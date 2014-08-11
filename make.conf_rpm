@@ -1,0 +1,18 @@
+# include Make.versions
+include $(SKV_TOP)/../linux/Make.versions
+
+INSTALL_ROOTFS_DIR=$(RPM_DIR)/BUILDROOT
+
+#############################################
+# specify which parts of the code you want to build and install
+# available options are: (note that the ordering is important!!)
+#  - lib  (C library for PIMD clients)
+#  - src  (actual skv code, libs, server)
+#  - test   (test routines)
+#  - system/bgq (system files for BGQ Linux environment)
+SKV_DEST=it_api src lib include test system/bgq
+
+SKV_MPI_IMPL?=mvapich2
+MPI_DIR?=/usr/lib64/${SKV_MPI_IMPL}
+SKV_GLOBAL_LDFLAGS_EXTENSION=-libverbs -lrdmacm
+SKV_CCFLAGS=-std=c++0x

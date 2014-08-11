@@ -1,0 +1,5 @@
+ifndef FXLOGGER_DIR
+   FXLOGGER_DIR=$(shell if ! test -e ${ITAPE_TOP}/../FxLogger; then echo "${ITAPE_TOP}/../../shared/FxLogger"; else echo "${ITAPE_TOP}/../FxLogger"; fi)
+   export FXLOGGER_DIR
+endif
+

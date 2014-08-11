@@ -1,0 +1,220 @@
+###################################################
+# Copyright (c) IBM Corp. 2014
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License v1.0
+# which accompanies this distribution, and is available at
+# http://www.eclipse.org/legal/epl-v10.html
+##################################################
+# 
+# Contributors:
+#      lschneid - initial implementation
+
+!/bin/sh
+#
+# SKV
+# Start the 'SKV' server
+#
+
+set -x
+
+. /etc/bg_profile
+. /dev/bgpers
+. /opt/skv/etc/skv.env
+
+export MV2_ENABLE_AFFINITY=0
+
+
+### NEW SKV SKRIPT ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+NODE_COUNT=$2
+if [ -z "$2" ]
+then
+NODE_COUNT=$ASF_NODE_COUNT
+echo "Using user defined node count: $NODE_COUNT"
+fi
+
+slurm_run_all="/opt/slurm/bin/srun -s -N ${NODE_COUNT} --ntasks-per-node=1 --ntasks-per-socket=1"
+slurm_run="/opt/slurm/bin/srun -s -N ${SKV_NODECOUNT} --ntasks-per-node=1 --ntasks-per-socket=1"
+
+std_out="/var/log/skvserver.stdout"
+std_err="/var/log/skvserver.stderr"
+pid_file="/tmp/skv_slurm_pid"
+
+skv_server_start()
+{
+  $slurm_run_all rm -rf /root/core
+  # # create machinefile of server nodes on all nodes
+  # for node in `cat /etc/machinefile`; do
+  #     ssh $node '. /etc/bg_profile; . /dev/bgpers; . /opt/skv/etc/skv.env; head -n ${SKV_NODECOUNT} /etc/machinefile > /etc/skv_machinefile'
+  # done
+
+  $slurm_run SKVServer $1 </dev/null >$std_out 2>$std_err &
+  echo "$!" >$pid_file
+}
+
+skv_server_stop()
+{
+  typeset -i slurm_skv_pid=`cat $pid_file`
+  if [ ${slurm_skv_pid} != 0 ]
+  then
+    kill ${slurm_skv_pid}
+    if [ $? != 0 ]
+    then
+      sleep 2
+      kill -9 ${slurm_skv_pid}
+    fi
+  fi
+  scancel -n SKVServer
+}
+
+skv_server_restart()
+{
+  skv_server_stop
+  skv_server_start
+}
+
+case "$1" in
+  start)
+    skv_server_start
+    ;;
+  stop)
+    skv_server_stop
+    ;;
+  restart)
+    skv_server_restart
+    ;;
+esac
+### END OF NEW SKV SKRIPT +++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+# mpcn is alias for:
+# '/opt/slurm/bin/srun -s -N ${ASF_NODE_COUNT}'
+
+### old script follows +++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+#  skv_server_start() 
+#  {
+#    # Copy the SKV Server
+#    # scp2 10.255.255.254:/bgpusr1/${BLOCK_OWNER}/sandboxes/asfbox/obj/bgp_linux_2/ASF/skv/src/server/SKVServer /tmp/
+#    
+#    if [ "${BG_NODE_TYPE}" = "ION" ]
+#      then
+#        compute_node_count=${ASF_NODE_COUNT}
+#  
+#        mpcn rm -rf /root/core
+
+#        # mpcn /bin/copy_skv_server    
+#  
+#        mpcn bash -c 'echo "set logging overwrite on
+#  set logging file /tmp/skv_server_gdb_output
+#  set logging on
+#  run $1
+#  where" > /tmp/gdb_skv_server_script'
+
+#        mpcn SKVServer $1 </dev/null >/var/log/skvserver.stdout 2>/var/log/skvserver.stderr &
+#        # mpcn bash -c 'gdb -batch -x /tmp/gdb_skv_server_script /bin/SKVServer' &
+#        echo "$!" > /tmp/slurm_skv_pid
+#    fi
+#  }
+
+#  skv_server_barestart()
+#  {
+#     mpcn /bin/SKVServer $1 </dev/null >/var/log/skvserver.stdout 2>/var/log/skvserver.stderr &
+#     echo "$!" >/var/run/skvserver.pid
+#  }
+
+#  skv_server_baregdbstart()
+#  {
+#     mpcn bash -c 'gdb -batch -x /var/skv/etc/gdb_skv_server_script /bin/SKVServer </dev/null >/var/log/skvservergdb.stdout 2>/var/log/skvservergdb.stderr' </dev/null >/var/log/skvserver.stdout 2>/var/log/skvserver.stderr &
+#     echo "$!" >/var/run/skvserver.pid
+#  }
+
+#  skv_server_barestop()
+#  {
+#    if [[ -r /var/run/skvserver.pid ]]
+#    then
+#    slurm_skv_pid="$(</var/run/skvserver.pid)"
+#    echo "SKV Server Pid: ${slurm_skv_pid}"
+#    kill -9 ${slurm_skv_pid}
+#    fi
+#  }
+
+#  skv_server_barerestart()
+#  {
+#    skv_server_barestop
+#    skv_server_barestart "$@"
+#  }
+
+#  skv_server_baregdbrestart()
+#  {
+#    skv_server_barestop
+#    skv_server_baregdbstart "$@"
+#  }
+
+#  skv_server_stop()
+#  {
+#    if [ "${BG_NODE_TYPE}" = "ION" ]
+#    then
+#  
+#    typeset -i slurm_skv_pid=`cat /tmp/slurm_skv_pid`
+#  
+#    if [ ${slurm_skv_pid} != 0 ]
+#      then 
+
+#      echo "SKV Server Pid: ${slurm_skv_pid}"
+#      
+#      kill -9 ${slurm_skv_pid}
+#    fi
+#    fi
+
+#  }
+
+#  skv_server_restart()
+#  {
+#    skv_server_stop
+#    skv_server_start $1
+#  }
+
+#  #case "$1" in
+#  #    start) 
+#  #  skv_server_start
+#  #  ;;
+#  #    stop)
+#  #  skv_server_stop
+#  #  ;;
+#  #    restart)
+#  #  skv_server_restart
+#  #  ;;
+#  #    *)
+#  #  ras_fatal "Usage: $0 {start|stop|restart}"
+#  #  ;;
+#  #esac
+
+#  ACTION=$1
+#  if [[ "${ACTION}" = "start" ]]
+#  then
+#    skv_server_start
+#  elif [[ "${ACTION}" = "stop" ]]
+#  then
+#    skv_server_stop
+#  elif [[ "${ACTION}" = "restart" ]]
+#  then
+#    skv_server_restart $2
+#  elif [[ "${ACTION}" = "barestart" ]]
+#  then
+#    skv_server_barestart
+#  elif [[ "${ACTION}" = "baregdbstart" ]]
+#  then
+#    skv_server_baregdbstart
+#  elif [[ "${ACTION}" = "barerestart" ]]
+#  then
+#    skv_server_barerestart $2
+#  elif [[ "${ACTION}" = "baregdbrestart" ]]
+#  then
+#    skv_server_baregdbrestart $2
+#  elif [[ "${ACTION}" = "barestop" ]]
+#  then
+#    skv_server_barestop
+#  else
+#    ras_fatal "Usage: $0 {start|stop|restart|barestart|barestop|barerestart|baregdbstart|baregdbrestart}"
+#  fi
+
+

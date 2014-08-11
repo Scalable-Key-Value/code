@@ -1,0 +1,24 @@
+20140515 -> 2014-06-27-16-30
+  * handling InfiniBand private data length issues
+  * client lib forwards more errors instead of asserting and die
+  * readyness for c++11 compilation
+  * disable RoQ SGL workaround (issue got fixed)
+  * various preparations for rocksdb backend (rdma_data_buffer, compiler settings, includes, code refactoring)
+
+0.7 -> 20140515
+
+  * more robust and fully functional asynchronous in-memory backend
+  * removed the need to provide server address command line parameter for some of the tests
+  * install script moved to top-level dir
+  * it_api build integrated (no more need to explicitly build it_api component)
+  * updated build process (some site-specific settings now set via
+    make.conf_NNN, where NNN is determined via SKV_CONF=NNN
+    environment variable
+  * server now accepts -c <config_file> to override the default config
+    file locations in $HOME and /etc
+  * started changes to client API: server address determined via
+    config file, config file used as address parameter
+  * rpm build enabled
+  * default 500MB per server limit 
+  * several bug fixes and robustness
+  * implemented workaround for RoQ SGL issue
