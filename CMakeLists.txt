@@ -1,11 +1,73 @@
 project(SKV)
 
+#--------------------------------------------------
+# cmake old/new compatibility
+#--------------------------------------------------
+cmake_minimum_required(VERSION 2.8)
+
+if(COMMAND cmake_policy)
+  cmake_policy(SET CMP0003 OLD)
+  cmake_policy(SET CMP0017 NEW)
+  cmake_policy(SET CMP0005 NEW)
+endif(COMMAND cmake_policy)
+
+#--------------------------------------------------
+# Setup Output directories
+#--------------------------------------------------
+SET (CMAKE_RUNTIME_OUTPUT_DIRECTORY
+    ${PROJECT_BINARY_DIR}/bin CACHE PATH "Single Directory for all Executables."
+)
+SET (CMAKE_LIBRARY_OUTPUT_DIRECTORY
+    ${PROJECT_BINARY_DIR}/bin CACHE PATH "Single Directory for all Libraries"
+)
+SET (CMAKE_ARCHIVE_OUTPUT_DIRECTORY
+    ${PROJECT_BINARY_DIR}/bin CACHE PATH "Single Directory for all static libraries."
+)
+
+#------------------------------------------------------------------------------
+# Machine check, see if we can tell if we are we running on BGQ or BGAS
+#------------------------------------------------------------------------------
+SITE_NAME(hostname)
+set(BGQ   0)
+set(BGAS  0)
+set(BGVIZ 0)
+if(hostname MATCHES bbpbg1)
+  set(BGQ 1)
+  message("Running on BGQ")
+elseif(hostname MATCHES bbpbg2)
+  set(BGAS 1)
+  message("Running on BGAS")
+elseif(hostname MATCHES bbpviz1)
+  set(BGVIZ 1)
+  message("Running on VIZ")
+endif()
+message("CMAKE_SYSTEM is ${CMAKE_SYSTEM} with hostname ${hostname} and processor ${CMAKE_SYSTEM_PROCESSOR}" )
+
+#------------------------------------------------------------------------------
+# MPI
+#------------------------------------------------------------------------------
+if (BGQ)
+  include (${CMAKE_CURRENT_SOURCE_DIR}/CMake//BGAS-MPI.cmake)
+endif()
+if (BGAS)
+  include (${CMAKE_CURRENT_SOURCE_DIR}/CMake//BGAS-MVAPICH.cmake)
+  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/mpi)
+endif()
+if(BGVIZ)
+  find_package(MPI REQUIRED)
+endif()
+
+include_directories(${MPI_INCLUDE_PATH})
+
 #------------------------------------------------------------------------------
 # OFED verbs libraries
 #------------------------------------------------------------------------------
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
 find_package(OFED)
 
+#------------------------------------------------------------------------------
+# Define source files
+#------------------------------------------------------------------------------
 set(FXLOGGER_SRCS
   ./FxLogger/FxLogger.cpp
   ./FxLogger/Trace.cpp
@@ -71,14 +133,16 @@ set(TEST_SRCS
   ./unittest/test_skv_ringbuffer_ptr.cpp
 )
 
+#------------------------------------------------------------------------------
+# Compile settings 
+#------------------------------------------------------------------------------
+
 #############################################
 # Define the local KV backend to use
 # inmem    - in-memory version of local kv
 # asyncmem - async in-memory version for testing
 # rocksdb  - rocksdb backend (tbd)
 set(SKV_LOCAL_KV_BACKEND inmem)
-
-include(${CMAKE_CURRENT_SOURCE_DIR}/BGVIZ-MVAPICH.cmake)
 
 include_directories( 
   include
@@ -87,7 +151,6 @@ include_directories(
   FxLogger
   FxLogger/Pk
   profiler
-  ${MPI_INCLUDE_PATH}
 )
 
 #SKV_GLOBAL_LDFLAGS=${SKV_CONFIG} ${SKV_CCFLAGS} ${FXLOGGER_DIR}/libPkLinux.a
@@ -96,7 +159,7 @@ include_directories(
 
 add_Definitions(
 # default config file
-  -DDEFAULT_CONFIG_FILE=\\"${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf\\"
+  -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
 # use PK_LINUX to pull in several important includes and macros
   -DPK_LINUX
 # use MSPACES from dlmalloc.h
