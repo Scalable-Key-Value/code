@@ -82,7 +82,7 @@ set(it_api_SRCS
   ./it_api/src/it_api_o_verbs_thread.cpp
 )
 
-set(C_SRCS
+set(SKV_SRCS
   ./lib/src/skv.cpp
 )
 
@@ -186,15 +186,24 @@ add_Definitions(
 # enable SIW workaround for ... and set the device name to use for
 # communication
   -DIT_API_USE_SIW_HACK
+
+# seems to be necessary for the tests to link
+  -DSKV_CLIENT_UNI
 )
 
 add_library(fxlogger ${FXLOGGER_SRCS})
 
 add_library(it_api ${it_api_SRCS})
 
+add_library(skv ${SKV_SRCS})
+
 add_library(skv_common ${COMMON_SRCS})
 
+add_library(skv_client ${CLIENT_SRCS})
+
 target_link_libraries(skv_common pthread)
+
+target_link_libraries(skv_client skv_common)
 
 add_executable(skv_server
   ${SERVER_SRCS}
@@ -207,3 +216,19 @@ target_link_libraries(skv_server
   ${OFED_LIBRARIES}
   ${MPI_LIBRARY}
 )
+
+foreach(_test ${TEST_SRCS})
+  message("Creating test ${_test}")
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  target_link_libraries(${TEST_NAME} 
+#    skv_common 
+    skv
+    skv_client 
+    it_api
+    fxlogger
+    ${OFED_LIBRARIES}
+    ${MPI_LIBRARY}
+  )
+endforeach()
+
