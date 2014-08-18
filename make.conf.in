@@ -17,7 +17,7 @@ include ${SKV_TOP}/make.conf_${SKV_CONF}
 #############################################
 # Definition whether we build for BG/Q developer env or not
 # no  - build for BG/Q
-# yes - other platform/env (requires more adjustments in this file) 
+# yes - other platform/env (requires more adjustments in this file)
 SKV_FOR_NONBGQ=no
 
 #############################################
@@ -190,7 +190,7 @@ SKV_CONFIG+=-DDO_CHECK
 
 
 ############################################################
-#  T R A C I N G                                     
+#  T R A C I N G
 
 #enable tracing
 #SKV_CONFIG+=-DPKTRACE_ON
@@ -234,7 +234,7 @@ SKV_INCLUDE_DIR=${SKV_BASE_DIR}/include
 SKV_BUILD_DIR = ${SKV_BASE_DIR}/build
 
 # set location within booted system/ramdisk (path where to install)
-SKV_PREFIX=/opt/skv
+SKV_PREFIX?=${HOME}/local
 SKV_INSTALL_DIR=${INSTALL_ROOTFS_DIR}${SKV_PREFIX}
 
 

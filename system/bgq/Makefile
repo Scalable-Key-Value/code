@@ -38,11 +38,10 @@ skv.env:
 
 
 skv:
-	install -D -m 755 etc/init.d/skv ${SKV_INSTALL_DIR}/etc/init.d/skv 
+	install -D -m 755 etc/init.d/skv ${SKV_INSTALL_DIR}/etc/init.d/skv
 
 skv_server.conf: etc/skv_server.conf
 	install -D -m 644 etc/skv_server.conf ${SKV_INSTALL_DIR}/etc/skv_server.conf
-	install -D -m 644 etc/skv_server.conf ${INSTALL_ROOTFS_DIR}/etc/skv_server.conf
 
 
 install: ${SKV_FILES}
