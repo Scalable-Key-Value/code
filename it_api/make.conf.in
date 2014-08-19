@@ -53,7 +53,7 @@ IT_API_CONFIG+=-DIT_API_USE_EVENT_CQ
 
 ifdef SKV_FOR_NONBGQ
 #  IT_API_CONFIG+=-DIT_API_COMM_DEVICE=\"eth1\"
-  IT_API_CONFIG+=-DIT_API_COMM_DEVICE=\"lo\"
+  IT_API_CONFIG+=-DIT_API_COMM_DEVICE=lo
 
 # enable SIW workaround for ... and set the device name to use for communication
   IT_API_CONFIG+=-DIT_API_USE_SIW_HACK
@@ -65,10 +65,10 @@ else
 # lets see if we still need vrnic-explicit stuff...
 #  IT_API_CONFIG+=-DIT_API_BGQ_VRNIC
 
-#  IT_API_CONFIG+=-DIT_API_COMM_DEVICE=\"eth0\"
-#  IT_API_CONFIG+=-DIT_API_COMM_DEVICE=\"vrnic0\"
+#  IT_API_CONFIG+=-DIT_API_COMM_DEVICE=eth0
+#  IT_API_CONFIG+=-DIT_API_COMM_DEVICE=vrnic0
 
-# enable SIW workaround for ... 
+# enable SIW workaround for ...
 IT_API_CONFIG+=-DIT_API_USE_SIW_HACK
 
 # enable RoQ SGE workaround

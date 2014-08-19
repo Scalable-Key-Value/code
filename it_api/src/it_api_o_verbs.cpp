@@ -29,6 +29,9 @@
 
 #include <rdma/rdma_cma.h>
 
+#define QUOTE( string ) STRINGIFY( string )
+#define STRINGIFY( foo ) #foo
+
 extern "C"
 {
 #define ITAPI_ENABLE_V21_BINDINGS
@@ -176,7 +179,7 @@ it_api_o_verbs_process_async_event( struct ibv_async_event* aRdmaEvent,
     case IBV_EVENT_PATH_MIG:
     case IBV_EVENT_PATH_MIG_ERR:
     case IBV_EVENT_QP_LAST_WQE_REACHED:
-      {	
+      {
         AffEvent->event_number = IT_ASYNC_AFF_EP_FAILURE;
         AffEvent->cause.ep   = (it_ep_handle_t) aRdmaEvent->element.qp->qp_context;
         break;
@@ -233,12 +236,12 @@ it_api_o_verbs_context_queue_t context_queue;
 
 /************************************************/
 int
-it_api_o_verbs_get_device_ordinal( struct ibv_context*           verbs, 
+it_api_o_verbs_get_device_ordinal( struct ibv_context*           verbs,
                                    it_api_o_verbs_device_mgr_t*  device )
 {
   int devices_count = device->devices_count;
 
-  char* device_name = (char *) ibv_get_device_name( verbs->device );  
+  char* device_name = (char *) ibv_get_device_name( verbs->device );
 
   for( int i = 0; i < devices_count; i++ )
     {
@@ -275,11 +278,11 @@ it_api_o_verbs_get_device_address( struct sockaddr_in *addr,
 {
   /********************************************************
    * SPECIAL NOTE: Below is logic is neccessary
-   * to be able to specify a local port 
-   * to the rdma_route_addr(). Specifying 
+   * to be able to specify a local port
+   * to the rdma_route_addr(). Specifying
    * the local port is needed because OFED
-   * has a tendency to choosing an already 
-   * used port, cause rdma_connect() to 
+   * has a tendency to choosing an already
+   * used port, cause rdma_connect() to
    * return with errno=98
    ********************************************************/
   struct ifaddrs * ifAddrStruct=NULL;
@@ -302,7 +305,7 @@ it_api_o_verbs_get_device_address( struct sockaddr_in *addr,
   ifAddrStructOriginal = ifAddrStruct;
 
   int addrFound = 0;
-  while( ifAddrStruct != NULL ) 
+  while( ifAddrStruct != NULL )
     {
       BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT )
         << " ifa_name: " << ifAddrStruct->ifa_name
@@ -311,7 +314,7 @@ it_api_o_verbs_get_device_address( struct sockaddr_in *addr,
         << " ifa_port: " << ((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_port
         << EndLogLine;
 
-      if ( strcmp(ifAddrStruct->ifa_name, device_name) == 0 && 
+      if ( strcmp(ifAddrStruct->ifa_name, device_name) == 0 &&
            ( ((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_family == AF_INET ) )
         {
           // is a valid IP4 Address
@@ -333,18 +336,18 @@ it_api_o_verbs_get_device_address( struct sockaddr_in *addr,
   if( !addrFound )
     {
       BegLogLine( 1 )
-        << "it_ep_connect(): ERROR: " << device_name 
+        << "it_ep_connect(): ERROR: " << device_name
         << " local if is not found"
         << EndLogLine;
       return -1;
-    }  
+    }
   /********************************************************/
   return 0;
 }
 
 it_status_t
 it_api_o_verbs_init_cq( int                                         aDeviceOrdinal,
-                        struct ibv_context*                         aVerbs, 
+                        struct ibv_context*                         aVerbs,
                         it_api_o_verbs_cq_mgr_t*                    aCQ,
                         it_api_o_verbs_cq_processing_thread_args_t* aProcessingThreadArgs )
 {
@@ -353,19 +356,19 @@ it_api_o_verbs_init_cq( int                                         aDeviceOrdin
       struct ibv_comp_channel *comp_channel = ibv_create_comp_channel( aVerbs );
       if( ! comp_channel )
         {
-          BegLogLine( 1 ) 
-            << "it_api_o_verbs_init_cq(): ERROR: failed to create comp channel" 
+          BegLogLine( 1 )
+            << "it_api_o_verbs_init_cq(): ERROR: failed to create comp channel"
             << EndLogLine;
 
-          return IT_ERR_ABORT;	  
+          return IT_ERR_ABORT;
         }
 
       struct ibv_cq* new_cq = ibv_create_cq( aVerbs, aCQ->queue_size, NULL, comp_channel, 0 );
 
       if( !new_cq )
         {
-          BegLogLine( 1 ) 
-            << "it_api_o_verbs_init_cq(): ERROR: failed to create cq" 
+          BegLogLine( 1 )
+            << "it_api_o_verbs_init_cq(): ERROR: failed to create cq"
             << EndLogLine;
 
           return IT_ERR_ABORT;
@@ -388,9 +391,9 @@ it_api_o_verbs_init_cq( int                                         aDeviceOrdin
   else
     {
       StrongAssertLogLine( 0 )
-        << "it_api_o_verbs_init_cq(): ERROR: Unexpected event type: " 
+        << "it_api_o_verbs_init_cq(): ERROR: Unexpected event type: "
         << aCQ->event_number
-        << EndLogLine;      
+        << EndLogLine;
     }
 
   return IT_SUCCESS;
@@ -398,34 +401,34 @@ it_api_o_verbs_init_cq( int                                         aDeviceOrdin
 
 it_status_t
 it_api_o_verbs_init_pd( int                      aDeviceOrdinal,
-                        struct ibv_context*      aVerbs, 
+                        struct ibv_context*      aVerbs,
                         it_api_o_verbs_pd_mgr_t* aPD )
 {
   struct ibv_pd* new_pd = ibv_alloc_pd( aVerbs );
-  if (!new_pd) 
+  if (!new_pd)
     {
-      BegLogLine( 1 ) 
-        << "it_api_o_verbs_init_pd(): ERROR: failed to allocate a pd" 
+      BegLogLine( 1 )
+        << "it_api_o_verbs_init_pd(): ERROR: failed to allocate a pd"
         << EndLogLine;
 
       return IT_ERR_ABORT;
     }
 
   StrongAssertLogLine( aDeviceOrdinal >= 0 && aDeviceOrdinal < aPD->device->devices_count )
-    << "it_api_o_verbs_init_pd(): ERROR: " 
+    << "it_api_o_verbs_init_pd(): ERROR: "
     << " aDeviceOrdinal: " << aDeviceOrdinal
     << " pd->device->devices_count: " << aPD->device->devices_count
-    << EndLogLine;  
+    << EndLogLine;
 
-  aPD->PDs[ aDeviceOrdinal ] = new_pd;  
+  aPD->PDs[ aDeviceOrdinal ] = new_pd;
 
   return IT_SUCCESS;
 }
 
 it_status_t
-it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id, 
+it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id,
                         it_api_o_verbs_qp_mgr_t* qp )
-{  
+{
   BegLogLine( FXLOG_IT_API_O_VERBS )
     << "it_api_o_verbs_init_qp(): Entering"
     << " cm_id...device: " << (char *)(cm_id->verbs->device)
@@ -436,7 +439,7 @@ it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id,
     << " cm_id->verbs: " << (cm_id != NULL?(void*)cm_id->verbs:NULL)
     << EndLogLine;
 
-  int device_ordinal = it_api_o_verbs_get_device_ordinal( cm_id->verbs, 
+  int device_ordinal = it_api_o_verbs_get_device_ordinal( cm_id->verbs,
                                                           qp->send_cq->device );
 
   StrongAssertLogLine( device_ordinal >= 0 && device_ordinal < qp->send_cq->device->devices_count )
@@ -453,7 +456,7 @@ it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id,
       status = it_api_o_verbs_init_pd( device_ordinal, cm_id->verbs, qp->pd );
       if( status != IT_SUCCESS )
         return status;
-    }  
+    }
 
   if( qp->send_cq->cq.cq[ device_ordinal ] == NULL )
     {
@@ -498,10 +501,10 @@ it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id,
       qp_init_attr.sq_sig_all = 0;
 
       int ret = rdma_create_qp( cm_id, qp->pd->PDs[ device_ordinal ], &qp_init_attr );
-      if( ret ) 
+      if( ret )
         {
-          BegLogLine( 1 ) 
-            << "it_api_o_verbs_init_qp(): ERROR: failed to create qp" 
+          BegLogLine( 1 )
+            << "it_api_o_verbs_init_qp(): ERROR: failed to create qp"
             << " errno: " << errno
             << EndLogLine;
 
@@ -515,7 +518,7 @@ it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id,
         << " qp->qp: " << (void *) qp->qp
         << EndLogLine;
 
-      StrongAssertLogLine( qp->qp != NULL )	
+      StrongAssertLogLine( qp->qp != NULL )
         << EndLogLine;
 
       qp->qp->qp_context = (void *) qp;
@@ -524,7 +527,7 @@ it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id,
       // // output of send/recv queue lengths
       // struct ibv_qp_attr attr;
       // struct ibv_qp_init_attr init_attr;
-      
+
       // bzero( &attr, sizeof(struct ibv_qp_attr) );
       // bzero( &init_attr, sizeof(struct ibv_qp_init_attr) );
 
@@ -534,10 +537,10 @@ it_api_o_verbs_init_qp( struct rdma_cm_id *      cm_id,
       //   << EndLogLine;
 
       // ibv_query_qp( qp->qp, &attr, IBV_QP_CAP,  &init_attr );
- 
+
 
       // BegLogLine( FXLOG_IT_API_O_VERBS )
-      //   << "dump_qp_stats():: "	
+      //   << "dump_qp_stats():: "
       //   << " rq_size: " << attr.cap.max_recv_wr
       //   << " sq_size: " << attr.cap.max_send_wr
       //   << EndLogLine;
@@ -587,7 +590,7 @@ dump_qp_stats( it_api_o_verbs_qp_mgr_t  *aQPMgr,
     }
 
   BegLogLine( 1 )
-    << "dump_qp_stats():: ERROR: post " << aMsgText << " failed "	
+    << "dump_qp_stats():: ERROR: post " << aMsgText << " failed "
     << " ret: " << aOpErr
     << " errno: " << aPrevErr
     << " rq_size: " << attr.cap.max_recv_wr
@@ -664,7 +667,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
     << "it_api_o_verbs_post_op(): ERROR: "
     << " device_ordinal: " << device_ord
     << " devices_count: " << qpMgr->pd->device->devices_count
-    << EndLogLine;  
+    << EndLogLine;
 
   // Convert to real MRs
   for( int i = 0; i < num_segments; i++ )
@@ -687,8 +690,8 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
 
           if( mrMgr->pd->PDs[ device_ord ] == NULL )
             {
-              it_status_t status = it_api_o_verbs_init_pd( device_ord, 
-                                                           qpMgr->cm_conn_id->verbs, 
+              it_status_t status = it_api_o_verbs_init_pd( device_ord,
+                                                           qpMgr->cm_conn_id->verbs,
                                                            mrMgr->pd );
               if( status != IT_SUCCESS )
                 return status;
@@ -698,20 +701,20 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
             << "about to register mr: " << (void*)mrMgr->addr
             << " len: " << mrMgr->length
             << EndLogLine;
-          
-          gITAPI_REG_MR_START.HitOE( IT_API_TRACE, 
-                                     gITAPI_REG_MR_START_Name, 
-                                     gTraceRank, 
+
+          gITAPI_REG_MR_START.HitOE( IT_API_TRACE,
+                                     gITAPI_REG_MR_START_Name,
+                                     gTraceRank,
                                      gITAPI_REG_MR_START );
 
-          struct ibv_mr *local_triplet_mr = ibv_reg_mr( mrMgr->pd->PDs[ device_ord ], 
-                                                        mrMgr->addr, 
+          struct ibv_mr *local_triplet_mr = ibv_reg_mr( mrMgr->pd->PDs[ device_ord ],
+                                                        mrMgr->addr,
                                                         mrMgr->length,
                                                         // 8 * 1024, // mrMgr->length,
                                                         mrMgr->access );
-          gITAPI_REG_MR_FINIS.HitOE( IT_API_TRACE, 
-                                     gITAPI_REG_MR_FINIS_Name, 
-                                     gTraceRank, 
+          gITAPI_REG_MR_FINIS.HitOE( IT_API_TRACE,
+                                     gITAPI_REG_MR_FINIS_Name,
+                                     gTraceRank,
                                      gITAPI_REG_MR_FINIS );
 
           if( ! local_triplet_mr )
@@ -731,7 +734,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
 
           mrMgr->MRs[ device_ord ].mr = local_triplet_mr;
 
-          BegLogLine( 0 ) 
+          BegLogLine( 0 )
             << "it_lmr_create(): "
             << " lmr: " << (void *)mrMgr
             << " dev" << device_ord
@@ -780,7 +783,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
             // << " local_sge.lkey: " << (void *) local_sge[ i ].lkey
             << " local_sge.addr: " << (void *) local_sge[ i ].addr
             // << " local_sge.length: " << local_sge[ i ].length
-            << EndLogLine;	  
+            << EndLogLine;
         }
 #endif
     }
@@ -902,7 +905,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
         << " cookie: " << *srv_fake_cookie
         << EndLogLine;
 
-      gITAPI_POST_SEND_START.HitOE( IT_API_TRACE, 
+      gITAPI_POST_SEND_START.HitOE( IT_API_TRACE,
                                     gITAPI_POST_SEND_START_Name,
                                     gTraceRank,
                                     gITAPI_POST_SEND_START );
@@ -929,7 +932,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
         }
 #endif
 
-      gITAPI_POST_SEND_FINIS.HitOE( IT_API_TRACE, 
+      gITAPI_POST_SEND_FINIS.HitOE( IT_API_TRACE,
                                     gITAPI_POST_SEND_FINIS_Name,
                                     gTraceRank,
                                     gITAPI_POST_SEND_FINIS );
@@ -950,7 +953,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
         default:
           dump_qp_stats( qpMgr, "send", ret, errno );
 
-          BegLogLine( 1 ) 
+          BegLogLine( 1 )
             << "post send: bad_wr: " << (void*)bad_tx_wr
             << " length: " << bad_tx_wr->sg_list->length
             << EndLogLine;
@@ -962,7 +965,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
   else
     {
       StrongAssertLogLine( 0 )
-        << "it_api_o_verbs_post_op():: ERROR: unexpected post_op code: "	
+        << "it_api_o_verbs_post_op():: ERROR: unexpected post_op code: "
         << post_op
         << EndLogLine;
     }
@@ -973,7 +976,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
   if( ! ( dto_flags & (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG) ) )
     {
       context_queue.Push( elem );
-    }      
+    }
   return IT_SUCCESS;
 }
 
@@ -992,17 +995,17 @@ it_api_o_verbs_get_dto_status( enum ibv_wc_status aStatus )
     case IBV_WC_WR_FLUSH_ERR:
       {
         rc = IT_DTO_ERR_FLUSHED;
-        break;		    
+        break;
       }
     case IBV_WC_LOC_QP_OP_ERR:
       {
         rc = IT_DTO_ERR_LOCAL_EP;
-        break;		    
+        break;
       }
     case IBV_WC_LOC_PROT_ERR:
       {
         rc = IT_DTO_ERR_LOCAL_PROTECTION;
-        break;		    		    
+        break;
       }
     default:
       {
@@ -1017,13 +1020,13 @@ it_api_o_verbs_get_dto_status( enum ibv_wc_status aStatus )
 }
 
 it_status_t
-it_api_o_verbs_convert_wc_to_it_dto_event( it_api_o_verbs_cq_mgr_t* aCQ, 
+it_api_o_verbs_convert_wc_to_it_dto_event( it_api_o_verbs_cq_mgr_t* aCQ,
                                            struct ibv_wc*           aWc,
                                            it_dto_cmpl_event_t*     aEvent )
 {
   it_api_o_verbs_context_queue_elem_t* elem = (it_api_o_verbs_context_queue_elem_t*) aWc->wr_id;
   aEvent->ep                 = (it_ep_handle_t) elem->qp;
-  aEvent->evd                = (it_evd_handle_t) aCQ;  
+  aEvent->evd                = (it_evd_handle_t) aCQ;
   CookieAssign( &(aEvent->cookie), &(elem->cookie) );
   // aEvent->cookie.mFirst      = elem->cookie.mFirst;
   // aEvent->cookie.mSecond     = elem->cookie.mSecond;
@@ -1031,7 +1034,7 @@ it_api_o_verbs_convert_wc_to_it_dto_event( it_api_o_verbs_cq_mgr_t* aCQ,
 
   unsigned short *srv_fake_cookie = &(((unsigned short*)&(elem->cookie))[1]);
   BegLogLine( FXLOG_IT_API_O_VERBS )
-    << "it_api_o_verbs_convert_wc_to_it_dto_event(): Got a CQ event "		
+    << "it_api_o_verbs_convert_wc_to_it_dto_event(): Got a CQ event "
     << " opcode: " << aWc->opcode
     << " cookie: " << *srv_fake_cookie
     << EndLogLine;
@@ -1050,12 +1053,12 @@ it_api_o_verbs_convert_wc_to_it_dto_event( it_api_o_verbs_cq_mgr_t* aCQ,
       }
     case IBV_WC_RDMA_WRITE:
       {
-        aEvent->event_number = IT_DTO_RDMA_WRITE_CMPL_EVENT;		    
+        aEvent->event_number = IT_DTO_RDMA_WRITE_CMPL_EVENT;
         break;
       }
     case IBV_WC_RDMA_READ:
       {
-        aEvent->event_number = IT_DTO_RDMA_READ_CMPL_EVENT;		    
+        aEvent->event_number = IT_DTO_RDMA_READ_CMPL_EVENT;
         break;
       }
     default:
@@ -1075,7 +1078,7 @@ it_api_o_verbs_convert_wc_to_it_dto_event( it_api_o_verbs_cq_mgr_t* aCQ,
 }
 
 it_status_t
-it_api_o_verbs_poll_cq( it_dto_cmpl_event_t *    aEvent, 
+it_api_o_verbs_poll_cq( it_dto_cmpl_event_t *    aEvent,
                         it_api_o_verbs_cq_mgr_t* aCQ,
                         int*                     aRRIndex )
 {
@@ -1085,13 +1088,13 @@ it_api_o_verbs_poll_cq( it_dto_cmpl_event_t *    aEvent,
   int iter_count = 0;
   int devices_count = aCQ->device->devices_count;
   while( iter_count < devices_count )
-    {      
+    {
       (*aRRIndex)++;
       if( (*aRRIndex) == devices_count )
-        (*aRRIndex) = 0;      
+        (*aRRIndex) = 0;
 
       if( aCQ->cq.cq[ (*aRRIndex) ] != NULL )
-        {	  
+        {
           BegLogLine( FXLOG_IT_API_O_VERBS )
             << "it_api_o_verbs_poll_cq(): About to ibv_poll_cq(): "
             << " CQ: " << (void *) aCQ->cq.cq[ (*aRRIndex) ]
@@ -1131,7 +1134,7 @@ it_api_o_verbs_poll_cq( it_dto_cmpl_event_t *    aEvent,
 
 it_status_t
 it_api_o_verbs_handle_cm_event( it_api_o_verbs_cq_mgr_t* aCQ,
-                                it_connection_event_t*   aIT_Event, 
+                                it_connection_event_t*   aIT_Event,
                                 struct rdma_cm_event*    aRDMA_Event )
 {
   aIT_Event->evd = (it_evd_handle_t) aCQ;
@@ -1188,7 +1191,7 @@ it_api_o_verbs_handle_cm_event( it_api_o_verbs_cq_mgr_t* aCQ,
 
 it_status_t
 it_api_o_verbs_handle_cr_event( it_api_o_verbs_cq_mgr_t* aCQ,
-                                it_conn_request_event_t* aIT_Event, 
+                                it_conn_request_event_t* aIT_Event,
                                 struct rdma_cm_event*    aRDMA_Event)
 {
   aIT_Event->event_number = IT_CM_REQ_CONN_REQUEST_EVENT;
@@ -1222,7 +1225,7 @@ it_status_t it_ia_create (
                           OUT       it_ia_handle_t *ia_handle
                           )
 {
-  pthread_mutex_lock( & gITAPI_INITMutex );  
+  pthread_mutex_lock( & gITAPI_INITMutex );
 
   it_api_o_verbs_device_mgr_t* deviceMgr = (it_api_o_verbs_device_mgr_t *) malloc( sizeof( it_api_o_verbs_device_mgr_t ) );
   StrongAssertLogLine( deviceMgr )
@@ -1233,7 +1236,7 @@ it_status_t it_ia_create (
 
   // CM CHANNEL & ID
   deviceMgr->cm_channel = rdma_create_event_channel();
-  if (! deviceMgr->cm_channel ) 
+  if (! deviceMgr->cm_channel )
     {
       BegLogLine( 1 )
         << "it_ia_create(): ERROR: "
@@ -1263,9 +1266,9 @@ it_status_t it_ia_create (
 
   int found_device = 0;
   int device_index = 0;
-  do 
+  do
     {
-      char* device_name = (char *) ibv_get_device_name( (device_list[ device_index ])->device );  
+      char* device_name = (char *) ibv_get_device_name( (device_list[ device_index ])->device );
       if( strncmp( device_name,
                    "bgvrnic",
                    7) == 0)
@@ -1280,7 +1283,7 @@ it_status_t it_ia_create (
           deviceMgr->devices_count = 1;
         }
       device_index++;
-      
+
     }
   while( (device_index<deviceMgr->devices_count) && (!found_device) );
 
@@ -1300,7 +1303,7 @@ it_status_t it_ia_create (
     {
       struct ibv_context* context = deviceMgr->devices[ i ];
 
-      char* device_name = (char *) ibv_get_device_name( context->device );  
+      char* device_name = (char *) ibv_get_device_name( context->device );
 
       BegLogLine( FXLOG_IT_API_O_VERBS )
         << "it_ia_create(): device_name: " << device_name
@@ -1313,7 +1316,7 @@ it_status_t it_ia_create (
       if( istatus != IT_SUCCESS )
         {
           return istatus;
-        }      
+        }
     }
 
   context_queue.Init( IT_API_O_VERBS_CONTEXT_QUEUE_ELEM_COUNT );
@@ -1341,7 +1344,7 @@ it_status_t it_ia_free (
 
   rdma_free_devices( deviceMgr->devices );
 
-  free( deviceMgr );  
+  free( deviceMgr );
 
   return(IT_SUCCESS);
 }
@@ -1538,7 +1541,7 @@ it_status_t it_evd_create (
             << EndLogLine;
         }
 
-      itov_aevd_defined = 1; 
+      itov_aevd_defined = 1;
       *evd_handle = (it_evd_handle_t) CQ;
 
     }
@@ -1561,20 +1564,20 @@ it_status_t it_evd_create (
 
       switch( event_number )
         {
-        case IT_ASYNC_UNAFF_EVENT_STREAM: 
+        case IT_ASYNC_UNAFF_EVENT_STREAM:
         case IT_ASYNC_AFF_EVENT_STREAM:
           {
             break;
           }
         case IT_CM_REQ_EVENT_STREAM:
         case IT_CM_MSG_EVENT_STREAM:
-          {	
+          {
             CQ->cq.cm_channel = deviceMgr->cm_channel;
 
             break;
           }
         case IT_DTO_EVENT_STREAM:
-          {	
+          {
             int cqSize = sizeof( struct ibv_cq * ) * deviceMgr->devices_count;
             CQ->cq.cq = (struct ibv_cq **) malloc( cqSize );
             StrongAssertLogLine( CQ->cq.cq )
@@ -1626,18 +1629,18 @@ it_status_t it_evd_free (
 
   it_api_o_verbs_cq_mgr_t* CQ = (it_api_o_verbs_cq_mgr_t *) evd_handle;
 
-  switch( CQ->event_number ) 
+  switch( CQ->event_number )
     {
-    case IT_ASYNC_UNAFF_EVENT_STREAM: 
+    case IT_ASYNC_UNAFF_EVENT_STREAM:
     case IT_ASYNC_AFF_EVENT_STREAM:
     case IT_CM_REQ_EVENT_STREAM:
     case IT_CM_MSG_EVENT_STREAM:
     case IT_SOFTWARE_EVENT_STREAM:
-      {	
+      {
         break;
       }
     case IT_DTO_EVENT_STREAM:
-      {	
+      {
         for( int i = 0; i < CQ->device->devices_count; i++ )
           {
             if( CQ->cq.cq[ i ] != NULL )
@@ -1661,7 +1664,7 @@ it_status_t it_evd_free (
       }
     }
 
-  free( CQ );  
+  free( CQ );
 
   return(IT_SUCCESS);
 }
@@ -1671,7 +1674,7 @@ it_status_t it_evd_dequeue (
                             IN  it_evd_handle_t evd_handle, // Handle for simple or agregate queue
                             OUT it_event_t     *event
                             )
-{  
+{
   pthread_mutex_lock( & gITAPIFunctionMutex );
 
   StrongAssertLogLine( evd_handle != (it_evd_handle_t)NULL )
@@ -1689,7 +1692,7 @@ it_status_t it_evd_dequeue (
 
   switch( CQ->event_number )
     {
-    case IT_ASYNC_UNAFF_EVENT_STREAM: 
+    case IT_ASYNC_UNAFF_EVENT_STREAM:
       { break; }
     case IT_ASYNC_AFF_EVENT_STREAM:
       {
@@ -1709,9 +1712,9 @@ it_status_t it_evd_dequeue (
             if( ready < 0 )
               {
                 StrongAssertLogLine( 0 )
-                  << "ERROR: poll failed " 
+                  << "ERROR: poll failed "
                   << " errno: " << errno
-                  << EndLogLine;	      
+                  << EndLogLine;
               }
             else if( ready )
               {
@@ -1720,14 +1723,14 @@ it_status_t it_evd_dequeue (
                 if( ret )
                   {
                     StrongAssertLogLine( 0 )
-                      << "ERROR: ibv_get_async_event failed " 
+                      << "ERROR: ibv_get_async_event failed "
                       << " i: " << i
                       << " ret: " << ret
                       << " async_fd: " << CQ->device->devices[ i ]->async_fd
                       << " errno: " << errno
                       << " ready: " << ready
                       << " device: " << (void *) CQ->device->devices[ i ]
-                      << EndLogLine;	      
+                      << EndLogLine;
                   }
 
                 BegLogLine( 1 )
@@ -1768,7 +1771,7 @@ it_status_t it_evd_dequeue (
           }
         else if( CQ->dto_type == CQ_UNINITIALIZED )
           {
-            // Nothing to poll 
+            // Nothing to poll
           }
         else
           {
@@ -1787,13 +1790,13 @@ it_status_t it_evd_dequeue (
           {
             BegLogLine( FXLOG_IT_API_O_VERBS )
               << "it_evd_dequeue():  "
-              << " current_cm_event->event: " << current_cm_event->event 
+              << " current_cm_event->event: " << current_cm_event->event
               << " CQ->event_number: " << CQ->event_number
               << EndLogLine;
 
             if( current_cm_event->event == RDMA_CM_EVENT_CONNECT_REQUEST )
               {
-                if( IT_CM_REQ_EVENT_STREAM == CQ->event_number ) 
+                if( IT_CM_REQ_EVENT_STREAM == CQ->event_number )
                   {
                     it_conn_request_event_t * ConnReqEvent = (it_conn_request_event_t *) event;
 
@@ -1801,11 +1804,11 @@ it_status_t it_evd_dequeue (
 
                     int ret = rdma_ack_cm_event( current_cm_event );
                     if( ret )
-                      {		  
+                      {
                         StrongAssertLogLine( 0 )
-                          << "ERROR: rdma_ack_cm_event failed " 
+                          << "ERROR: rdma_ack_cm_event failed "
                           << " ret: " << ret
-                          << EndLogLine;	      
+                          << EndLogLine;
                       }
 
                     current_cm_event = NULL;
@@ -1813,7 +1816,7 @@ it_status_t it_evd_dequeue (
               }
             else
               {
-                if( IT_CM_MSG_EVENT_STREAM == CQ->event_number ) 
+                if( IT_CM_MSG_EVENT_STREAM == CQ->event_number )
                   {
                     it_connection_event_t * ConnEvent = (it_connection_event_t *) event;
 
@@ -1821,14 +1824,14 @@ it_status_t it_evd_dequeue (
 
                     int ret = rdma_ack_cm_event( current_cm_event );
                     if( ret )
-                      {		  
+                      {
                         StrongAssertLogLine( 0 )
-                          << "ERROR: rdma_ack_cm_event failed " 
+                          << "ERROR: rdma_ack_cm_event failed "
                           << " ret: " << ret
-                          << EndLogLine;	      
+                          << EndLogLine;
                       }
 
-                    current_cm_event = NULL;  
+                    current_cm_event = NULL;
                   }
               }
 
@@ -1860,20 +1863,20 @@ it_status_t it_evd_dequeue (
             if( ready < 0 )
               {
                 StrongAssertLogLine( 0 )
-                  << "ERROR: poll failed " 
+                  << "ERROR: poll failed "
                   << " errno: " << errno
-                  << EndLogLine;	      
+                  << EndLogLine;
               }
             else if( ready )
               {
                 struct rdma_cm_event		*cm_event = NULL;
                 int ret = rdma_get_cm_event(ch, &cm_event);
                 if( ret )
-                  {		  
+                  {
                     StrongAssertLogLine( 0 )
-                      << "ERROR: rdma_get_cm_event failed " 
+                      << "ERROR: rdma_get_cm_event failed "
                       << " ret: " << ret
-                      << EndLogLine;	      
+                      << EndLogLine;
                   }
 
                 BegLogLine( FXLOG_IT_API_O_VERBS )
@@ -1883,7 +1886,7 @@ it_status_t it_evd_dequeue (
 
                 if( cm_event->event == RDMA_CM_EVENT_CONNECT_REQUEST )
                   {
-                    if( IT_CM_REQ_EVENT_STREAM == CQ->event_number ) 
+                    if( IT_CM_REQ_EVENT_STREAM == CQ->event_number )
                       {
                         it_conn_request_event_t * ConnReqEvent = (it_conn_request_event_t *) event;
 
@@ -1895,11 +1898,11 @@ it_status_t it_evd_dequeue (
 
                         int ret = rdma_ack_cm_event( cm_event );
                         if( ret )
-                          {		  
+                          {
                             StrongAssertLogLine( 0 )
-                              << "ERROR: rdma_ack_cm_event failed " 
+                              << "ERROR: rdma_ack_cm_event failed "
                               << " ret: " << ret
-                              << EndLogLine;	      
+                              << EndLogLine;
                           }
                       }
                     else
@@ -1914,7 +1917,7 @@ it_status_t it_evd_dequeue (
                   }
                 else
                   {
-                    if( IT_CM_MSG_EVENT_STREAM == CQ->event_number ) 
+                    if( IT_CM_MSG_EVENT_STREAM == CQ->event_number )
                       {
                         it_connection_event_t * ConnEvent = (it_connection_event_t *) event;
 
@@ -1922,11 +1925,11 @@ it_status_t it_evd_dequeue (
 
                         int ret = rdma_ack_cm_event( cm_event );
                         if( ret )
-                          {		  
+                          {
                             StrongAssertLogLine( 0 )
-                              << "ERROR: rdma_ack_cm_event failed " 
+                              << "ERROR: rdma_ack_cm_event failed "
                               << " ret: " << ret
-                              << EndLogLine;	      
+                              << EndLogLine;
                           }
                       }
                     else
@@ -1936,7 +1939,7 @@ it_status_t it_evd_dequeue (
                           << " current_cm_event: " << (void *) current_cm_event
                           << EndLogLine;
 
-                        current_cm_event = cm_event;			  
+                        current_cm_event = cm_event;
                       }
                   }
               }
@@ -1945,7 +1948,7 @@ it_status_t it_evd_dequeue (
         break;
       }
     case IT_SOFTWARE_EVENT_STREAM:
-      {	  
+      {
         break;
       }
     default:
@@ -2039,7 +2042,7 @@ it_status_t it_listen_create (
   if( ret )
     {
       BegLogLine( 1 )
-        << "it_listen_create():: ERROR: "	
+        << "it_listen_create():: ERROR: "
         << " ret: " << ret
         << EndLogLine;
 
@@ -2054,11 +2057,12 @@ it_status_t it_listen_create (
   s_addr.sin_port = conn_qual->conn_qual.lr_port.local;
 
 #ifndef IT_API_USE_SIW_HACK
-  ret = it_api_o_verbs_get_device_address( &s_addr, IT_API_COMM_DEVICE );
+  ret = it_api_o_verbs_get_device_address( &s_addr,
+                                           QUOTE( IT_API_COMM_DEVICE ));
   if( ret != 0 )
     {
       BegLogLine( 1 )
-        << "Couldn't find address for device " << IT_API_COMM_DEVICE
+        << "Couldn't find address for device " << QUOTE( IT_API_COMM_DEVICE )
         << EndLogLine;
       return IT_ERR_ABORT;
     }
@@ -2068,7 +2072,7 @@ it_status_t it_listen_create (
 
 
   ret = rdma_bind_addr(cm_listen_id, (struct sockaddr*)&s_addr);
-  if (ret) 
+  if (ret)
     {
       BegLogLine( 1 )
         << "it_listen_create(): "
@@ -2092,7 +2096,7 @@ it_status_t it_listen_create (
     << EndLogLine;
 
   ret = rdma_listen(cm_listen_id, IT_API_O_VERBS_LISTEN_BACKLOG );
-  if (ret) 
+  if (ret)
     {
       BegLogLine( 1 )
         << "it_listen_create(): "
@@ -2214,7 +2218,7 @@ it_status_t it_ep_rc_create (
   memcpy( & (qpMgr->ep_attr), ep_attr, sizeof( it_ep_attributes_t ) ); // get attributes copied for later use
 
   qpMgr->send_cq->dto_type = CQ_SEND;
-  qpMgr->recv_cq->dto_type = CQ_RECV;  
+  qpMgr->recv_cq->dto_type = CQ_RECV;
 
   *ep_handle = (it_ep_handle_t) qpMgr;
 
@@ -2265,11 +2269,11 @@ it_status_t it_prepare_connection(
 
       ret = rdma_destroy_id( qpMgr->cm_conn_id );
 
-      if( ret ) 
+      if( ret )
         {
           BegLogLine( 1 )
             << "it_ep_connect(): ERROR: rdma_destroy id failed"
-            << EndLogLine;	  
+            << EndLogLine;
         }
 
       qpMgr->cm_conn_id = NULL;
@@ -2280,9 +2284,9 @@ it_status_t it_prepare_connection(
 
   // then create new cm_id
   // Note: qp is created later (after resolving address, route and initial handshake)
-  {           
+  {
     ret = rdma_create_id(qpMgr->cm_cq->device->cm_channel, &cm_conn_id, NULL, RDMA_PS_TCP);
-    if (ret) 
+    if (ret)
       {
         BegLogLine( 1 )
           << "it_ep_connect(): ERROR: creating cm id failed"
@@ -2293,7 +2297,7 @@ it_status_t it_prepare_connection(
       }
 
     StrongAssertLogLine( qpMgr->cm_conn_id == NULL )
-      << "it_ep_connect(): ERROR: cm_conn_id should not be set"    
+      << "it_ep_connect(): ERROR: cm_conn_id should not be set"
       << EndLogLine;
 
     BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT )
@@ -2325,11 +2329,12 @@ it_status_t it_prepare_connection(
       l_addr.sin_port = local_port;
       local_port++;
 
-      ret = it_api_o_verbs_get_device_address( &l_addr, IT_API_COMM_DEVICE );
+      ret = it_api_o_verbs_get_device_address( &l_addr,
+                                               QUOTE( IT_API_COMM_DEVICE ));
       if( ret != 0 )
         {
           BegLogLine( 1 )
-            << "Couldn't find address for device " << IT_API_COMM_DEVICE
+            << "Couldn't find address for device " << QUOTE(IT_API_COMM_DEVICE)
             << EndLogLine;
           return IT_ERR_ABORT;
         }
@@ -2339,7 +2344,7 @@ it_status_t it_prepare_connection(
       ret = rdma_resolve_addr( cm_conn_id, NULL, (struct sockaddr*) & s_addr, 2000 );
 #endif
 
-      if (ret) 
+      if (ret)
         {
           BegLogLine( 1 )
             << "it_ep_connect(): ERROR: failed to resolve address"
@@ -2353,9 +2358,9 @@ it_status_t it_prepare_connection(
       struct rdma_cm_event		*cm_event;
 
       ret = rdma_get_cm_event(qpMgr->cm_cq->device->cm_channel, &cm_event);
-      if (ret) 
+      if (ret)
         {
-          BegLogLine( 1 ) 
+          BegLogLine( 1 )
             << "it_ep_connect(): ERROR: failed to get cm event"
             << " ret: " << ret
             << " errno: " << errno
@@ -2366,19 +2371,19 @@ it_status_t it_prepare_connection(
           return IT_ERR_ABORT;
         }
 
-      if (cm_event->event != RDMA_CM_EVENT_ADDR_RESOLVED) 
+      if (cm_event->event != RDMA_CM_EVENT_ADDR_RESOLVED)
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: wrong event received: " 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: wrong event received: "
             << EndLogLine;
 
           pthread_mutex_unlock( & gITAPIFunctionMutex );
           return IT_ERR_ABORT;
-        } 
-      else if (cm_event->status != 0 ) 
+        }
+      else if (cm_event->status != 0 )
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: event has error status: " 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: event has error status: "
             << cm_event->status
             << EndLogLine;
 
@@ -2388,19 +2393,19 @@ it_status_t it_prepare_connection(
 
       ret = rdma_ack_cm_event( cm_event );
 
-      if (ret) 
+      if (ret)
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: failed to acknowledge cm event" 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: failed to acknowledge cm event"
             << EndLogLine;
 
           pthread_mutex_unlock( & gITAPIFunctionMutex );
           return IT_ERR_ABORT;
         }
 
-      BegLogLine(FXLOG_IT_API_O_VERBS) 
-        << "it_ep_connect(): Address resolved" 
-        << "" 
+      BegLogLine(FXLOG_IT_API_O_VERBS)
+        << "it_ep_connect(): Address resolved"
+        << ""
         << EndLogLine;
 
       qpMgr->addr_resolved = 1;
@@ -2410,10 +2415,10 @@ it_status_t it_prepare_connection(
     {
       /* route */
       ret = rdma_resolve_route(qpMgr->cm_conn_id, 2000);
-      if (ret) 
+      if (ret)
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: failed to resolve route" 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: failed to resolve route"
             << " ret: " << ret
             << " errno: " << errno
             << EndLogLine;
@@ -2425,29 +2430,29 @@ it_status_t it_prepare_connection(
       struct rdma_cm_event		*cm_event;
 
       ret = rdma_get_cm_event(qpMgr->cm_cq->device->cm_channel, &cm_event);
-      if (ret) 
+      if (ret)
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: failed to get cm event " 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: failed to get cm event "
             << EndLogLine;
 
           pthread_mutex_unlock( & gITAPIFunctionMutex );
           return IT_ERR_ABORT;
         }
 
-      if (cm_event->event != RDMA_CM_EVENT_ROUTE_RESOLVED) 
+      if (cm_event->event != RDMA_CM_EVENT_ROUTE_RESOLVED)
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: wrong event received: " 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: wrong event received: "
             << EndLogLine;
 
           pthread_mutex_unlock( & gITAPIFunctionMutex );
           return IT_ERR_ABORT;
-        } 
-      else if (cm_event->status != 0 ) 
+        }
+      else if (cm_event->status != 0 )
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: event has error status: " 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: event has error status: "
             << cm_event->status
             << EndLogLine;
 
@@ -2456,18 +2461,18 @@ it_status_t it_prepare_connection(
         }
 
       ret = rdma_ack_cm_event(cm_event);
-      if (ret) 
+      if (ret)
         {
-          BegLogLine( 1 ) 
-            << "it_ep_connect(): ERROR: failed to acknowledge cm event" 
+          BegLogLine( 1 )
+            << "it_ep_connect(): ERROR: failed to acknowledge cm event"
             << EndLogLine;
 
           pthread_mutex_unlock( & gITAPIFunctionMutex );
           return IT_ERR_ABORT;
         }
 
-      BegLogLine(FXLOG_IT_API_O_VERBS_CONNECT) 
-        << "it_ep_connect(): Route resolved" 
+      BegLogLine(FXLOG_IT_API_O_VERBS_CONNECT)
+        << "it_ep_connect(): Route resolved"
         << EndLogLine;
 
       qpMgr->route_resolved = 1;
@@ -2522,7 +2527,7 @@ it_status_t it_ep_connect (
                                   connect_qual,
                                   cn_est_flags
                                   );
-                                  
+
 
   struct rdma_cm_id *cm_conn_id = qpMgr->cm_conn_id;
 
@@ -2540,8 +2545,8 @@ it_status_t it_ep_connect (
           return status;
         }
 
-      BegLogLine(FXLOG_IT_API_O_VERBS_CONNECT) 
-        << "it_ep_connect(): QP initiated" 
+      BegLogLine(FXLOG_IT_API_O_VERBS_CONNECT)
+        << "it_ep_connect(): QP initiated"
         << EndLogLine;
     }
 
@@ -2558,10 +2563,10 @@ it_status_t it_ep_connect (
     << EndLogLine;
 
   ret = rdma_connect(cm_conn_id, &conn_param);
-  if (ret) 
+  if (ret)
     {
-      BegLogLine( 1 ) 
-        << "it_ep_connect(): ERROR: failed to connect to remote host" 
+      BegLogLine( 1 )
+        << "it_ep_connect(): ERROR: failed to connect to remote host"
         << " ret: " << ret
         << " errno: " << errno
         << " conn_id: " << (void*)cm_conn_id
@@ -2570,11 +2575,11 @@ it_status_t it_ep_connect (
 
       pthread_mutex_unlock( & gITAPIFunctionMutex );
       return IT_ERR_ABORT;
-    }  
+    }
 
-  // BegLogLine(FXLOG_IT_API_O_VERBS) 
-  BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT ) 
-    << "it_ep_connect(): QP connected" 
+  // BegLogLine(FXLOG_IT_API_O_VERBS)
+  BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT )
+    << "it_ep_connect(): QP connected"
     << EndLogLine;
 
   istatus = socket_nonblock_on( qpMgr->cm_cq->device->cm_channel->fd );
@@ -2618,7 +2623,7 @@ it_status_t it_ep_accept (
   if( status != IT_SUCCESS )
     {
       return status;
-    }  
+    }
 
   struct rdma_conn_param conn_param;
   memset(&conn_param, 0, sizeof(conn_param));
@@ -2632,10 +2637,10 @@ it_status_t it_ep_accept (
     << EndLogLine;
 
   int ret = rdma_accept(cm_conn_id, &conn_param);
-  if( ret ) 
+  if( ret )
     {
-      BegLogLine( 1 ) 
-        << "it_ep_accept(): ERROR: failed to accept connection" 
+      BegLogLine( 1 )
+        << "it_ep_accept(): ERROR: failed to accept connection"
         << " ret: " << ret
         << " errno: " << errno
         << EndLogLine;
@@ -2740,12 +2745,12 @@ it_status_t it_lmr_create21 (
   StrongAssertLogLine( pdMgr->device != NULL )
     << "it_lmr_create(): ERROR: "
     << " pdMgr: " << (void *) pdMgr
-    << EndLogLine;  
+    << EndLogLine;
 
   StrongAssertLogLine( pdMgr->device->devices_count > 0 )
     << "it_lmr_create(): ERROR: "
     << " pdMgr->device->devices_count: " << pdMgr->device->devices_count
-    << EndLogLine;  
+    << EndLogLine;
 
   mrMgr->MRs = (it_api_o_verbs_mr_record_t *) malloc( sizeof( it_api_o_verbs_mr_record_t ) * pdMgr->device->devices_count );
   StrongAssertLogLine( mrMgr->MRs )
@@ -2756,18 +2761,18 @@ it_status_t it_lmr_create21 (
     {
       if( pdMgr->PDs[ i ] != NULL )
         {
-          gITAPI_REG_MR_START.HitOE( IT_API_TRACE, 
-                                     gITAPI_REG_MR_START_Name, 
-                                     gTraceRank, 
+          gITAPI_REG_MR_START.HitOE( IT_API_TRACE,
+                                     gITAPI_REG_MR_START_Name,
+                                     gTraceRank,
                                      gITAPI_REG_MR_START );
 
           struct ibv_mr *local_triplet_mr = ibv_reg_mr( pdMgr->PDs[ i ],
-                                                        mrMgr->addr, 
+                                                        mrMgr->addr,
                                                         mrMgr->length,
                                                         mrMgr->access );
-          gITAPI_REG_MR_FINIS.HitOE( IT_API_TRACE, 
-                                     gITAPI_REG_MR_FINIS_Name, 
-                                     gTraceRank, 
+          gITAPI_REG_MR_FINIS.HitOE( IT_API_TRACE,
+                                     gITAPI_REG_MR_FINIS_Name,
+                                     gTraceRank,
                                      gITAPI_REG_MR_FINIS );
 
           if( ! local_triplet_mr )
@@ -2782,7 +2787,7 @@ it_status_t it_lmr_create21 (
 
           mrMgr->MRs[ i ].mr = local_triplet_mr;
 
-          BegLogLine( 0 ) 
+          BegLogLine( 0 )
             << "it_lmr_create(): "
             << " lmr: " << (void *)mrMgr
             << " dev" << i
@@ -2794,7 +2799,7 @@ it_status_t it_lmr_create21 (
         }
       else
         {
-          BegLogLine( FXLOG_IT_API_O_VERBS ) 
+          BegLogLine( FXLOG_IT_API_O_VERBS )
             << "it_lmr_create(): "
             << " no pd created for dev: " << i
             << " deferring registration"
@@ -2884,14 +2889,14 @@ it_status_t it_post_rdma_read (
     << "it_post_rdma_read(): local_segments is NULL "
     << EndLogLine;
 
-  it_status_t status = it_api_o_verbs_post_op( POST_SEND, 
-                                               IBV_WR_RDMA_READ, 
+  it_status_t status = it_api_o_verbs_post_op( POST_SEND,
+                                               IBV_WR_RDMA_READ,
                                                ep_handle,
                                                local_segments,
                                                num_segments,
                                                cookie,
                                                dto_flags,
-                                               rdma_addr, 
+                                               rdma_addr,
                                                rmr_context );
 
   pthread_mutex_unlock( & gITAPIFunctionMutex );
@@ -2931,13 +2936,13 @@ it_status_t it_post_rdma_write (
     << EndLogLine;
 
   it_status_t status = it_api_o_verbs_post_op( POST_SEND,
-                                               IBV_WR_RDMA_WRITE, 
+                                               IBV_WR_RDMA_WRITE,
                                                ep_handle,
                                                local_segments,
                                                num_segments,
                                                cookie,
                                                dto_flags,
-                                               rdma_addr, 
+                                               rdma_addr,
                                                rmr_context );
 
   pthread_mutex_unlock( & gITAPIFunctionMutex );
@@ -2969,14 +2974,14 @@ it_status_t it_post_recv (
 
   BegLogLine(FXLOG_IT_API_O_VERBS) << "it_dto_flags_t   " << (void*)dto_flags << EndLogLine;
 
-  it_status_t status = it_api_o_verbs_post_op( POST_RECV, 
-                                               IBV_WR_SEND, 
+  it_status_t status = it_api_o_verbs_post_op( POST_RECV,
+                                               IBV_WR_SEND,
                                                (it_ep_handle_t) handle,
                                                local_segments,
                                                num_segments,
                                                cookie,
                                                dto_flags,
-                                               0, 
+                                               0,
                                                0 );
 
   pthread_mutex_unlock( & gITAPIFunctionMutex );
@@ -3012,14 +3017,14 @@ it_status_t it_post_send (
     << "it_post_send(): local_segments is NULL "
     << EndLogLine;
 
-  it_status_t status = it_api_o_verbs_post_op( POST_SEND, 
-                                               IBV_WR_SEND, 
+  it_status_t status = it_api_o_verbs_post_op( POST_SEND,
+                                               IBV_WR_SEND,
                                                ep_handle,
                                                local_segments,
                                                num_segments,
                                                cookie,
                                                dto_flags,
-                                               0, 
+                                               0,
                                                0 );
 
   pthread_mutex_unlock( & gITAPIFunctionMutex );
@@ -3033,7 +3038,7 @@ it_status_t it_post_send (
 
 
 /********************************************************************
- * Extended IT_API 
+ * Extended IT_API
  ********************************************************************/
 // Extended Accept that allows to transmit an RMR context as private data
 // - registers the lmr with the newly created qp
@@ -3070,7 +3075,7 @@ it_status_t itx_ep_accept_with_rmr (
   if( status != IT_SUCCESS )
     {
       return status;
-    }  
+    }
 
   struct rdma_conn_param conn_param;
   memset(&conn_param, 0, sizeof(conn_param));
@@ -3089,7 +3094,7 @@ it_status_t itx_ep_accept_with_rmr (
       if( status != IT_SUCCESS )
         {
           return status;
-        }  
+        }
 
       BegLogLine( 1 )
         << "accept_with_rmr: "
@@ -3104,11 +3109,11 @@ it_status_t itx_ep_accept_with_rmr (
       private_data.rmr      = (it_rmr_handle_t) htobe64( (*rmr_context) );
       private_data.addr.abs = (void*)htobe64( (long unsigned int) lmr->addr.abs );
       private_data.length   = htobe64( lmr->length );
-  
+
       conn_param.private_data = &private_data;
       conn_param.private_data_len =  sizeof(it_rmr_triplet_t);
     }
-      
+
   else
     {
       conn_param.private_data_len = 0; // assume no data
@@ -3120,10 +3125,10 @@ it_status_t itx_ep_accept_with_rmr (
     << EndLogLine;
 
   int ret = rdma_accept(cm_conn_id, &conn_param);
-  if( ret ) 
+  if( ret )
     {
-      BegLogLine( 1 ) 
-        << "it_ep_accept(): ERROR: failed to accept connection" 
+      BegLogLine( 1 )
+        << "it_ep_accept(): ERROR: failed to accept connection"
         << " ret: " << ret
         << " errno: " << errno
         << EndLogLine;
@@ -3186,7 +3191,7 @@ it_status_t itx_ep_connect_with_rmr (
                                   connect_qual,
                                   cn_est_flags
                                   );
-                                  
+
 
   struct rdma_cm_id *cm_conn_id = qpMgr->cm_conn_id;
 
@@ -3204,8 +3209,8 @@ it_status_t itx_ep_connect_with_rmr (
           return istatus;
         }
 
-      BegLogLine(FXLOG_IT_API_O_VERBS_CONNECT) 
-        << "it_ep_connect(): QP initiated" 
+      BegLogLine(FXLOG_IT_API_O_VERBS_CONNECT)
+        << "it_ep_connect(): QP initiated"
         << EndLogLine;
     }
 
@@ -3229,7 +3234,7 @@ it_status_t itx_ep_connect_with_rmr (
       if( istatus != IT_SUCCESS )
         {
           return istatus;
-        }  
+        }
 
       // we have to extend the private data buffer if user provided data already
       int   internal_private_data_length;
@@ -3237,7 +3242,7 @@ it_status_t itx_ep_connect_with_rmr (
 
       internal_private_data_length = private_data_length + 2 * sizeof(uint64_t) + 1 * sizeof(uint32_t); // works also if no user priv-data is present
       internal_private_data = (unsigned char*)malloc( internal_private_data_length );
-          
+
       if( private_data != NULL )
         {
           memcpy( internal_private_data, private_data, internal_private_data_length );
@@ -3254,7 +3259,7 @@ it_status_t itx_ep_connect_with_rmr (
 
       conn_param.private_data = internal_private_data;
       conn_param.private_data_len = internal_private_data_length;
-    }  
+    }
   else
     {
       conn_param.private_data_len = private_data_length; // assume no data
@@ -3266,10 +3271,10 @@ it_status_t itx_ep_connect_with_rmr (
     << EndLogLine;
 
   ret = rdma_connect(cm_conn_id, &conn_param);
-  if (ret) 
+  if (ret)
     {
-      BegLogLine( 1 ) 
-        << "it_ep_connect(): ERROR: failed to connect to remote host" 
+      BegLogLine( 1 )
+        << "it_ep_connect(): ERROR: failed to connect to remote host"
         << " ret: " << ret
         << " errno: " << errno
         << " conn_id: " << (void*)cm_conn_id
@@ -3281,11 +3286,11 @@ it_status_t itx_ep_connect_with_rmr (
 
       pthread_mutex_unlock( & gITAPIFunctionMutex );
       return IT_ERR_ABORT;
-    }  
+    }
 
-  // BegLogLine(FXLOG_IT_API_O_VERBS) 
-  BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT ) 
-    << "it_ep_connect(): QP connected" 
+  // BegLogLine(FXLOG_IT_API_O_VERBS)
+  BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT )
+    << "it_ep_connect(): QP connected"
     << EndLogLine;
 
   /* should be save to free here:
@@ -3326,7 +3331,7 @@ itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
   StrongAssertLogLine( device_ordinal >= 0 && device_ordinal < device_count )
     << "ERROR: "
     << " device_ordinal: " << device_ordinal
-    << " device_count: " << device_count    
+    << " device_count: " << device_count
     << EndLogLine;
 
   it_api_o_verbs_mr_mgr_t* mrMgr = (it_api_o_verbs_mr_mgr_t* ) lmr;
@@ -3339,8 +3344,8 @@ itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
 
       if( mrMgr->pd->PDs[ device_ordinal ] == NULL )
         {
-          it_status_t status = it_api_o_verbs_init_pd( device_ordinal, 
-                                                       qpMgr->cm_conn_id->verbs, 
+          it_status_t status = it_api_o_verbs_init_pd( device_ordinal,
+                                                       qpMgr->cm_conn_id->verbs,
                                                        mrMgr->pd );
           if( status != IT_SUCCESS )
             return status;
@@ -3350,7 +3355,7 @@ itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
         << "about to register mr: " << (void*)mrMgr->addr
         << " len: " << mrMgr->length
         << EndLogLine;
-          
+
           BegLogLine( 1 )
             << "it_api_o_verbs_post_op(): "
             << " about to an mr "
@@ -3360,19 +3365,19 @@ itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
             << " mrMgr->access: " << mrMgr->access
             << EndLogLine;
 
-      gITAPI_REG_MR_START.HitOE( IT_API_TRACE, 
-                                 gITAPI_REG_MR_START_Name, 
-                                 gTraceRank, 
+      gITAPI_REG_MR_START.HitOE( IT_API_TRACE,
+                                 gITAPI_REG_MR_START_Name,
+                                 gTraceRank,
                                  gITAPI_REG_MR_START );
 
-      struct ibv_mr *local_triplet_mr = ibv_reg_mr( mrMgr->pd->PDs[ device_ordinal ], 
-                                                    mrMgr->addr, 
+      struct ibv_mr *local_triplet_mr = ibv_reg_mr( mrMgr->pd->PDs[ device_ordinal ],
+                                                    mrMgr->addr,
                                                     mrMgr->length,
                                                     // 8 * 1024, // mrMgr->length,
                                                     mrMgr->access );
-      gITAPI_REG_MR_FINIS.HitOE( IT_API_TRACE, 
-                                 gITAPI_REG_MR_FINIS_Name, 
-                                 gTraceRank, 
+      gITAPI_REG_MR_FINIS.HitOE( IT_API_TRACE,
+                                 gITAPI_REG_MR_FINIS_Name,
+                                 gTraceRank,
                                  gITAPI_REG_MR_FINIS );
 
       if( ! local_triplet_mr )
@@ -3400,7 +3405,7 @@ itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
   // BegLogLine( 1 ) << " MRs: "  << (void*)mrMgr->MRs                           << EndLogLine;
   // BegLogLine( 1 ) << " [dev].mr: " << (void*)mrMgr->MRs[ device_ordinal ].mr  << EndLogLine;
   // BegLogLine( 1 ) << " rkey: " << (void*)mrMgr->MRs[ device_ordinal ].mr->rkey       << EndLogLine;
-    
+
 
   *rmr_context = mrMgr->MRs[ device_ordinal ].mr->rkey;
 
@@ -3410,7 +3415,7 @@ itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
 it_status_t
 itx_bind_ep_to_device( IN  it_ep_handle_t          ep_handle,
                        IN  it_cn_est_identifier_t  cn_id )
-{  
+{
   it_api_o_verbs_qp_mgr_t* qpMgr = (it_api_o_verbs_qp_mgr_t*) ep_handle;
 
   qpMgr->cm_conn_id = (struct rdma_cm_id *) cn_id;
@@ -3422,7 +3427,7 @@ itx_bind_ep_to_device( IN  it_ep_handle_t          ep_handle,
  * evd_handle has to be an aevd
  ***/
 it_status_t
-itx_aevd_wait( IN  it_evd_handle_t evd_handle,	       
+itx_aevd_wait( IN  it_evd_handle_t evd_handle,
                IN  uint64_t        timeout,
                IN  size_t          max_event_count,
                OUT it_event_t     *events,
@@ -3434,7 +3439,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
    * Block on event ready notification from the processing
    * threads
    ************************************************************/
-  pthread_mutex_lock( & ( AEVD->mEventCounterMutex ) );  
+  pthread_mutex_lock( & ( AEVD->mEventCounterMutex ) );
   if( timeout == 0 )
     {
       // early exit if there are no events yet
@@ -3468,12 +3473,12 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
   pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
   /************************************************************/
 
-  int gatheredEventCount = 0;  
+  int gatheredEventCount = 0;
 
   /***********************************************************************************
    * Dequeue AFF Events
-   ***********************************************************************************/  
-  int availableEventSlotsCount = max_event_count; 
+   ***********************************************************************************/
+  int availableEventSlotsCount = max_event_count;
   int deviceCount = AEVD->mDevice->devices_count;
   for( int deviceOrd = 0; deviceOrd < deviceCount; deviceOrd++ )
     {
@@ -3490,14 +3495,14 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
             }
         }
     }
-  /***********************************************************************************/  
+  /***********************************************************************************/
 
 
 
 
   /***********************************************************************************
    * Dequeue CM Events
-   ***********************************************************************************/  
+   ***********************************************************************************/
   AssertLogLine( availableEventSlotsCount >= 0 )
     << "ERROR: "
     << " availableEventSlotsCount: " << availableEventSlotsCount
@@ -3515,7 +3520,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
           availableEventSlotsCount--;
         }
     }
-  /***********************************************************************************/  
+  /***********************************************************************************/
 
 
 
@@ -3562,7 +3567,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
                     gITAPI_RDMA_WRITE_AT_WAIT.HitOE( IT_API_TRACE,
                                                      gITAPI_RDMA_WRITE_AT_WAIT_Name,
                                                      gTraceRank,
-                                                     gITAPI_RDMA_WRITE_AT_WAIT );	      
+                                                     gITAPI_RDMA_WRITE_AT_WAIT );
                     break;
                   }
                 case IT_DTO_SEND_CMPL_EVENT:
@@ -3617,7 +3622,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
               gITAPI_RECV_AT_WAIT.HitOE( IT_API_TRACE,
                                          gITAPI_RECV_AT_WAIT_Name,
                                          gTraceRank,
-                                         gITAPI_RECV_AT_WAIT );	      
+                                         gITAPI_RECV_AT_WAIT );
             }
         }
     }
@@ -3645,7 +3650,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 /**************************************************************************************/
 
 it_status_t
-itx_init_tracing( const char* aContextName, 
+itx_init_tracing( const char* aContextName,
                   int   aTraceRank )
 {
   gTraceRank = aTraceRank;
