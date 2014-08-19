@@ -1,0 +1,18 @@
+  #
+  # clang
+  #
+  export CLANG_ROOT=/gpfs/bbp.cscs.ch/home/biddisco/apps/clang/bgclang/current
+  export CC=$CLANG_ROOT/bin/clang
+  export CXX=$CLANG_ROOT/bin/clang++
+  export PATH=$CLANG_ROOT/bin:$PATH
+  export LDFLAGS="-dynamic"
+  export CFLAGS="-mcpu=a2 -std=c99"
+
+  export GCC_TOOOLCHAIN=/gpfs/bbp.cscs.ch/home/biddisco/clang/V1R2M1_base_4.7.2/gnu-linux-4.7.2/powerpc64-bgq-linux/include/c++/4.7.2
+  export GCC_TOOLCHAIN_INCLUDE=$GCC_TOOOLCHAIN/powerpc64-bgq-linux
+  export CLANG_LIBCPP=$CLANG_ROOT/libc++/lib
+  export SYS_LIBSTDCPP=/gpfs/bbp.cscs.ch/home/biddisco/clang/V1R2M1_base_4.7.2/gnu-linux-4.7.2/powerpc64-bgq-linux/lib/
+
+  export CPPFLAGS="-mcpu=a2 --std=c++11 -stdlib=libc++ -I$GCC_TOOOLCHAIN -I$GCC_TOOLCHAIN_INCLUDE -L$CLANG_LIBCPP -L$SYS_LIBSTDCPP  -L/bgsys/drivers/ppcfloor/gnu-linux-4.7.2/powerpc64-bgq-linux/lib -lstdc++"
+  export CXXFLAGS=$CPPFLAGS
+  export LD_LIBRARY_PATH=$CLANG_ROOT/libc++/lib:$SYS_LIBSTDCPP:$LD_LIBRARY_PATH
