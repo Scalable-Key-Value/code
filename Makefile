@@ -10,13 +10,16 @@
 # Contributors:
 #     arayshu, lschneid - initial implementation
 
-export SKV_TOP?=${PWD}
+ifndef SKV_TOP
+    SKV_TOP=$(shell while ! test -e make.conf.in; do cd ..; done; pwd)
+    export SKV_TOP
+endif
 # use skv/build as a central build dir for all skv components
 export BUILD_DIR=$(SKV_TOP)/build
 
 # picks up SKV-specific settings
 # e.g.: SKV_DEST, SKV_BASE_DIR, SKV_GLOBAL_*FLAGS, ...
-SKV_CONF?=dev
+SKV_CONF?=rpm
 export SKV_CONF
 include ${SKV_TOP}/make.conf
 
@@ -40,7 +43,7 @@ install: build
 	install -D -m 644 README ${SKV_INSTALL_DIR}/doc/README
 	install -D -m 644 CHANGELOG ${SKV_INSTALL_DIR}/doc/CHANGELOG
 
-build: ${SKV_DEST} ${FXLOGGER_DIR}/libPkLinux.a
+build: ${SKV_DEST} ${FXLOGGER_LIB}
 	@if [ ! -d ${SKV_BUILD_DIR} ]; then echo "Creating ${SKV_BUILD_DIR}/mpi"; mkdir -p ${SKV_BUILD_DIR}/mpi; fi
 	@set -e; \
 	for subdest in ${SKV_DEST}; do \
