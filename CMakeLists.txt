@@ -50,6 +50,55 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
 find_package(OFED)
 
 #------------------------------------------------------------------------------
+# Options
+#------------------------------------------------------------------------------
+option(SKV_FOR_NONBGQ OFF)
+
+  #############################################
+  # Define the local KV backend to use
+  # inmem    - in-memory version of local kv
+  # asyncmem - async in-memory version for testing
+  # rocksdb  - rocksdb backend (tbd)
+  #############################################
+set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING 
+  "Select a database backend {inmem, asyncmem, rocksdb}")
+set_property(CACHE SKV_LOCAL_KV_BACKEND 
+  PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
+
+set(GLOBAL_DEFS
+  # use PK_LINUX to pull in several important includes and macros
+  -DPK_LINUX
+  # use MSPACES from dlmalloc.h
+  -DONLY_MSPACES
+  # enable logging in general
+  -DPKFXLOG
+ )
+
+set(IT_API_DEFS
+  # use event-based CQ reaping, if undefined it uses polling
+  -DDIT_API_USE_EVENT_CQ
+  # enable SIW workaround
+  -DIT_API_USE_SIW_HACK
+)
+
+if(SKV_FOR_NONBGQ)
+  # set the device name to use for communication
+  set(IT_API_DEFS ${IT_API_DEFS} -DIT_API_COMM_DEVICE="lo")
+endif()
+
+#------------------------------------------------------------------------------
+# include dirs
+#------------------------------------------------------------------------------
+include_directories(
+  ./include 
+  it_api/include 
+  lib/include 
+  FxLogger 
+  FxLogger/Pk
+  profiler
+)
+
+#------------------------------------------------------------------------------
 # Define source files
 #------------------------------------------------------------------------------
 set(FXLOGGER_SOURCES
@@ -121,48 +170,24 @@ set(TEST_SOURCES
 # Compile settings
 #------------------------------------------------------------------------------
 
-#############################################
-# Define the local KV backend to use
-# inmem    - in-memory version of local kv
-# asyncmem - async in-memory version for testing
-# rocksdb  - rocksdb backend (tbd)
-set(SKV_LOCAL_KV_BACKEND inmem)
-
-include_directories(include it_api/include lib/include FxLogger FxLogger/Pk
-  profiler)
-
 add_definitions(
+  -DSKV_LOCAL_KV_BACKEND="${SKV_LOCAL_KV_BACKEND}"
 # default config file
   -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
-# use PK_LINUX to pull in several important includes and macros
-  -DPK_LINUX
-# use MSPACES from dlmalloc.h
-  -DONLY_MSPACES
-# enable logging in general
-  -DPKFXLOG
 # enable command header checksum
   -DSKV_HEADER_CHECKSUM
 # enable workaround for missing RoQ loopback functionality
   -DSKV_ROQ_LOOPBACK_WORKAROUND
 # set the local kv backend for SKV
-  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
+#  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
 # logging in tests
   -DDO_CHECK
-
-# IT_API_CONFIG+=-DPK_LINUX
-
-# use event-based CQ reaping, if undefined it uses polling
-  -DDIT_API_USE_EVENT_CQ
-
-# ifdef SKV_FOR_NONBGQ
-  -DIT_API_COMM_DEVICE="lo"
-
-# enable SIW workaround for ... and set the device name to use for
-# communication
-  -DIT_API_USE_SIW_HACK
+  -DSKV_LOGGING_ALL=1 
 
 # seems to be necessary for the tests to link
   -DSKV_CLIENT_UNI
+  ${GLOBAL_DEFS}
+  ${IT_API_DEFS}
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
@@ -172,7 +197,7 @@ common_library(fxlogger)
 common_library(it_api)
 common_library(skv)
 
-set(SKV_COMMON_LINK_LIBRARIES pthread)
+set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
 common_library(skv_common)
 
 set(SKV_CLIENT_LINK_LIBRARIES skv_common)
@@ -183,7 +208,6 @@ target_link_libraries(skv_server
   skv_common it_api fxlogger ${OFED_LIBRARIES} ${MPI_LIBRARY})
 
 foreach(_test ${TEST_SOURCES})
-  message("Creating test ${_test}")
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   target_link_libraries(${TEST_NAME}
