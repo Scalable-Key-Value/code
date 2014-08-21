@@ -13,8 +13,13 @@
  *      Author: lschneid
  */
 
+#ifndef SKV_CLIENT_UNI
 #define SKV_CLIENT_UNI
+#endif
+
+#ifndef SKV_NON_MPI
 #define SKV_NON_MPI
+#endif
 
 #include <cstdint>
 #include <cstdio>
