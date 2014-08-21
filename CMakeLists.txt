@@ -94,8 +94,6 @@ include_directories(
   it_api/include 
   lib/include 
   FxLogger 
-  FxLogger/Pk
-  profiler
 )
 
 #------------------------------------------------------------------------------

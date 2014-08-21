@@ -33,17 +33,14 @@
 
 #include <fstream>
 #include <string>
-#include <Pk/Time.hpp>
+#include <Time.hpp>
 
 extern int  FxLoggerNodeId;
 extern char FxLoggerProgramName[ 1024 ];
 using namespace std;
 #else
 
-#include <Pk/Time.hpp>
-#include <Pk/Core.hpp>
-#include <Pk/Node.hpp>
-#include <Pk/FASched.hpp>
+#include <Time.hpp>
 
 #endif
 
