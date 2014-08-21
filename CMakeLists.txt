@@ -53,14 +53,13 @@ find_package(OFED)
 #------------------------------------------------------------------------------
 # Options
 #------------------------------------------------------------------------------
-option(SKV_FOR_NONBGQ OFF)
 
-  #############################################
-  # Define the local KV backend to use
-  # inmem    - in-memory version of local kv
-  # asyncmem - async in-memory version for testing
-  # rocksdb  - rocksdb backend (tbd)
-  #############################################
+#############################################
+# Define the local KV backend to use
+# inmem    - in-memory version of local kv
+# asyncmem - async in-memory version for testing
+# rocksdb  - rocksdb backend (requires rocksdb build)
+#############################################
 set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING 
   "Select a database backend {inmem, asyncmem, rocksdb}")
 set_property(CACHE SKV_LOCAL_KV_BACKEND 
@@ -79,11 +78,6 @@ set(IT_API_DEFS
   # enable SIW workaround
   -DIT_API_USE_SIW_HACK
 )
-
-if(SKV_FOR_NONBGQ)
-  # set the device name to use for communication
-  set(IT_API_DEFS ${IT_API_DEFS} -DIT_API_COMM_DEVICE="lo")
-endif()
 
 #------------------------------------------------------------------------------
 # include dirs
@@ -115,10 +109,6 @@ set(IT_API_SOURCES
 set(SKV_SOURCES
   ./lib/src/skv.cpp
 )
-
-#  ./make.conf.in
-#  ./make.conf_dev
-#  ./make.conf_rpm
 
 set(SKV_CLIENT_SOURCES
   ./src/client/skv_client.cpp
@@ -168,7 +158,6 @@ set(TEST_SOURCES
 #------------------------------------------------------------------------------
 
 add_definitions(
-  -DSKV_LOCAL_KV_BACKEND="${SKV_LOCAL_KV_BACKEND}"
 # default config file
   -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
 # enable command header checksum
@@ -176,7 +165,7 @@ add_definitions(
 # enable workaround for missing RoQ loopback functionality
   -DSKV_ROQ_LOOPBACK_WORKAROUND
 # set the local kv backend for SKV
-#  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
+  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
 # logging in tests
   -DDO_CHECK
 
