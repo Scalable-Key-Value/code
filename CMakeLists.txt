@@ -10,6 +10,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake
   ${CMAKE_SOURCE_DIR}/CMake/common)
 include(GitExternal)
 include(Common)
+include(logtrace)
 
 #------------------------------------------------------------------------------
 # Machine check, see if we can tell if we are we running on BGQ or BGAS
@@ -70,8 +71,6 @@ set(GLOBAL_DEFS
   -DPK_LINUX
   # use MSPACES from dlmalloc.h
   -DONLY_MSPACES
-  # enable logging in general
-  -DPKFXLOG
  )
 
 set(IT_API_DEFS
@@ -180,7 +179,6 @@ add_definitions(
 #  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
 # logging in tests
   -DDO_CHECK
-  -DSKV_LOGGING_ALL=1 
 
 # seems to be necessary for the tests to link
   -DSKV_CLIENT_UNI
