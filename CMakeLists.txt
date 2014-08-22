@@ -294,3 +294,36 @@ foreach(_test ${UNITTEST_SOURCES})
  #   ${MPI_LIBRARY}
   )
 endforeach()
+
+
+if( CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT )
+  set (CMAKE_INSTALL_PREFIX "/opt/SKV" CACHE PATH "SKV default location" FORCE )
+endif( CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT )
+
+set( SKV_BINARIES SKVServer )
+set( SKV_TESTS skv_base_test )
+set( SKV_LIBS skvc skvc_mpi skv_common skv_client skv_client_mpi it_api fxlogger )
+
+install(TARGETS ${SKV_BINARIES} ${SKV_TESTS} ${SKV_LIBS}
+  RUNTIME DESTINATION bin
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+)
+
+set( SKV_INCLUDE_FILES
+ FxLogger/FxLogger.hpp FxLogger/Trace.hpp
+ it_api/include/it_api.h it_api/include/it_api_os_specific.h
+ lib/include/skv.h include/client/skv_client.hpp
+)
+
+install(FILES ${SKV_INCLUDE_FILES}
+  DESTINATION include
+)
+
+set( SKV_CONFIG_FILES
+  system/bgq/etc/skv_server.conf
+)
+
+install(FILES ${SKV_CONFIG_FILES}
+  DESTINATION etc
+)
