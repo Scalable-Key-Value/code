@@ -15,7 +15,7 @@ include(logtrace)
 #------------------------------------------------------------------------------
 # Build platform/major env
 #------------------------------------------------------------------------------
-set(SKV_ENV "BGAS" STRING
+set(SKV_ENV "BGAS" CACHE STRING
     "Select the main target platform {BGAS, BGQCNK, Power, x86}")
 set_property(CACHE SKV_ENV
   PROPERTY STRINGS "BGAS" "BGQCNK" "Power" "x86")
@@ -25,7 +25,7 @@ set_property(CACHE SKV_ENV
 # MPI
 #------------------------------------------------------------------------------
 # Configurations for various pre-configured MPI installations
-set(SKV_MPI "AUTO" STRING 
+set(SKV_MPI "AUTO" CACHE STRING 
   "Select an MPI configuration {AUTO, MVAPICH2_RHEL65, MPICH_BGQ, BGAS-MVAPICH}")
 set_property(CACHE SKV_MPI
   PROPERTY STRINGS "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
