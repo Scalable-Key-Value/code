@@ -19,8 +19,8 @@
 // make sure this is a single-node program
 #include <time.h>
 #include <errno.h>
-#include <Pk/FxLogger.hpp>
-#include <Pk/Trace.hpp>
+#include <FxLogger.hpp>
+#include <Trace.hpp>
 #include <client/skv_client.hpp>
 #include <math.h>
 #include <iostream>
