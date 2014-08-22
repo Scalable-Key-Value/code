@@ -1,0 +1,2 @@
+set(SKV_ENV "BGAS" )
+set(SKV_MPI "MVAPICH2_RHEL65" )

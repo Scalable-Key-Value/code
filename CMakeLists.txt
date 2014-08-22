@@ -13,34 +13,46 @@ include(Common)
 include(logtrace)
 
 #------------------------------------------------------------------------------
-# Machine check, see if we can tell if we are we running on BGQ or BGAS
+# Build platform/major env
 #------------------------------------------------------------------------------
-SITE_NAME(hostname)
-if(hostname MATCHES bbpbg1)
-  set(BGQ 1)
-  message("Running on BGQ")
-elseif(hostname MATCHES bbpbg2)
-  set(BGAS 1)
-  message("Running on BGAS")
-elseif(hostname MATCHES bbpviz1)
-  set(BGVIZ 1)
-  message("Running on VIZ")
-endif()
-message("CMAKE_SYSTEM is ${CMAKE_SYSTEM} with hostname ${hostname} and processor ${CMAKE_SYSTEM_PROCESSOR}" )
+set(SKV_ENV "BGAS" STRING
+    "Select the main target platform {BGAS, BGQCNK, Power, x86}")
+set_property(CACHE SKV_ENV
+  PROPERTY STRINGS "BGAS" "BGQCNK" "Power" "x86")
+
 
 #------------------------------------------------------------------------------
 # MPI
 #------------------------------------------------------------------------------
-if (BGQ)
-  include (${CMAKE_CURRENT_SOURCE_DIR}/CMake/BGAS-MPI.cmake)
-endif()
-if (BGAS)
-  include (${CMAKE_CURRENT_SOURCE_DIR}/CMake/BGAS-MVAPICH.cmake)
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/mpi)
-endif()
-if(BGVIZ)
+# Configurations for various pre-configured MPI installations
+set(SKV_MPI "AUTO" STRING 
+  "Select an MPI configuration {AUTO, MVAPICH2_RHEL65, MPICH_BGQ, BGAS-MVAPICH}")
+set_property(CACHE SKV_MPI
+  PROPERTY STRINGS "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
+
+
+#------------------------------------------------------------------------------
+# pick up any site specific configuration that might differ from default
+#------------------------------------------------------------------------------
+set(SKV_SITE "default" CACHE STRING
+  "Select the main target platform {default, CSCS, ykt}")
+set_property(CACHE SKV_SITE
+  PROPERTY STRINGS "default" "CSCS" "ykt")
+include( Site/${SKV_SITE} )
+
+
+
+# include the platform and mpi config files
+include( Platform/${SKV_ENV} )
+
+message("ENV setting is: ${SKV_ENV}; MPI setting is: ${SKV_MPI}")
+if( ${SKV_MPI} MATCHES "AUTO" )
   find_package(MPI REQUIRED)
-endif()
+else( ${SKV_MPI} MATCHES "AUTO" )
+  include( MPI/${SKV_MPI} )
+endif( ${SKV_MPI} MATCHES "AUTO" )
+
+message("MPI includes in: ${MPI_INCLUDE_PATH}")
 
 include_directories(${MPI_INCLUDE_PATH})
 
@@ -66,6 +78,7 @@ set_property(CACHE SKV_LOCAL_KV_BACKEND
   PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
 
 set(GLOBAL_DEFS
+  ${PLATFORM_GLOBAL_DEFS}
   # use PK_LINUX to pull in several important includes and macros
   -DPK_LINUX
   # use MSPACES from dlmalloc.h
@@ -92,6 +105,7 @@ include_directories(
 #------------------------------------------------------------------------------
 # Define source files
 #------------------------------------------------------------------------------
+
 set(FXLOGGER_SOURCES
   ./FxLogger/FxLogger.cpp
   ./FxLogger/Trace.cpp
@@ -99,14 +113,11 @@ set(FXLOGGER_SOURCES
 )
 
 set(IT_API_SOURCES
-  ./it_api/make.conf.in
-  ./it_api/make.conf_dev
-  ./it_api/make.conf_rpm
   ./it_api/src/it_api_o_verbs.cpp
   ./it_api/src/it_api_o_verbs_thread.cpp
 )
 
-set(SKV_SOURCES
+set(SKV_CLIB_SOURCES
   ./lib/src/skv.cpp
 )
 
@@ -143,12 +154,21 @@ set(SERVER_SOURCES
 
 set(TEST_SOURCES
   ./test/skv_base_test.cpp
-  ./test/skv_test_bulk.cpp
+)
+
+set(TEST_C_SOURCES
   ./test/skv_test_clib.c
+)
+
+set(TEST_MPI_SOURCES
+  ./test/skv_test_bulk.cpp
   ./test/skv_test_insert_retrieve_async.cpp
   ./test/skv_test_insert_retrieve_sync.cpp
   ./test/test_skv_insert_command.cpp
   ./test/test_skv_remove_command.cpp
+)
+
+set(UNITTEST_SOURCES
   ./unittest/test_skv_rdma_data_buffer.cpp
   ./unittest/test_skv_ringbuffer_ptr.cpp
 )
@@ -166,7 +186,7 @@ add_definitions(
   -DSKV_ROQ_LOOPBACK_WORKAROUND
 # set the local kv backend for SKV
   -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
-# logging in tests
+# data checking in tests
   -DDO_CHECK
 
 # seems to be necessary for the tests to link
@@ -178,30 +198,99 @@ add_definitions(
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
-common_library(fxlogger)
-common_library(it_api)
-common_library(skv)
+#------------------------------------------------------------------------------
+# list of libraries
+# fxlogger
+# it_api
+# common
+# client
+# client-mpi
+# server
+# c-lib
+# c-lib-mpi
 
+add_library(fxlogger STATIC ${FXLOGGER_SOURCES})
+add_library(it_api STATIC ${IT_API_SOURCES})
+add_library(skv_common STATIC ${SKV_COMMON_SOURCES})
+
+add_library(skv_client STATIC ${SKV_CLIENT_SOURCES})
+target_compile_definitions(skv_client PUBLIC
+  "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
+)
+add_library(skv_client_mpi STATIC ${SKV_CLIENT_SOURCES})
+
+add_library(skvc STATIC ${SKV_CLIB_SOURCES})
+target_compile_definitions(skvc PUBLIC
+  "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
+)
+add_library(skvc_mpi STATIC ${SKV_CLIB_SOURCES})
+
+
+#------------------------------------------------------------------------------
+# build the server
+add_executable(SKVServer ${SERVER_SOURCES})
 set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
-common_library(skv_common)
+target_link_libraries(SKVServer
+  skv_common it_api fxlogger ${OFED_LIBRARIES} ${MPI_LIBRARY} ${SKV_COMMON_LINK_LIBRARIES})
 
-set(SKV_CLIENT_LINK_LIBRARIES skv_common)
-common_library(skv_client)
 
-add_executable(skv_server ${SERVER_SOURCES})
-target_link_libraries(skv_server
-  skv_common it_api fxlogger ${OFED_LIBRARIES} ${MPI_LIBRARY})
-
-foreach(_test ${TEST_SOURCES})
+#------------------------------------------------------------------------------
+# build the tests
+foreach(_test ${TEST_MPI_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   target_link_libraries(${TEST_NAME}
-#    skv_common
-    skv
-    skv_client
+    skv_client_mpi
+    skv_common
     it_api
     fxlogger
     ${OFED_LIBRARIES}
     ${MPI_LIBRARY}
+  )
+endforeach()
+
+foreach(_test ${TEST_SOURCES})
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  target_compile_definitions(${TEST_NAME} PUBLIC
+    "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
+  )
+  target_link_libraries(${TEST_NAME}
+    skv_client
+    skv_common
+    it_api
+    fxlogger
+    ${OFED_LIBRARIES}
+#    ${MPI_LIBRARY}
+  )
+endforeach()
+
+foreach(_test ${TEST_C_SOURCES})
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  target_link_libraries(${TEST_NAME}
+    skvc
+    skv_client
+    skv_common
+    it_api
+    fxlogger
+    ${OFED_LIBRARIES}
+    ${MPI_LIBRARY}
+  )
+endforeach()
+
+foreach(_test ${UNITTEST_SOURCES})
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  target_compile_definitions(${TEST_NAME} PUBLIC
+    "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
+  )
+  target_link_libraries(${TEST_NAME}
+    skv_client
+    skv_common
+    it_api
+    fxlogger
+    ${OFED_LIBRARIES}
+ #   ${MPI_LIBRARY}
   )
 endforeach()
