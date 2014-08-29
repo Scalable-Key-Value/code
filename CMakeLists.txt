@@ -138,9 +138,7 @@ set(SKV_COMMON_SOURCES
 )
 
 set(SERVER_SOURCES
-  ./src/server/skv_local_kv_asyncmem.cpp
-  ./src/server/skv_local_kv_inmem.cpp
-  ./src/server/skv_local_kv_rocksdb.cpp
+  ./src/server/skv_local_kv_${SKV_LOCAL_KV_BACKEND}.cpp
   ./src/server/skv_server.cpp
   ./src/server/skv_server_IT_event_source.cpp
   ./src/server/skv_server_command_event_source.cpp
@@ -149,7 +147,6 @@ set(SERVER_SOURCES
   ./src/server/skv_server_network_event_manager.cpp
   ./src/server/skv_server_tree_based_container.cpp
   ./src/server/skv_server_uber_pds.cpp
-  ./system/bgq/etc/skv_server.conf
 )
 
 set(TEST_SOURCES
