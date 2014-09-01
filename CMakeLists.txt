@@ -44,7 +44,7 @@ set_property(CACHE SKV_MPI
   PROPERTY STRINGS "AUTO" "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
 
 include(Platform/${SKV_ENV})
-message("Environment ${SKV_ENV}; MPI ${SKV_MPI}")
+message(STATUS "Environment ${SKV_ENV}; MPI ${SKV_MPI}")
 
 if(SKV_MPI MATCHES "AUTO")
   find_package(MPI REQUIRED)
@@ -53,7 +53,6 @@ else()
 endif()
 
 find_package(OFED REQUIRED)
-find_package(Threads REQUIRED)
 
 include_directories(${MPI_INCLUDE_PATH})
 
@@ -91,12 +90,7 @@ set(IT_API_DEFS
 #------------------------------------------------------------------------------
 # include dirs
 #------------------------------------------------------------------------------
-include_directories(
-  ./include
-  it_api/include
-  lib/include
-  FxLogger
-)
+include_directories(./include it_api/include lib/include FxLogger)
 
 #------------------------------------------------------------------------------
 # Define source files
@@ -196,7 +190,11 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 #------------------------------------------------------------------------------
 # libraries
-set(COMMON_LIBRARY_TYPE STATIC)
+
+# eile: Disabled static linking. For some unfathomable reason fxlogger
+# then forces the link against gcc 4.4.7 libs which can't work
+#set(COMMON_LIBRARY_TYPE STATIC)
+
 common_library(fxlogger)
 common_library(it_api)
 common_library(skv_common)
@@ -208,33 +206,18 @@ common_library(skvc_mpi)
 target_compile_definitions(skv_client PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
 target_compile_definitions(skvc PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
 
-
 #------------------------------------------------------------------------------
-# build the server
-add_executable(SKVServer ${SERVER_SOURCES})
-set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
-target_link_libraries(SKVServer skv_common it_api fxlogger
-  ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+# executables
 
-add_executable(skv_server ${SERVER_SOURCES})
-target_link_libraries(skv_server skv_common it_api fxlogger
+set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
+
+add_executable(SKVServer ${SERVER_SOURCES})
+target_link_libraries(SKVServer skv_common it_api fxlogger
   ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
-    ${OFED_LIBRARIES} ${MPI_LIBRARY} ${SKV_COMMON_LINK_LIBRARIES})
-endforeach()
-
-foreach(_test ${UNITTEST_SOURCES})
-  get_filename_component(TEST_NAME ${_test} NAME_WE)
-  add_executable(${TEST_NAME} ${_test})
-  target_compile_definitions(${TEST_NAME} PUBLIC
-    "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
-  )
-  target_link_libraries(${TEST_NAME} skv_client skv_common it_api fxlogger
-    ${OFED_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES}
- #   ${MPI_LIBRARY}
-  )
+    ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()
