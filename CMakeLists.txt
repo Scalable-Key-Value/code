@@ -10,57 +10,52 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake
   ${CMAKE_SOURCE_DIR}/CMake/common)
 include(GitExternal)
 include(Common)
-include(logtrace)
 
-#------------------------------------------------------------------------------
-# Build platform/major env
-#------------------------------------------------------------------------------
-set(SKV_ENV "BGAS" CACHE STRING
+# pick up any site specific configuration that might differ from default
+set(SKV_SITE "default" CACHE STRING
+  "Select the main target platform {default, CSCS, ykt}")
+set_property(CACHE SKV_SITE PROPERTY STRINGS "default" "CSCS" "ykt")
+include(Site/${SKV_SITE})
+
+# do default magic
+if(NOT SKV_ENV)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc")
+    set(SKV_ENV "BGAS")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86")
+    set(SKV_ENV "x86")
+  else()
+    set(SKV_ENV ${CMAKE_SYSTEM_PROCESSOR})
+  endif()
+endif()
+
+if(NOT SKV_MPI)
+  set(SKV_MPI "AUTO")
+endif()
+
+# store results
+set(SKV_ENV ${SKV_ENV} CACHE STRING
     "Select the main target platform {BGAS, BGQCNK, Power, x86}")
 set_property(CACHE SKV_ENV
   PROPERTY STRINGS "BGAS" "BGQCNK" "Power" "x86")
 
-
-#------------------------------------------------------------------------------
-# MPI
-#------------------------------------------------------------------------------
-# Configurations for various pre-configured MPI installations
-set(SKV_MPI "AUTO" CACHE STRING 
-  "Select an MPI configuration {AUTO, MVAPICH2_RHEL65, MPICH_BGQ, BGAS-MVAPICH}")
+set(SKV_MPI ${SKV_MPI} CACHE STRING
+  "MPI configuration {AUTO, MVAPICH2_RHEL65, MPICH_BGQ, BGAS-MVAPICH}")
 set_property(CACHE SKV_MPI
-  PROPERTY STRINGS "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
+  PROPERTY STRINGS "AUTO" "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
 
+include(Platform/${SKV_ENV})
+message("Environment ${SKV_ENV}; MPI ${SKV_MPI}")
 
-#------------------------------------------------------------------------------
-# pick up any site specific configuration that might differ from default
-#------------------------------------------------------------------------------
-set(SKV_SITE "default" CACHE STRING
-  "Select the main target platform {default, CSCS, ykt}")
-set_property(CACHE SKV_SITE
-  PROPERTY STRINGS "default" "CSCS" "ykt")
-include( Site/${SKV_SITE} )
-
-
-
-# include the platform and mpi config files
-include( Platform/${SKV_ENV} )
-
-message("ENV setting is: ${SKV_ENV}; MPI setting is: ${SKV_MPI}")
-if( ${SKV_MPI} MATCHES "AUTO" )
+if(SKV_MPI MATCHES "AUTO")
   find_package(MPI REQUIRED)
-else( ${SKV_MPI} MATCHES "AUTO" )
-  include( MPI/${SKV_MPI} )
-endif( ${SKV_MPI} MATCHES "AUTO" )
+else()
+  include(MPI/${SKV_MPI})
+endif()
 
-message("MPI includes in: ${MPI_INCLUDE_PATH}")
+find_package(OFED REQUIRED)
+find_package(Threads REQUIRED)
 
 include_directories(${MPI_INCLUDE_PATH})
-
-#------------------------------------------------------------------------------
-# OFED verbs libraries
-#------------------------------------------------------------------------------
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
-find_package(OFED)
 
 #------------------------------------------------------------------------------
 # Options
@@ -72,11 +67,12 @@ find_package(OFED)
 # asyncmem - async in-memory version for testing
 # rocksdb  - rocksdb backend (requires rocksdb build)
 #############################################
-set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING 
+set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING
   "Select a database backend {inmem, asyncmem, rocksdb}")
-set_property(CACHE SKV_LOCAL_KV_BACKEND 
+set_property(CACHE SKV_LOCAL_KV_BACKEND
   PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
 
+include(logtrace)
 set(GLOBAL_DEFS
   ${PLATFORM_GLOBAL_DEFS}
   # use PK_LINUX to pull in several important includes and macros
@@ -96,10 +92,10 @@ set(IT_API_DEFS
 # include dirs
 #------------------------------------------------------------------------------
 include_directories(
-  ./include 
-  it_api/include 
-  lib/include 
-  FxLogger 
+  ./include
+  it_api/include
+  lib/include
+  FxLogger
 )
 
 #------------------------------------------------------------------------------
@@ -117,9 +113,8 @@ set(IT_API_SOURCES
   ./it_api/src/it_api_o_verbs_thread.cpp
 )
 
-set(SKV_CLIB_SOURCES
-  ./lib/src/skv.cpp
-)
+set(SKVC_SOURCES ./lib/src/skv.cpp)
+set(SKVC_MPI_SOURCES ${SKVC_SOURCES})
 
 set(SKV_CLIENT_SOURCES
   ./src/client/skv_client.cpp
@@ -130,6 +125,7 @@ set(SKV_CLIENT_SOURCES
   ./src/client/skv_client_cursor.cpp
   ./src/client/skv_client_internal.cpp
 )
+set(SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES})
 
 set(SKV_COMMON_SOURCES
   ./src/common/skv_config.cpp
@@ -199,84 +195,36 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 #------------------------------------------------------------------------------
-# list of libraries
-# fxlogger
-# it_api
-# common
-# client
-# client-mpi
-# server
-# c-lib
-# c-lib-mpi
+# libraries
+set(COMMON_LIBRARY_TYPE STATIC)
+common_library(fxlogger)
+common_library(it_api)
+common_library(skv_common)
+common_library(skv_client)
+common_library(skv_client_mpi)
+common_library(skvc)
+common_library(skvc_mpi)
 
-add_library(fxlogger STATIC ${FXLOGGER_SOURCES})
-add_library(it_api STATIC ${IT_API_SOURCES})
-add_library(skv_common STATIC ${SKV_COMMON_SOURCES})
-
-add_library(skv_client STATIC ${SKV_CLIENT_SOURCES})
-target_compile_definitions(skv_client PUBLIC
-  "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
-)
-add_library(skv_client_mpi STATIC ${SKV_CLIENT_SOURCES})
-
-add_library(skvc STATIC ${SKV_CLIB_SOURCES})
-target_compile_definitions(skvc PUBLIC
-  "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
-)
-add_library(skvc_mpi STATIC ${SKV_CLIB_SOURCES})
+target_compile_definitions(skv_client PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
+target_compile_definitions(skvc PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
 
 
 #------------------------------------------------------------------------------
 # build the server
 add_executable(SKVServer ${SERVER_SOURCES})
 set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
-target_link_libraries(SKVServer
-  skv_common it_api fxlogger ${OFED_LIBRARIES} ${MPI_LIBRARY} ${SKV_COMMON_LINK_LIBRARIES})
+target_link_libraries(SKVServer skv_common it_api fxlogger
+  ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 
-
-#------------------------------------------------------------------------------
-# build the tests
-foreach(_test ${TEST_MPI_SOURCES})
-  get_filename_component(TEST_NAME ${_test} NAME_WE)
-  add_executable(${TEST_NAME} ${_test})
-  target_link_libraries(${TEST_NAME}
-    skv_client_mpi
-    skv_common
-    it_api
-    fxlogger
-    ${OFED_LIBRARIES}
-    ${MPI_LIBRARY}
-  )
-endforeach()
+add_executable(skv_server ${SERVER_SOURCES})
+target_link_libraries(skv_server skv_common it_api fxlogger
+  ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
-  target_compile_definitions(${TEST_NAME} PUBLIC
-    "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
-  )
-  target_link_libraries(${TEST_NAME}
-    skv_client
-    skv_common
-    it_api
-    fxlogger
-    ${OFED_LIBRARIES}
-#    ${MPI_LIBRARY}
-  )
-endforeach()
-
-foreach(_test ${TEST_C_SOURCES})
-  get_filename_component(TEST_NAME ${_test} NAME_WE)
-  add_executable(${TEST_NAME} ${_test})
-  target_link_libraries(${TEST_NAME}
-    skvc
-    skv_client
-    skv_common
-    it_api
-    fxlogger
-    ${OFED_LIBRARIES}
-    ${MPI_LIBRARY}
-  )
+  target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
+    ${OFED_LIBRARIES} ${MPI_LIBRARY} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()
 
 foreach(_test ${UNITTEST_SOURCES})
@@ -285,12 +233,8 @@ foreach(_test ${UNITTEST_SOURCES})
   target_compile_definitions(${TEST_NAME} PUBLIC
     "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
   )
-  target_link_libraries(${TEST_NAME}
-    skv_client
-    skv_common
-    it_api
-    fxlogger
-    ${OFED_LIBRARIES}
+  target_link_libraries(${TEST_NAME} skv_client skv_common it_api fxlogger
+    ${OFED_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES}
  #   ${MPI_LIBRARY}
   )
 endforeach()

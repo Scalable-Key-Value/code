@@ -21,13 +21,19 @@
 #define THREAD_SAFE_QUEUE_FXLOG ( 0 )
 #endif
 
-#ifndef VRNIC_CNK // need a better name
-#define _bgp_msync(void) do { asm volatile ("msync" : : : "memory"); } while( 0 )
-#define _bgp_mbar(void) do { asm volatile ("mbar" : : : "memory"); } while( 0 )
+#ifdef _ARCH_PPC64
+#  ifdef VRNIC_CNK // need a better name
+#    include "/bgsys/drivers/ppcfloor/arch/include/spi/kernel_interface.h"
+#  else
+#    define _bgp_msync(void)                                    \
+    do { asm volatile ("msync" : : : "memory"); } while( 0 )
+#    define _bgp_mbar(void)                                 \
+    do { asm volatile ("mbar" : : : "memory"); } while( 0 )
+#  endif
 #else
-#include "/bgsys/drivers/ppcfloor/arch/include/spi/kernel_interface.h"
+#  define _bgp_msync(void) __sync_synchronize()
+#  define _bgp_mbar(void) __sync_synchronize()
 #endif
-
 
 template< class Item, int tLockless >
 struct ThreadSafeQueue_t
