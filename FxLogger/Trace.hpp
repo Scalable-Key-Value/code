@@ -10,7 +10,7 @@
 #ifndef __PKTRACE2_HPP__
 #define __PKTRACE2_HPP__
 
-#include <Pk/FxLogger.hpp>
+#include <FxLogger.hpp>
 
 #if 1
 // THIS IS WHY YOU"RE NOT GETTING TRACING

@@ -1,0 +1,20 @@
+#------------------------------------------------------------------------------
+# Machine check, see if we can tell if we are we running on BGQ or BGAS
+#------------------------------------------------------------------------------
+SITE_NAME(hostname)
+if(hostname MATCHES bbpbg1)
+  set(BGQ 1)
+  set(SKV_ENV "BGQCNK")
+  set(SKV_MPI "BGAS-MPI")
+  message("Running on BGQ")
+elseif(hostname MATCHES bbpbg2)
+  set(BGAS 1)
+  set(SKV_ENV "BGAS")
+  set(SKV_MPI "BGAS-MVAPICH")
+  message("Running on BGAS")
+else()
+  set(NORMAL 1)
+  set(SKV_ENV "x86")
+  set(SKV_MPI "AUTO")
+  message("Running on normal hardware")
+endif()

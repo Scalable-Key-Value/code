@@ -11,31 +11,45 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake
 include(GitExternal)
 include(Common)
 
-#------------------------------------------------------------------------------
-# Machine check, see if we can tell if we are we running on BGQ or BGAS
-#------------------------------------------------------------------------------
-SITE_NAME(hostname)
-if(hostname MATCHES bbpbg1)
-  set(BGQ 1)
-  message(STATUS "Running on BGQ")
-elseif(hostname MATCHES bbpbg2)
-  set(BGAS 1)
-  message(STATUS "Running on BGAS")
-else()
-  set(NORMAL 1)
-  message(STATUS "Running on standard hardware")
+# pick up any site specific configuration that might differ from default
+set(SKV_SITE "default" CACHE STRING
+  "Select the main target platform {default, CSCS, ykt}")
+set_property(CACHE SKV_SITE PROPERTY STRINGS "default" "CSCS" "ykt")
+include(Site/${SKV_SITE})
+
+# do default magic
+if(NOT SKV_ENV)
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "ppc")
+    set(SKV_ENV "BGAS")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "x86")
+    set(SKV_ENV "x86")
+  else()
+    set(SKV_ENV ${CMAKE_SYSTEM_PROCESSOR})
+  endif()
 endif()
 
-#------------------------------------------------------------------------------
-# MPI
-#------------------------------------------------------------------------------
-if(BGQ)
-  include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/BGAS-MPI.cmake)
-elseif(BGAS)
-  include(${CMAKE_CURRENT_SOURCE_DIR}/CMake/BGAS-MVAPICH.cmake)
-  include_directories(${CMAKE_CURRENT_SOURCE_DIR}/mpi)
-elseif(NORMAL)
+if(NOT SKV_MPI)
+  set(SKV_MPI "AUTO")
+endif()
+
+# store results
+set(SKV_ENV ${SKV_ENV} CACHE STRING
+    "Select the main target platform {BGAS, BGQCNK, Power, x86}")
+set_property(CACHE SKV_ENV
+  PROPERTY STRINGS "BGAS" "BGQCNK" "Power" "x86")
+
+set(SKV_MPI ${SKV_MPI} CACHE STRING
+  "MPI configuration {AUTO, MVAPICH2_RHEL65, MPICH_BGQ, BGAS-MVAPICH}")
+set_property(CACHE SKV_MPI
+  PROPERTY STRINGS "AUTO" "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
+
+include(Platform/${SKV_ENV})
+message("Environment ${SKV_ENV}; MPI ${SKV_MPI}")
+
+if(SKV_MPI MATCHES "AUTO")
   find_package(MPI REQUIRED)
+else()
+  include(MPI/${SKV_MPI})
 endif()
 
 include_directories(${MPI_INCLUDE_PATH})
@@ -47,8 +61,50 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
 find_package(OFED)
 
 #------------------------------------------------------------------------------
+# Options
+#------------------------------------------------------------------------------
+
+#############################################
+# Define the local KV backend to use
+# inmem    - in-memory version of local kv
+# asyncmem - async in-memory version for testing
+# rocksdb  - rocksdb backend (requires rocksdb build)
+#############################################
+set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING
+  "Select a database backend {inmem, asyncmem, rocksdb}")
+set_property(CACHE SKV_LOCAL_KV_BACKEND
+  PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
+
+include(logtrace)
+set(GLOBAL_DEFS
+  ${PLATFORM_GLOBAL_DEFS}
+  # use PK_LINUX to pull in several important includes and macros
+  -DPK_LINUX
+  # use MSPACES from dlmalloc.h
+  -DONLY_MSPACES
+ )
+
+set(IT_API_DEFS
+  # use event-based CQ reaping, if undefined it uses polling
+  -DDIT_API_USE_EVENT_CQ
+  # enable SIW workaround
+  -DIT_API_USE_SIW_HACK
+)
+
+#------------------------------------------------------------------------------
+# include dirs
+#------------------------------------------------------------------------------
+include_directories(
+  ./include
+  it_api/include
+  lib/include
+  FxLogger
+)
+
+#------------------------------------------------------------------------------
 # Define source files
 #------------------------------------------------------------------------------
+
 set(FXLOGGER_SOURCES
   ./FxLogger/FxLogger.cpp
   ./FxLogger/Trace.cpp
@@ -56,20 +112,12 @@ set(FXLOGGER_SOURCES
 )
 
 set(IT_API_SOURCES
-  ./it_api/make.conf.in
-  ./it_api/make.conf_dev
-  ./it_api/make.conf_rpm
   ./it_api/src/it_api_o_verbs.cpp
   ./it_api/src/it_api_o_verbs_thread.cpp
 )
 
-set(SKV_SOURCES
-  ./lib/src/skv.cpp
-)
-
-#  ./make.conf.in
-#  ./make.conf_dev
-#  ./make.conf_rpm
+set(SKVC_SOURCES ./lib/src/skv.cpp)
+set(SKVC_MPI_SOURCES ${SKVC_SOURCES})
 
 set(SKV_CLIENT_SOURCES
   ./src/client/skv_client.cpp
@@ -80,6 +128,7 @@ set(SKV_CLIENT_SOURCES
   ./src/client/skv_client_cursor.cpp
   ./src/client/skv_client_internal.cpp
 )
+set(SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES})
 
 set(SKV_COMMON_SOURCES
   ./src/common/skv_config.cpp
@@ -104,12 +153,21 @@ set(SERVER_SOURCES
 
 set(TEST_SOURCES
   ./test/skv_base_test.cpp
-  ./test/skv_test_bulk.cpp
+)
+
+set(TEST_C_SOURCES
   ./test/skv_test_clib.c
+)
+
+set(TEST_MPI_SOURCES
+  ./test/skv_test_bulk.cpp
   ./test/skv_test_insert_retrieve_async.cpp
   ./test/skv_test_insert_retrieve_sync.cpp
   ./test/test_skv_insert_command.cpp
   ./test/test_skv_remove_command.cpp
+)
+
+set(UNITTEST_SOURCES
   ./unittest/test_skv_rdma_data_buffer.cpp
   ./unittest/test_skv_ringbuffer_ptr.cpp
 )
@@ -118,77 +176,79 @@ set(TEST_SOURCES
 # Compile settings
 #------------------------------------------------------------------------------
 
-#############################################
-# Define the local KV backend to use
-# inmem    - in-memory version of local kv
-# asyncmem - async in-memory version for testing
-# rocksdb  - rocksdb backend (tbd)
-set(SKV_LOCAL_KV_BACKEND inmem)
-
-include_directories(include it_api/include lib/include FxLogger FxLogger/Pk
-  profiler)
-
 add_definitions(
 # default config file
   -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
-# use PK_LINUX to pull in several important includes and macros
-  -DPK_LINUX
-# use MSPACES from dlmalloc.h
-  -DONLY_MSPACES
-# enable logging in general
-  -DPKFXLOG
 # enable command header checksum
   -DSKV_HEADER_CHECKSUM
 # enable workaround for missing RoQ loopback functionality
   -DSKV_ROQ_LOOPBACK_WORKAROUND
 # set the local kv backend for SKV
   -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
-# logging in tests
+# data checking in tests
   -DDO_CHECK
-
-# IT_API_CONFIG+=-DPK_LINUX
-
-# use event-based CQ reaping, if undefined it uses polling
-  -DDIT_API_USE_EVENT_CQ
-
-# ifdef SKV_FOR_NONBGQ
-  -DIT_API_COMM_DEVICE="lo"
-
-# enable SIW workaround for ... and set the device name to use for
-# communication
-  -DIT_API_USE_SIW_HACK
 
 # seems to be necessary for the tests to link
   -DSKV_CLIENT_UNI
+  ${GLOBAL_DEFS}
+  ${IT_API_DEFS}
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
+#------------------------------------------------------------------------------
+# libraries
+set(COMMON_LIBRARY_TYPE STATIC)
 common_library(fxlogger)
 common_library(it_api)
-common_library(skv)
-
-set(SKV_COMMON_LINK_LIBRARIES pthread)
 common_library(skv_common)
-
-set(SKV_CLIENT_LINK_LIBRARIES skv_common)
 common_library(skv_client)
+common_library(skv_client_mpi)
+common_library(skvc)
+common_library(skvc_mpi)
+
+target_compile_definitions(skv_client PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
+target_compile_definitions(skvc PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
+
+
+#------------------------------------------------------------------------------
+# build the server
+add_executable(SKVServer ${SERVER_SOURCES})
+set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
+target_link_libraries(SKVServer skv_common it_api fxlogger
+  ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 
 add_executable(skv_server ${SERVER_SOURCES})
-target_link_libraries(skv_server
-  skv_common it_api fxlogger ${OFED_LIBRARIES} ${MPI_LIBRARIES})
+target_link_libraries(skv_server skv_common it_api fxlogger
+  ${OFED_LIBRARIES} ${MPI_LIBRARIES})
 
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   target_link_libraries(${TEST_NAME}
-#    skv_common
-    skv
+    skvc
     skv_client
+    skv_common
     it_api
     fxlogger
     ${OFED_LIBRARIES}
     ${MPI_LIBRARY}
+  )
+endforeach()
+
+foreach(_test ${UNITTEST_SOURCES})
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  target_compile_definitions(${TEST_NAME} PUBLIC
+    "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
+  )
+  target_link_libraries(${TEST_NAME}
+    skv_client
+    skv_common
+    it_api
+    fxlogger
+    ${OFED_LIBRARIES}
+ #   ${MPI_LIBRARY}
   )
 endforeach()
