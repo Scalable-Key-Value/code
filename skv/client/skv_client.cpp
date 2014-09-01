@@ -11,8 +11,8 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client.hpp>
-#include <client/skv_client_internal.hpp>
+#include <skv/client/skv_client.hpp>
+#include <skv/client/skv_client_internal.hpp>
 
 #ifndef SKV_CLIENT_INSERT_TRACE
 #define SKV_CLIENT_INSERT_TRACE ( 1 )
@@ -27,7 +27,7 @@ TraceClient SKVClientInsertFinis;
  * Desc: Initializes the state of the skv_client
  * Gets the client ready to establish a  connection
  * with the serverp
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 #ifdef SKV_CLIENT_UNI
@@ -42,7 +42,7 @@ Init( skv_client_group_id_t aCommGroupId,
     << "skv_client_t::Init():: ERROR:: mSKVClientInternalPtr != NULL "
     << EndLogLine;
 
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Init( aCommGroupId,  
+  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Init( aCommGroupId,
                                                                  aFlags );
 }
 #else
@@ -58,13 +58,13 @@ Init( skv_client_group_id_t aCommGroupId,
     << "skv_client_t::Init():: ERROR:: mSKVClientInternalPtr != NULL "
     << EndLogLine;
 
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Init( aCommGroupId,  
+  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Init( aCommGroupId,
                                                                  aComm,
                                                                  aFlags,
                                                                  aConfigFile );
 }
 #endif
-skv_status_t 
+skv_status_t
 skv_client_t::
 Disconnect()
 {
@@ -75,10 +75,10 @@ Disconnect()
 /***
  * skv_client_t::Connect::
  * Desc: Connect to the SKV Server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 Connect( const char* aConfigFile,
          int         aFlags )
@@ -90,18 +90,18 @@ Connect( const char* aConfigFile,
 /***
  * skv_client_t::iOpen::
  * Desc: Async interface to opening a PDS
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 iOpen( char*                 aPDSName,
-       skv_pds_priv_t        aPrivs, 
-       skv_cmd_open_flags_t  aFlags, 
-       skv_pds_id_t*         aPDSId, 
+       skv_pds_priv_t        aPrivs,
+       skv_cmd_open_flags_t  aFlags,
+       skv_pds_id_t*         aPDSId,
        skv_client_cmd_ext_hdl_t* aCmdHdl )
-{  
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iOpen( aPDSName, 
+{
+  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iOpen( aPDSName,
                                                                   aPrivs,
                                                                   aFlags,
                                                                   aPDSId,
@@ -111,10 +111,10 @@ iOpen( char*                 aPDSName,
 /***
  * skv_client_t::iRetrieve::
  * Desc: Async interface to retrieving a record
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 iRetrieve( skv_pds_id_t*          aPDSId,
            char*                  aKeyBuffer,
@@ -140,10 +140,10 @@ iRetrieve( skv_pds_id_t*          aPDSId,
 /***
  * skv_client_t::iUpdate::
  * Desc: Async interface to updating a record
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 iUpdate( skv_pds_id_t*          aPDSId,
          char*                  aKeyBuffer,
@@ -167,10 +167,10 @@ iUpdate( skv_pds_id_t*          aPDSId,
 /***
  * skv_client_t::iInsert::
  * Desc: Async interface to inserting a record
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 iInsert( skv_pds_id_t*          aPDSId,
          char*                  aKeyBuffer,
@@ -195,18 +195,18 @@ iInsert( skv_pds_id_t*          aPDSId,
 /***
  * skv_client_t::iRemove::
  * Desc: Async interface to remove an item
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
 skv_client_t::
-iRemove( skv_pds_id_t*          aPDSId, 
+iRemove( skv_pds_id_t*          aPDSId,
          char*                  aKeyBuffer,
          int                    aKeyBufferSize,
          skv_cmd_remove_flags_t aFlags,
          skv_client_cmd_ext_hdl_t*  aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iRemove( aPDSId, 
+  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iRemove( aPDSId,
                                                                     aKeyBuffer,
                                                                     aKeyBufferSize,
                                                                     aFlags,
@@ -218,10 +218,10 @@ iRemove( skv_pds_id_t*          aPDSId,
 /***
  * skv_client_t::iClose::
  * Desc: Async interface to closing a PDS
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 iClose( skv_pds_id_t*             aPDSId,
         skv_client_cmd_ext_hdl_t* aCmdHdl )
@@ -252,10 +252,10 @@ iPDScntl( skv_pdscntl_cmd_t         aCmd,
 /***
  * skv_client_t::TestAny::
  * Desc: Check if any command is done
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 TestAny( skv_client_cmd_ext_hdl_t* aCmdHdl )
 {
@@ -265,7 +265,7 @@ TestAny( skv_client_cmd_ext_hdl_t* aCmdHdl )
 /***
  * skv_client_t::Test::
  * Desc: Check if a command is done
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -278,7 +278,7 @@ Test( skv_client_cmd_ext_hdl_t aCmdHdl )
 /***
  * skv_client_t::WaitAny::
  * Desc: Wait on any command handle
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -291,30 +291,30 @@ WaitAny( skv_client_cmd_ext_hdl_t* aCmdHdl )
 /***
  * skv_client_t::Wait::
  * Desc: Wait on a command handle
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 Wait( skv_client_cmd_ext_hdl_t aCmdHdl )
 {
   return ((skv_client_internal_t *)mSKVClientInternalPtr)->Wait( (skv_client_cmd_hdl_t) aCmdHdl );
-}  
+}
 
 /***
  * skv_client_t::Open::
  * Desc: Create or open a new PDS (partition data set)
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 Open( char*                  aPDSName,
-      skv_pds_priv_t         aPrivs, 
-      skv_cmd_open_flags_t   aFlags, 
+      skv_pds_priv_t         aPrivs,
+      skv_cmd_open_flags_t   aFlags,
       skv_pds_id_t*          aPDSId )
-{  
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Open( aPDSName, 
+{
+  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Open( aPDSName,
                                                                   aPrivs,
                                                                   aFlags,
                                                                   aPDSId );
@@ -323,13 +323,13 @@ Open( char*                  aPDSName,
 /***
  * skv_client_t::Close::
  * Desc: Close the pds
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 Close( skv_pds_id_t* aPDSId )
-{  
+{
   return ((skv_client_internal_t *)mSKVClientInternalPtr)->Close( aPDSId );
 }
 
@@ -353,12 +353,12 @@ PDScntl( skv_pdscntl_cmd_t  aCmd,
 /***
  * skv_client_t::Retrieve::
  * Desc: Retrieve a record from the skv server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
-Retrieve( skv_pds_id_t*       aPDSId, 
+Retrieve( skv_pds_id_t*       aPDSId,
           char*               aKeyBuffer,
           int                 aKeyBufferSize,
           char*               aValueBuffer,
@@ -367,7 +367,7 @@ Retrieve( skv_pds_id_t*       aPDSId,
           int                 aOffset,
           skv_cmd_RIU_flags_t aFlags  )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Retrieve( aPDSId, 
+  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Retrieve( aPDSId,
                                                                      aKeyBuffer,
                                                                      aKeyBufferSize,
                                                                      aValueBuffer,
@@ -380,12 +380,12 @@ Retrieve( skv_pds_id_t*       aPDSId,
 /***
  * skv_client_t::Update::
  * Desc: Update a record on the skv server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
-Update( skv_pds_id_t*         aPDSId, 
+Update( skv_pds_id_t*         aPDSId,
         char*                 aKeyBuffer,
         int                   aKeyBufferSize,
         char*                 aValueBuffer,
@@ -405,12 +405,12 @@ Update( skv_pds_id_t*         aPDSId,
 /***
  * skv_client_t::Insert::
  * Desc: Insert a record into the skv server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
-Insert( skv_pds_id_t*       aPDSId, 
+Insert( skv_pds_id_t*       aPDSId,
         char*               aKeyBuffer,
         int                 aKeyBufferSize,
         char*               aValueBuffer,
@@ -423,7 +423,7 @@ Insert( skv_pds_id_t*       aPDSId,
                               ((skv_client_internal_t *)mSKVClientInternalPtr)->GetRank(),
                               SKVClientInsertStart );
 
-  skv_status_t status  = ((skv_client_internal_t *)mSKVClientInternalPtr)->Insert( aPDSId, 
+  skv_status_t status  = ((skv_client_internal_t *)mSKVClientInternalPtr)->Insert( aPDSId,
                                                                                    aKeyBuffer,
                                                                                    aKeyBufferSize,
                                                                                    aValueBuffer,
@@ -458,7 +458,7 @@ GetLocalServerRanks( int **aLocalServers, int *aCount )
 skv_status_t
 skv_client_t::
 OpenLocalCursor( int                          aNodeId,
-                 skv_pds_id_t*                aPDSId, 
+                 skv_pds_id_t*                aPDSId,
                  skv_client_cursor_ext_hdl_t* aCursorHdl )
 {
   return ((skv_client_internal_t *)mSKVClientInternalPtr)->OpenLocalCursor( aNodeId,
@@ -484,7 +484,7 @@ CloseLocalCursor( skv_client_cursor_ext_hdl_t  aCursorHdl )
  * Desc: Get the first element in the cursor
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 GetFirstLocalElement( skv_client_cursor_ext_hdl_t aCursorHdl,
                       char*                       aRetrievedKeyBuffer,
@@ -510,7 +510,7 @@ GetFirstLocalElement( skv_client_cursor_ext_hdl_t aCursorHdl,
  * Desc: Get the next element in the cursor pointed to a node id
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 GetNextLocalElement(  skv_client_cursor_ext_hdl_t   aCursorHdl,
                       char*                         aRetrievedKeyBuffer,
@@ -542,10 +542,10 @@ GetNextLocalElement(  skv_client_cursor_ext_hdl_t   aCursorHdl,
  ***/
 skv_status_t
 skv_client_t::
-OpenCursor( skv_pds_id_t*                aPDSId, 
+OpenCursor( skv_pds_id_t*                aPDSId,
             skv_client_cursor_ext_hdl_t* aCursorHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->OpenCursor( aPDSId, 
+  return ((skv_client_internal_t *)mSKVClientInternalPtr)->OpenCursor( aPDSId,
                                                                        (skv_client_cursor_handle_t * ) aCursorHdl);
 }
 #endif
@@ -563,14 +563,14 @@ CloseCursor( skv_client_cursor_ext_hdl_t aCursorHdl )
 }
 
 
-skv_status_t 
+skv_status_t
 skv_client_t::
-Remove( skv_pds_id_t*          aPDSId, 
+Remove( skv_pds_id_t*          aPDSId,
         char*                  aKeyBuffer,
         int                    aKeyBufferSize,
         skv_cmd_remove_flags_t aFlags )
 {
-  skv_status_t status  = ((skv_client_internal_t *)mSKVClientInternalPtr)->Remove( aPDSId, 
+  skv_status_t status  = ((skv_client_internal_t *)mSKVClientInternalPtr)->Remove( aPDSId,
                                                                                    aKeyBuffer,
                                                                                    aKeyBufferSize,
                                                                                    aFlags );
@@ -578,7 +578,7 @@ Remove( skv_pds_id_t*          aPDSId,
   return status;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_t::
 Finalize()
 {
@@ -591,7 +591,7 @@ Finalize()
  * Desc: Get the first element in the cursor
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 GetFirstElement( skv_client_cursor_ext_hdl_t  aCursorHdl,
                  char*                        aRetrievedKeyBuffer,
@@ -614,10 +614,10 @@ GetFirstElement( skv_client_cursor_ext_hdl_t  aCursorHdl,
 
 /***
  * skv_client_t::GetNextElement::
- * Desc: Get the next global element in the cursor 
+ * Desc: Get the next global element in the cursor
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 GetNextElement( skv_client_cursor_ext_hdl_t  aCursorHdl,
                 char*                        aRetrievedKeyBuffer,
@@ -636,14 +636,14 @@ GetNextElement( skv_client_cursor_ext_hdl_t  aCursorHdl,
                                                                            aRetrievedValueSize,
                                                                            aRetrievedValueMaxSize,
                                                                            aFlags );
-}  
+}
 
 /***
  * skv_client_t::DumpPDS::
- * Desc: 
+ * Desc:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_t::
 DumpPDS( skv_pds_id_t aPDSId,
          int          aMaxKeySize,
@@ -658,7 +658,7 @@ DumpPDS( skv_pds_id_t aPDSId,
 /******************************************************************************
  * Bulk Insert Interface
  *****************************************************************************/
-skv_status_t 
+skv_status_t
 skv_client_t::
 CreateBulkInserter( skv_pds_id_t*                           aPDSId,
                     skv_bulk_inserter_flags_t               aFlags,
@@ -669,7 +669,7 @@ CreateBulkInserter( skv_pds_id_t*                           aPDSId,
                                                                                (skv_client_bulk_inserter_hdl_t *) aBulkInserterHandle );
 }
 
-skv_status_t 
+skv_status_t
 skv_client_t::
 Insert( skv_client_bulk_inserter_ext_hdl_t  aBulkInserterHandle,
         char*                               aKeyBuffer,
@@ -687,21 +687,21 @@ Insert( skv_client_bulk_inserter_ext_hdl_t  aBulkInserterHandle,
                                                                    aFlags );
 }
 
-skv_status_t 
+skv_status_t
 skv_client_t::
 Flush( skv_client_bulk_inserter_ext_hdl_t aBulkInserterHandle )
 {
   return ((skv_client_internal_t *) mSKVClientInternalPtr)->Flush( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle );
 }
 
-skv_status_t 
+skv_status_t
 skv_client_t::
 CloseBulkInserter( skv_client_bulk_inserter_ext_hdl_t aBulkInserterHandle )
 {
   return ((skv_client_internal_t *) mSKVClientInternalPtr)->CloseBulkInserter( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle );
 }
 
-skv_status_t 
+skv_status_t
 skv_client_t::
 DumpPersistentImage( char* aPath )
 {

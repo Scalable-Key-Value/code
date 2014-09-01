@@ -21,16 +21,16 @@
 #define SKV_SERVER_INSERT_TRACE ( 0 )
 #endif
 
-#include <common/skv_types.hpp>
-#include <utils/skv_trace_clients.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/utils/skv_trace_clients.hpp>
 
-#include <common/skv_client_server_headers.hpp>
-#include <client/skv_client_server_conn.hpp>
-#include <common/skv_client_server_protocol.hpp>
-#include <server/skv_server_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/server/skv_server_types.hpp>
 
-#include <server/skv_local_kv_types.hpp>
-#include <server/skv_local_kv_inmem.hpp>
+#include <skv/server/skv_local_kv_types.hpp>
+#include <skv/server/skv_local_kv_inmem.hpp>
 
 skv_status_t
 skv_local_kv_inmem::Init( int aRank,

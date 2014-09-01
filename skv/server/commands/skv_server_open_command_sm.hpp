@@ -14,9 +14,9 @@
 #ifndef __SKV_SERVER_OPEN_COMMAND_SM_HPP__
 #define __SKV_SERVER_OPEN_COMMAND_SM_HPP__
 
-#include <common/skv_types.hpp>
+#include <skv/common/skv_types.hpp>
 
-#ifndef SKV_SERVER_OPEN_COMMAND_SM_LOG 
+#ifndef SKV_SERVER_OPEN_COMMAND_SM_LOG
 #define SKV_SERVER_OPEN_COMMAND_SM_LOG  ( 0 | SKV_LOGGING_ALL )
 #endif
 

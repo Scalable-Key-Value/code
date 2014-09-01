@@ -35,16 +35,16 @@
 // The number of keys to prefetch
 #define SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE   ( 2 )
 
-#include <common/skv_types.hpp>
-#include <common/skv_distribution_manager.hpp>
-#include <client/skv_c2s_active_broadcast.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_distribution_manager.hpp>
+#include <skv/client/skv_c2s_active_broadcast.hpp>
 
-struct skv_client_command_open_t  
+struct skv_client_command_open_t
 {
   skv_pds_id_t* mPDSId;
 };
 
-struct skv_client_command_insert_t 
+struct skv_client_command_insert_t
 {
   skv_cmd_RIU_flags_t   mFlags;
   it_lmr_handle_t       mValueLMR;
@@ -66,7 +66,7 @@ struct skv_client_command_retrieve_t
 
 struct skv_client_command_retrieve_dist_t
 {
-  skv_distribution_t*   mDist;  
+  skv_distribution_t*   mDist;
 };
 
 struct skv_client_command_update_t
@@ -124,7 +124,7 @@ struct skv_client_command_cursor_prefetch_t
 
 struct skv_client_command_t
 {
-  skv_command_type_t mType;    
+  skv_command_type_t mType;
 
   union
   {
@@ -139,7 +139,7 @@ struct skv_client_command_t
     skv_client_command_pdscntl_t           mCommandPDScntl;
     skv_client_command_active_bcast_t      mCommandActiveBcast;
     skv_client_command_cursor_prefetch_t   mCommandCursorPrefetch;
-  } mCommandBundle;  
+  } mCommandBundle;
 };
 
 typedef enum
@@ -193,12 +193,12 @@ skv_client_command_state_to_string( skv_client_command_state_t aState )
   switch( aState )
   {
     case SKV_CLIENT_COMMAND_STATE_IDLE:                         { return "SKV_CLIENT_COMMAND_STATE_IDLE"; }
-    case SKV_CLIENT_COMMAND_STATE_PENDING:                      { return "SKV_CLIENT_COMMAND_STATE_PENDING"; } 
-    case SKV_CLIENT_COMMAND_STATE_DONE:                         { return "SKV_CLIENT_COMMAND_STATE_DONE"; } 
-      //case SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_KEY:    { return "SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_KEY"; } 
-      //case SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_VALUE:  { return "SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_VALUE"; } 
-    case SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL:             { return "SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL"; } 
-    case SKV_CLIENT_COMMAND_STATE_WAITING_FOR_VALUE_TX_ACK:     { return "SKV_CLIENT_COMMAND_STATE_WAITING_FOR_VALUE_TX_ACK"; } 
+    case SKV_CLIENT_COMMAND_STATE_PENDING:                      { return "SKV_CLIENT_COMMAND_STATE_PENDING"; }
+    case SKV_CLIENT_COMMAND_STATE_DONE:                         { return "SKV_CLIENT_COMMAND_STATE_DONE"; }
+      //case SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_KEY:    { return "SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_KEY"; }
+      //case SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_VALUE:  { return "SKV_CLIENT_COMMAND_STATE_WAITING_TO_RDMA_WRITE_VALUE"; }
+    case SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL:             { return "SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL"; }
+    case SKV_CLIENT_COMMAND_STATE_WAITING_FOR_VALUE_TX_ACK:     { return "SKV_CLIENT_COMMAND_STATE_WAITING_FOR_VALUE_TX_ACK"; }
     default:
     {
       StrongAssertLogLine( 0 )
@@ -231,7 +231,7 @@ skv_client_state_to_string( skv_client_state_t aState )
         StrongAssertLogLine( 0 )
           << "skv_client_state_to_string:: "
           << " aState: " << aState
-          << " Not recognized."	  
+          << " Not recognized."
           << EndLogLine;
         break;
       }
@@ -252,7 +252,7 @@ struct skv_client_ccb_t
   skv_client_ccb_t*             mNext;
   skv_client_ccb_t*             mPrev;
 
-  // This status is only valid after the command 
+  // This status is only valid after the command
   // has completed
   skv_status_t                  mStatus;
   int                           mCmdOrd;
@@ -324,7 +324,7 @@ public:
     Reset();
   }
 
-  void 
+  void
   Finalize()
   {
 
@@ -333,12 +333,12 @@ public:
   void
   Reset()
   {
-    mState         = SKV_CLIENT_COMMAND_STATE_IDLE;    
+    mState         = SKV_CLIENT_COMMAND_STATE_IDLE;
     mCommand.mType = SKV_COMMAND_NONE;
     mCmdOrd        = -1;
     mCmdReadyForDone = 0;
     mRecvCtrlMsgBuff = NULL;
-  }  
+  }
 };
 
 class skv_client_ccb_manager_if_t
@@ -354,7 +354,7 @@ class skv_client_ccb_manager_if_t
   skv_client_ccb_t                         mCommandCtrlBlockHeap[ SKV_CLIENT_COMMAND_LIMIT ];
 
   it_lmr_handle_t                           mBaseHandle;
-  
+
 
 public:
 
@@ -372,12 +372,12 @@ public:
       << " SizeToLMR: " << SizeToLMR
       << EndLogLine;
 
-    it_status_t istatus = it_lmr_create( aPZ_Hdl, 
+    it_status_t istatus = it_lmr_create( aPZ_Hdl,
                                          mCommandCtrlBlockHeap,
                                          NULL,
                                          SizeToLMR,
-                                         IT_ADDR_MODE_ABSOLUTE, 
-                                         privs, 
+                                         IT_ADDR_MODE_ABSOLUTE,
+                                         privs,
                                          lmr_flags,
                                          0,
                                          & mBaseHandle,
@@ -385,7 +385,7 @@ public:
 
     StrongAssertLogLine( istatus == IT_SUCCESS )
       << "skv_client_ccb_manager_if_t::Init(): ERROR:: after it_lmr_create()"
-      << " status: " << istatus 
+      << " status: " << istatus
       << EndLogLine;
 
     StrongAssertLogLine( SKV_CLIENT_COMMAND_LIMIT >=2 )
@@ -423,8 +423,8 @@ public:
 
   /***
    * AddToDoneCCBQueue::
-   * Desc: 
-   * input: 
+   * Desc:
+   * input:
    * returns: Returns a free command control block
    * Or NULL if none are available
    ***/
@@ -454,8 +454,8 @@ public:
 
   /***
    * skv_client_ccb_manager_if_t::RemoveFromDoneCCBQueue::
-   * Desc: 
-   * input: 
+   * Desc:
+   * input:
    * returns: Returns a free command control block
    * Or NULL if none are available
    ***/
@@ -506,8 +506,8 @@ public:
 
   /***
    * skv_client_ccb_manager_if_t::AddToFreeCCBQueue::
-   * Desc: 
-   * input: 
+   * Desc:
+   * input:
    * returns: Returns a free command control block
    * Or NULL if none are available
    ***/
@@ -556,9 +556,9 @@ public:
 
   /***
    * skv_client_ccb_manager_if_t::RemoveFromFrontDoneCCBQueue::
-   * Desc: 
-   * input/output: aCCB  
-   * returns: 
+   * Desc:
+   * input/output: aCCB
+   * returns:
    * Or NULL if none are available
    ***/
   skv_client_ccb_t*
@@ -594,7 +594,7 @@ public:
     AssertLogLine( DoneBlock->mState == SKV_CLIENT_COMMAND_STATE_DONE )
       << "skv_client_ccb_manager_if_t::RemoveFromFrontDoneCCBQueue(): "
       << " DoneBlock->mState: " << DoneBlock->mState
-      << EndLogLine;  
+      << EndLogLine;
 
     BegLogLine( SKV_CLIENT_DONE_QUEUE_LOG )
       << "skv_client_ccb_manager_if_t::RemoveFromFrontDoneCCBQueue(): Leaving "
@@ -605,9 +605,9 @@ public:
 
   /***
    * skv_client_ccb_manager_if_t::RemoveFromFrontFreeCCBQueue::
-   * Desc: 
-   * input/output: aCCB  
-   * returns: 
+   * Desc:
+   * input/output: aCCB
+   * returns:
    * Or NULL if none are available
    ***/
   skv_client_ccb_t*
@@ -645,14 +645,14 @@ public:
     AssertLogLine( FreeBlock->mState == SKV_CLIENT_COMMAND_STATE_IDLE )
       << "skv_client_ccb_manager_if_t::RemoveFromFrontFreeCCBQueue(): "
       << " FreeBlock->mState: " << FreeBlock->mState
-      << EndLogLine;  
+      << EndLogLine;
 
     BegLogLine( SKV_CLIENT_FREE_QUEUE_LOG )
       << "skv_client_ccb_manager_if_t::RemoveFromFrontFreeCCBQueue(): Leaving "
       << EndLogLine;
 
     return FreeBlock;
-  }  
+  }
 
   void
   Finalize()

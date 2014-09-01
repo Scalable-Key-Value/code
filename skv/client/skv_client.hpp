@@ -18,7 +18,7 @@
 #include <mpi.h>
 #endif
 
-#include <common/skv_types_ext.hpp>
+#include <skv/common/skv_types_ext.hpp>
 
 class skv_client_t
 {

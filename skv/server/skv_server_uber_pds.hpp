@@ -14,9 +14,9 @@
 #ifndef __SKV_UBER_PDS_HPP__
 #define __SKV_UBER_PDS_HPP__
 
-#include <common/skv_types.hpp>
-#include <common/skv_distribution_manager.hpp>
-#include <server/skv_server_tree_based_container.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_distribution_manager.hpp>
+#include <skv/server/skv_server_tree_based_container.hpp>
 
 /***
  * Placeholder for dealing with access permissions on a PDS
@@ -56,7 +56,7 @@ class skv_uber_pds_t
 
   //  typedef   std::map<string, skv_pds_attr_t>   skv_pds_name_table_t;
 
-  // skv_pds_name_table_t*                        mPDSNameTable;  
+  // skv_pds_name_table_t*                        mPDSNameTable;
 
 protected:
   int Rebalance();
@@ -65,7 +65,7 @@ public:
   skv_uber_pds_t() {}
   ~skv_uber_pds_t() {}
 
-  skv_status_t Init( int                                      aNodeId, 
+  skv_status_t Init( int                                      aNodeId,
                      int                                      aNodeCount,
                      skv_server_internal_event_manager_if_t* aInternalEventQueue,
                      it_pz_handle_t                           aPZ_Hdl,
@@ -84,24 +84,24 @@ public:
    ***/
   skv_distribution_t* GetDistribution();
 
-  skv_status_t Open( char*                  aPDSName, 
+  skv_status_t Open( char*                  aPDSName,
                      skv_pds_priv_t        aPrivs,
                      skv_cmd_open_flags_t  aFlags,
                      skv_pds_id_t*         aPDSId );
 
-  skv_status_t Stat( skv_pdscntl_cmd_t  aCmd, 
+  skv_status_t Stat( skv_pdscntl_cmd_t  aCmd,
                      skv_pds_attr_t    *aPDSAttr );
   skv_status_t Close( skv_pds_attr_t   *aPDSAttr );
 
 
-  // 
+  //
   int GetMaxDataLoad();
 
-  skv_status_t Remove( skv_pds_id_t             aPDSId, 
+  skv_status_t Remove( skv_pds_id_t             aPDSId,
                        char*                     aKeyData,
                        int                       aKeySize );
 
-  skv_status_t Insert( skv_pds_id_t             aPDSId, 
+  skv_status_t Insert( skv_pds_id_t             aPDSId,
                        char*                     aRecordRep,
                        int                       aKeySize,
                        int                       aValueSize );
@@ -111,7 +111,7 @@ public:
 
   skv_status_t Deallocate( skv_lmr_triplet_t*     aMemRep );
 
-  skv_status_t Retrieve( skv_pds_id_t             aPDSId, 
+  skv_status_t Retrieve( skv_pds_id_t             aPDSId,
                          char*                     aKeyData,
                          int                       aKeySize,
                          int                       aValueOffset,
@@ -120,7 +120,7 @@ public:
                          skv_lmr_triplet_t*       aRemMemRepValue );
 
 
-  skv_status_t RetrieveNKeys( skv_pds_id_t       aPDSId, 
+  skv_status_t RetrieveNKeys( skv_pds_id_t       aPDSId,
                               char *              aStartingKeyData,
                               int                 aStartingKeySize,
                               skv_lmr_triplet_t* aRetrievedKeysSizesSegs,

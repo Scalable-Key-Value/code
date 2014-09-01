@@ -14,9 +14,9 @@
 #ifndef __SKV_CLIENT_SERVER_HEADERS_HPP__
 #define __SKV_CLIENT_SERVER_HEADERS_HPP__
 
-#include <common/skv_types.hpp>
-#include <server/skv_server_event_type.hpp>
-#include <client/skv_client_types.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/server/skv_server_event_type.hpp>
+#include <skv/client/skv_client_types.hpp>
 
 #define SKV_CTRL_MSG_FLAG_EMPTY             0x00
 #define SKV_CTRL_MSG_FLAG_REQUEST_COMPLETE  0x01
@@ -126,12 +126,12 @@ struct skv_client_to_server_cmd_hdr_t
 #endif
 
     return (*this);
-  }  
+  }
 };
 
 template<class streamclass>
-static  
-streamclass& 
+static
+streamclass&
 operator<<(streamclass& os, const skv_client_to_server_cmd_hdr_t& aHdr)
 {
   os << "skv_client_to_server_cmd_hdr_t [ "
@@ -240,7 +240,7 @@ operator<<( streamclass& os, const skv_server_to_client_cmd_hdr_t& aHdr )
      << (int) aHdr.mEvent
      << " ]";
 
-  return(os);    
+  return(os);
 
 }
 /***************************************************/

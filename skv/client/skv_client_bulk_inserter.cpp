@@ -11,7 +11,7 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_internal.hpp>
+#include <skv/client/skv_client_internal.hpp>
 
 TraceClient gSKVClientiBulkInsertStart;
 TraceClient gSKVClientiBulkInsertFinis;
@@ -28,10 +28,10 @@ TraceClient gSKVClientiBulkInsertFinis;
 #define SKV_CLIENT_BULK_INSERT_FLUSH_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iBulkInsert( int                 aNodeId,
-             skv_pds_id_t*      aPDSId,      
+             skv_pds_id_t*      aPDSId,
              char*               aBuffer,
              int                 aBufferSize,
              it_lmr_handle_t     aBufferLMR,
@@ -118,11 +118,11 @@ iBulkInsert( int                 aNodeId,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_bulk_insert_req_t* Req = (skv_cmd_bulk_insert_req_t *) SendCtrlMsgBuff;
 
   uint64_t BufferChecksum = 0;
-#ifdef SKV_BULK_LOAD_CHECKSUM 
+#ifdef SKV_BULK_LOAD_CHECKSUM
   for( int i = 0; i < aBufferSize; i++)
   {
     BufferChecksum += aBuffer[ i ];
@@ -134,7 +134,7 @@ iBulkInsert( int                 aNodeId,
     << EndLogLine;
 #endif
 
-  Req->Init( aNodeId, 
+  Req->Init( aNodeId,
              & mConnMgrIF,
              aPDSId,
              SKV_COMMAND_BULK_INSERT,
@@ -151,20 +151,20 @@ iBulkInsert( int                 aNodeId,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType                                             = SKV_COMMAND_BULK_INSERT;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandBulkInsert.mBuffer         = aBuffer;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandBulkInsert.mBufferSize     = aBufferSize;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandBulkInsert.mBufferChecksum = BufferChecksum;
-  /*****************************************************/  
+  /*****************************************************/
 
 
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( aNodeId, CmdCtrlBlk );
 
@@ -180,27 +180,27 @@ iBulkInsert( int                 aNodeId,
     << EndLogLine;
 
   gSKVClientiBulkInsertFinis.HitOE( SKV_CLIENT_iBULKINSERT_TRACE,
-                                     "SKVClientiBulkInsert", 
+                                     "SKVClientiBulkInsert",
                                      mMyRank,
                                      gSKVClientiBulkInsertFinis );
-  return status;  
+  return status;
 
 }
 
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 CreateBulkInserter( skv_pds_id_t*                       aPDSId,
                     skv_bulk_inserter_flags_t           aFlags,
                     skv_client_bulk_inserter_hdl_t*     aBulkInserterHandle )
 {
-  skv_client_bulk_insert_control_block_t* BulkInsertControlBlock = 
+  skv_client_bulk_insert_control_block_t* BulkInsertControlBlock =
     (skv_client_bulk_insert_control_block_t *) malloc( sizeof( skv_client_bulk_insert_control_block_t ) );
 
   AssertLogLine( BulkInsertControlBlock != NULL )
     << "skv_client_internal_t::CreateBulkInserter(): ERROR: "
     << EndLogLine;
 
-  BulkInsertControlBlock->Init( mPZ_Hdl, 
+  BulkInsertControlBlock->Init( mPZ_Hdl,
                                 aPDSId,
                                 aFlags,
                                 mConnMgrIF.GetServerConnCount() );
@@ -216,9 +216,9 @@ Insert( skv_client_bulk_inserter_hdl_t                  aBulkInserterHandle,
         char*                                            aKeyBuffer,
         int                                              aKeyBufferSize,
         char*                                            aValueBuffer,
-        int                                              aValueBufferSize,			
+        int                                              aValueBufferSize,
         skv_bulk_inserter_flags_t                       aFlags )
-{  
+{
   BegLogLine( SKV_CLIENT_BULK_INSERT_LOG )
     << "skv_client_internal_t::Insert(): Entering "
     << " aBulkInserterHandle: " << (void *) aBulkInserterHandle
@@ -252,7 +252,7 @@ Insert( skv_client_bulk_inserter_hdl_t                  aBulkInserterHandle,
   skv_key_t UserKey;
   UserKey.Init( aKeyBuffer, aKeyBufferSize );
 
-  int NodeId = mDistribution.GetNode( &UserKey );  
+  int NodeId = mDistribution.GetNode( &UserKey );
   /*****************************************/
 
   AssertLogLine( NodeId >= 0 && NodeId < aBulkInserterHandle->mServerNodeCount )
@@ -365,9 +365,9 @@ Insert( skv_client_bulk_inserter_hdl_t                  aBulkInserterHandle,
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
-Flush( skv_client_bulk_inserter_hdl_t aBulkInserterHandle )  
+Flush( skv_client_bulk_inserter_hdl_t aBulkInserterHandle )
 {
   BegLogLine( SKV_CLIENT_BULK_INSERT_FLUSH_LOG )
     << "skv_client_internal_t::Flush(): Entering... "
@@ -468,7 +468,7 @@ Flush( skv_client_bulk_inserter_hdl_t aBulkInserterHandle )
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 CloseBulkInserter(  skv_client_bulk_inserter_hdl_t      aBulkInserterHandle )
 {

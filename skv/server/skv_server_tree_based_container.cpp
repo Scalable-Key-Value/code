@@ -11,9 +11,9 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_server_conn.hpp>
-#include <common/skv_client_server_protocol.hpp>
-#include <server/skv_server_tree_based_container.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/server/skv_server_tree_based_container.hpp>
 
 #ifndef SKV_SERVER_TREE_BASED_CONTAINER_LOG
 #define SKV_SERVER_TREE_BASED_CONTAINER_LOG ( 0 | SKV_LOGGING_ALL )
@@ -27,11 +27,11 @@
 #define SKV_SERVER_TREE_BASED_CONTAINER_OPEN_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
 Open( char*                 aPDSName,
-      skv_pds_priv_t        aPrivs, 
-      skv_cmd_open_flags_t  aFlags, 
+      skv_pds_priv_t        aPrivs,
+      skv_cmd_open_flags_t  aFlags,
       skv_pds_id_t*         aPDSId )
 {
   skv_status_t status = SKV_SUCCESS;
@@ -46,7 +46,7 @@ Open( char*                 aPDSName,
     << " aFlags: " << aFlags
     << EndLogLine;
 
-  skv_pds_name_table_t::iterator iter = mPDSNameTable->find( PdsNameStr );  
+  skv_pds_name_table_t::iterator iter = mPDSNameTable->find( PdsNameStr );
 
   if( iter != mPDSNameTable->end() )
   {
@@ -236,16 +236,16 @@ Close( skv_pds_attr_t      *aPDSAttr )
 }
 
 
-int 
+int
 skv_tree_based_container_t::
 GetMaxDataLoad()
 {
   return mMaxDataLoad;
 }
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
-InBoundsCheck( const char* aContext, 
+InBoundsCheck( const char* aContext,
                char* aMem,
                int   aSize )
 {
@@ -256,12 +256,12 @@ InBoundsCheck( const char* aContext,
     << " aSize: " << aSize
     << " mDataFieldLen: " << mDataFieldLen
     << " mStartOfDataField: " << (void *) mStartOfDataField
-    << EndLogLine;  
+    << EndLogLine;
 
   uint64_t req_end = (uint64_t)aMem + (uint64_t)aSize;
   uint64_t sto_end = (uint64_t)mStartOfDataField + (uint64_t)mDataFieldLen;
 
-  StrongAssertLogLine( aMem >= mStartOfDataField && 
+  StrongAssertLogLine( aMem >= mStartOfDataField &&
                        req_end < sto_end )
     << "ERROR: "
     << " aContext: " << aContext
@@ -269,22 +269,22 @@ InBoundsCheck( const char* aContext,
     << " aSize: " << aSize
     << " mDataFieldLen: " << mDataFieldLen
     << " mStartOfDataField: " << (void *) mStartOfDataField
-    << EndLogLine;  
+    << EndLogLine;
 
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
 Allocate( int                   aSize,
           skv_lmr_triplet_t*   aRemMemRep )
-{   
+{
   char* Mem = (char *) skv_server_heap_manager_t::Allocate( aSize );
 
   if( Mem == NULL )
     return SKV_ERRNO_OUT_OF_MEMORY;
 
-  // Check that the address is within bounds 
+  // Check that the address is within bounds
   InBoundsCheck( "Allocate1", Mem, aSize );
 
   aRemMemRep->InitAbs( mDataLMR, Mem, aSize );
@@ -292,10 +292,10 @@ Allocate( int                   aSize,
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
 Deallocate( skv_lmr_triplet_t* aRemMemRep )
-{  
+{
   char* MemAddr = (char *) aRemMemRep->GetAddr();
   if( MemAddr != NULL )
   {
@@ -306,9 +306,9 @@ Deallocate( skv_lmr_triplet_t* aRemMemRep )
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
-Insert( skv_pds_id_t         aPDSId, 
+Insert( skv_pds_id_t         aPDSId,
         char*                 aRowData,
         int                   aKeySize,
         int                   aValueSize )
@@ -318,7 +318,7 @@ Insert( skv_pds_id_t         aPDSId,
     << EndLogLine;
 
   skv_key_t UserKey;
-  UserKey.Init( aRowData, 
+  UserKey.Init( aRowData,
                 aKeySize );
 
   skv_tree_based_container_key_t* key = MakeKey( aPDSId, &UserKey );
@@ -336,7 +336,7 @@ Insert( skv_pds_id_t         aPDSId,
 #endif
 
   BegLogLine(0)
-    << "INSERT: " 
+    << "INSERT: "
     << " key: "     << (void*)key
     << " dataMap: " << (void*)mDataMap
     << EndLogLine;
@@ -358,7 +358,7 @@ Insert( skv_pds_id_t         aPDSId,
 
 template<class streamclass>
 static
-streamclass& 
+streamclass&
 operator<<(streamclass& os, const skv_tree_based_container_key_t& aKey )
 {
   os << "skv_tree_based_container_t::Key [ "
@@ -371,9 +371,9 @@ operator<<(streamclass& os, const skv_tree_based_container_key_t& aKey )
 }
 
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
-RetrieveNKeys( skv_pds_id_t       aPDSId, 
+RetrieveNKeys( skv_pds_id_t       aPDSId,
                char *              aStartingKeyData,
                int                 aStartingKeySize,
                skv_lmr_triplet_t* aRetrievedKeysSizesSegs,
@@ -391,7 +391,7 @@ RetrieveNKeys( skv_pds_id_t       aPDSId,
 
   skv_tree_based_container_key_t* StartingKeyPtr;
 
-  skv_key_t StartingUserKey;  
+  skv_key_t StartingUserKey;
   StartingUserKey.Init( aStartingKeyData, aStartingKeySize );
 
   if( (aFlags & SKV_CURSOR_RETRIEVE_FIRST_ELEMENT_FLAG)
@@ -408,10 +408,10 @@ RetrieveNKeys( skv_pds_id_t       aPDSId,
   skv_data_container_t::iterator iter = mDataMap->lower_bound( *StartingKeyPtr );
 
   BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
-    << "skv_tree_based_container_t::RetrieveNKeys():: After mDataMap->lower_bound():: "    
+    << "skv_tree_based_container_t::RetrieveNKeys():: After mDataMap->lower_bound():: "
     << " *StartingKeyPtr: " << *StartingKeyPtr
     << " (iter != mDataMap->end()): " << (iter != mDataMap->end())
-    << " mDataMap->size(): " << mDataMap->size() 
+    << " mDataMap->size(): " << mDataMap->size()
     << " aFlags: " << aFlags
     << EndLogLine;
 
@@ -494,12 +494,12 @@ RetrieveNKeys( skv_pds_id_t       aPDSId,
  * skv_tree_based_container_t::Remove::
  * Desc: Given a [ KeyData, KeySize ] remove
  * from the local store (STL map)
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
-Remove( skv_pds_id_t             aPDSId, 
+Remove( skv_pds_id_t             aPDSId,
         char*                     aKeyData,
         int                       aKeySize )
 {
@@ -557,22 +557,22 @@ Remove( skv_pds_id_t             aPDSId,
 
 /***
  * skv_tree_based_container_t::Retrieve::
- * Desc: Given a [ KeyData, KeySize ] retrieve 
+ * Desc: Given a [ KeyData, KeySize ] retrieve
  * from [ aOffset, up to aValueSizeMax ]
  * from the local store (STL map)
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
-Retrieve( skv_pds_id_t             aPDSId, 
+Retrieve( skv_pds_id_t             aPDSId,
           char*                     aKeyData,
           int                       aKeySize,
           int                       aValueOffset,
           int                       aValueSizeMax,
           skv_cmd_RIU_flags_t      aFlags,
           skv_lmr_triplet_t*       aMemRepValue )
-{  
+{
   BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
     << "skv_tree_based_container_t::Retrieve():: Entering... "
     << EndLogLine;
@@ -640,8 +640,8 @@ Retrieve( skv_pds_id_t             aPDSId,
     << EndLogLine;
 
   // Note: This requires both the Offset and Size
-  // of the request to be provided. A flag which 
-  // would specify from Offset to the end of the 
+  // of the request to be provided. A flag which
+  // would specify from Offset to the end of the
   // record could be implemented if a use case arises
   int RequestedOffset   = aValueOffset;
 
@@ -683,7 +683,7 @@ Retrieve( skv_pds_id_t             aPDSId,
     << " SizeInStore: "      << SizeInStore
     << " SizeToReturn: "     << SizeToReturn
     << " StartOfValueInStore: " << (void *) StartOfValueInStore
-    << EndLogLine;  
+    << EndLogLine;
 
   // NOTE: Retrieve does not return a copy
   aMemRepValue->mLMRTriplet.lmr      = mDataLMR;
@@ -717,7 +717,7 @@ DumpPersistenceImage( char* aPath )
 /***
  * skv_tree_based_container_t::Init::
  * Desc: Initializes the state of the container
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -727,12 +727,12 @@ Init( it_pz_handle_t                            aPZ_Hdl,
       int                                       aMyNodeId,
       char*                                     aRestartImagePath,
       skv_persistance_flag_t                   aFlag )
-{    
+{
   mMyNodeId             = aMyNodeId;
   mPZ_Hdl               = aPZ_Hdl;
   mInternalEventManager = aInternalEventManager;
 
-  // mMaxDataLoad = SKV_MAX_DATA_LOAD * 1024 * 1024;  
+  // mMaxDataLoad = SKV_MAX_DATA_LOAD * 1024 * 1024;
   char* PersistanceHdr = NULL;
   skv_server_heap_manager_t::Init( SKV_MAX_DATA_LOAD, & PersistanceHdr, aRestartImagePath, aFlag );
 
@@ -871,15 +871,15 @@ Init( it_pz_handle_t                            aPZ_Hdl,
                                         mStartOfDataField,
                                         NULL,
                                         mDataFieldLen,
-                                        IT_ADDR_MODE_ABSOLUTE, 
-                                        privs, 
+                                        IT_ADDR_MODE_ABSOLUTE,
+                                        privs,
                                         lmr_flags,
                                         0,
                                         & mDataLMR,
                                         & mDataRMR );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_tree_based_container_t::Init:: ERROR:: itstatus == IT_SUCCESS "    
+    << "skv_tree_based_container_t::Init:: ERROR:: itstatus == IT_SUCCESS "
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -889,7 +889,7 @@ Init( it_pz_handle_t                            aPZ_Hdl,
 /***
  * skv_tree_based_container_t::Finalize::
  * Desc: Takes down the state of the container
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -912,7 +912,7 @@ Finalize()
 /***
  * skv_tree_based_container_t::MakeKey::
  * Desc: Given a aPDSId put the next element in aKey and aValue
- * input: 
+ * input:
  * aPDSId -> Representation of the PDSId
  * aKey   -> Representation of user defined key
  * returns: Pointer to a key structure
@@ -922,11 +922,11 @@ skv_tree_based_container_t::
 MakeKey( skv_pds_id_t & aPDSId, skv_key_t* aKey )
 {
   AssertLogLine( aKey != NULL )
-    << "skv_tree_based_container_t::MakeKey():: ERROR: " 
+    << "skv_tree_based_container_t::MakeKey():: ERROR: "
     << " aKey != NULL "
     << EndLogLine;
 
-  AssertLogLine( (aKey->GetSize() > 0) && 
+  AssertLogLine( (aKey->GetSize() > 0) &&
                  (aKey->GetSize() <= SKV_KEY_LIMIT ) )
     << "skv_tree_based_container_t::MakeKey():: ERROR: "
     << " aKey->GetSize(): " << aKey->GetSize()
@@ -942,11 +942,11 @@ MakeKey( skv_pds_id_t & aPDSId, skv_key_t* aKey )
 
 /***
  * skv_tree_based_container_t::MakeMagicKey::
- * Desc: Create a special key to be used in 
+ * Desc: Create a special key to be used in
  * picking out the records associated with a aPDSId
  * NOTE: This key is for temporary use only, designed
- * for the temporary need of a lookup 
- * input: 
+ * for the temporary need of a lookup
+ * input:
  * aPDSId -> Representation of the PDSId
  * returns: Pointer to a key structure
  ***/
@@ -955,7 +955,7 @@ skv_tree_based_container_t::
 MakeMagicKey( skv_pds_id_t* aPDSId )
 {
   AssertLogLine( aPDSId != NULL )
-    << "skv_tree_based_container_t::MakeMagicKey():: ERROR: " 
+    << "skv_tree_based_container_t::MakeMagicKey():: ERROR: "
     << " aPDSId != NULL"
     << EndLogLine;
 
@@ -965,7 +965,7 @@ MakeMagicKey( skv_pds_id_t* aPDSId )
 }
 
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
 UnlockRecord( skv_rec_lock_handle_t   aRecLock )
 {
@@ -982,11 +982,11 @@ UnlockRecord( skv_rec_lock_handle_t   aRecLock )
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
-LockRecord( skv_pds_id_t             aPDSId, 
+LockRecord( skv_pds_id_t             aPDSId,
             char*                     aKeyData,
-            int                       aKeySize,	  
+            int                       aKeySize,
             skv_rec_lock_handle_t*   aRecLock )
 {
   BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
@@ -1027,14 +1027,14 @@ LockRecord( skv_pds_id_t             aPDSId,
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
-CreateCursor( char*                              aBuff,	      
-              int                                aBuffSize,	      
+CreateCursor( char*                              aBuff,
+              int                                aBuffSize,
               skv_server_cursor_hdl_t*          aServCursorHdl )
 {
-  return mServCursorMgrIF.InitHandle( aBuff,				      
-                                      aBuffSize,		      
+  return mServCursorMgrIF.InitHandle( aBuff,
+                                      aBuffSize,
                                       mPZ_Hdl,
                                       mInternalEventManager,
                                       aServCursorHdl );

@@ -11,20 +11,20 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <common/skv_types.hpp>
-#include <common/skv_client_server_headers.hpp>
-#include <client/skv_client_server_conn.hpp>
-#include <common/skv_client_server_protocol.hpp>
-#include <server/skv_server_types.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/server/skv_server_types.hpp>
 
-#include <server/skv_server_network_event_manager.hpp>
+#include <skv/server/skv_server_network_event_manager.hpp>
 
-#include <server/skv_server_event_source.hpp>
+#include <skv/server/skv_server_event_source.hpp>
 
 // include the implementations of the local kv backend
-#include <server/skv_local_kv_interface.hpp>
+#include <skv/server/skv_local_kv_interface.hpp>
 
-#include <server/skv_server.hpp>
+#include <skv/server/skv_server.hpp>
 
 skv_server_t Server;
 
@@ -32,9 +32,9 @@ skv_server_t Server;
 // #define SKV_SERVER_READY_FILE "/var/run/skv_server.ready"
 // #endif
 
-int 
-main(int argc, char **argv) 
-{ 
+int
+main(int argc, char **argv)
+{
   /************************************************************
    * Initialize MPI
    ***********************************************************/

@@ -11,8 +11,8 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_internal.hpp>
-#include <client/skv_client_conn_manager_if.hpp>
+#include <skv/client/skv_client_internal.hpp>
+#include <skv/client/skv_client_conn_manager_if.hpp>
 
 
 #include <fstream>
@@ -23,29 +23,29 @@
 
 // Supported Operation State Machines
 
-#include <client/commands/skv_client_open_command_sm.hpp>
-#include <client/commands/skv_client_retrieve_dist_command_sm.hpp>
-#include <client/commands/skv_client_insert_command_sm.hpp>
-#include <client/commands/skv_client_bulk_insert_command_sm.hpp>
-#include <client/commands/skv_client_retrieve_command_sm.hpp>
-#include <client/commands/skv_client_retrieve_n_keys_command_sm.hpp>
-#include <client/commands/skv_client_remove_command_sm.hpp>
-#include <client/commands/skv_client_active_bcast_command_sm.hpp>
-#include <client/commands/skv_client_pdscntl_command_sm.hpp>
+#include <skv/client/commands/skv_client_open_command_sm.hpp>
+#include <skv/client/commands/skv_client_retrieve_dist_command_sm.hpp>
+#include <skv/client/commands/skv_client_insert_command_sm.hpp>
+#include <skv/client/commands/skv_client_bulk_insert_command_sm.hpp>
+#include <skv/client/commands/skv_client_retrieve_command_sm.hpp>
+#include <skv/client/commands/skv_client_retrieve_n_keys_command_sm.hpp>
+#include <skv/client/commands/skv_client_remove_command_sm.hpp>
+#include <skv/client/commands/skv_client_active_bcast_command_sm.hpp>
+#include <skv/client/commands/skv_client_pdscntl_command_sm.hpp>
 
-#ifndef SKV_CLIENT_CONN_INFO_LOG 
+#ifndef SKV_CLIENT_CONN_INFO_LOG
 #define SKV_CLIENT_CONN_INFO_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#ifndef SKV_CLIENT_PROCESS_CCB_LOG 
+#ifndef SKV_CLIENT_PROCESS_CCB_LOG
 #define SKV_CLIENT_PROCESS_CCB_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#ifndef SKV_CLIENT_PROCESS_CONN_LOG 
+#ifndef SKV_CLIENT_PROCESS_CONN_LOG
 #define SKV_CLIENT_PROCESS_CONN_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#ifndef SKV_CLIENT_PROCESS_CONN_N_DEQUEUE_LOG 
+#ifndef SKV_CLIENT_PROCESS_CONN_N_DEQUEUE_LOG
 #define SKV_CLIENT_PROCESS_CONN_N_DEQUEUE_LOG ( 0 )
 #endif
 
@@ -63,7 +63,7 @@
 // #define SKV_SERVER_MACHINE_FILE "/etc/machinefile"
 // #endif
 
-/** \brief maximum number of events to dequeue and process from receive queue in one chunk (it_evd_dequeue_n) 
+/** \brief maximum number of events to dequeue and process from receive queue in one chunk (it_evd_dequeue_n)
  *
  */
 #define SKV_CLIENT_RQ_EVENTS_TO_DEQUEUE_COUNT ( 4 )
@@ -81,19 +81,19 @@ TraceClient                                      gSKVClientConnProcessRecv[ SKV_
  * skv_client_conn_manager_if_t::Init::
  * Desc: Initializes the state of the skv_client_conn_manager_if_t
  * Gets the client ready to create connections
- * input: 
+ * input:
  * aFlags ->
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
 skv_client_conn_manager_if_t::
-Init( skv_client_group_id_t        aClientGroupId, 
-      int                           aMyRank, 
+Init( skv_client_group_id_t        aClientGroupId,
+      int                           aMyRank,
       it_ia_handle_t*               aIA_Hdl,
       it_pz_handle_t*               aPZ_Hdl,
       int                           aFlags,
       skv_client_ccb_manager_if_t* aCCBMgrIF )
-{ 
+{
   mServerConnCount = 0;
   mServerConns = NULL;
 
@@ -126,7 +126,7 @@ Init( skv_client_group_id_t        aClientGroupId,
                                       NULL );
 
   StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()"
     << " status: " << status
     << EndLogLine;
 
@@ -140,7 +140,7 @@ Init( skv_client_group_id_t        aClientGroupId,
                           NULL );
 
   StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()"
     << " status: " << status
     << EndLogLine;
 
@@ -154,7 +154,7 @@ Init( skv_client_group_id_t        aClientGroupId,
                           NULL );
 
   StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()"
     << " status: " << status
     << EndLogLine;
 
@@ -168,7 +168,7 @@ Init( skv_client_group_id_t        aClientGroupId,
                           NULL );
 
   StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()"
     << " status: " << status
     << EndLogLine;
 
@@ -182,7 +182,7 @@ Init( skv_client_group_id_t        aClientGroupId,
                           NULL );
 
   StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_client_conn_manager_if_t::Init():: ERROR:: Failed in it_evd_create()"
     << " status: " << status
     << EndLogLine;
 
@@ -196,9 +196,9 @@ Init( skv_client_group_id_t        aClientGroupId,
                           NULL );
 
   StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_conn_manager_if_t::Init(): ERROR:: Failed in it_evd_create()" 
+    << "skv_client_conn_manager_if_t::Init(): ERROR:: Failed in it_evd_create()"
     << " status: " << status
-    << EndLogLine;  
+    << EndLogLine;
   /***********************************************************/
 
   mEventsToDequeueCount = SKV_CLIENT_RQ_EVENTS_TO_DEQUEUE_COUNT;
@@ -231,7 +231,7 @@ Init( skv_client_group_id_t        aClientGroupId,
 /***
  * skv_client_conn_manager_if_t::Finalize::
  * Desc: Takes down the state of the skv_client_conn_manager_if_t
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -261,16 +261,16 @@ Finalize()
 
 /***
  * skv_client_conn_manager_if_t::Connect::
- * Desc: Creates a connection between the client and the 
+ * Desc: Creates a connection between the client and the
  * SKV server group. For now server group name denotes a path
  * to a file with server IPs. (/etc/compute.mf)
- * input: 
- * IN aServerGroupName -> Takes a name of the server. The name of the 
+ * input:
+ * IN aServerGroupName -> Takes a name of the server. The name of the
  * server is one that's recognized by a name service.
- * IN aFlags      -> 
+ * IN aFlags      ->
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
 Connect( const char* aConfigFile,
          int   aFlags )
@@ -317,7 +317,7 @@ Connect( const char* aConfigFile,
     << " mServerConnCount: " << mServerConnCount
     << EndLogLine;
 
-  mServerConns = (skv_client_server_conn_t *) 
+  mServerConns = (skv_client_server_conn_t *)
     malloc( sizeof( skv_client_server_conn_t ) * mServerConnCount );
 
   StrongAssertLogLine( mServerConns != NULL )
@@ -325,7 +325,7 @@ Connect( const char* aConfigFile,
     << " Not enough memory to allocate: "
     << sizeof( skv_client_server_conn_t ) * mServerConnCount
     << " bytes"
-    << EndLogLine;    
+    << EndLogLine;
 
   skv_server_addr_t* ServerAddrs = (skv_server_addr_t *) malloc( mServerConnCount * sizeof( skv_server_addr_t ) );
   StrongAssertLogLine( ServerAddrs != NULL )
@@ -344,14 +344,14 @@ Connect( const char* aConfigFile,
 
   char ServerAddr[ SKV_MAX_SERVER_ADDR_NAME_LENGTH ];
 
-  while( fin1.getline( ServerAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH ) ) 
+  while( fin1.getline( ServerAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH ) )
   {
     char* firstspace=index(ServerAddr, ' ');
     char* PortStr=firstspace+1;
     *firstspace=0;
 
     // replace local hostname by loopback address
-    strcpy( ServerAddrs[ RankInx ].mName, ServerAddr ); 
+    strcpy( ServerAddrs[ RankInx ].mName, ServerAddr );
     ServerAddrs[ RankInx ].mPort = atoi( PortStr );
 
     BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
@@ -360,7 +360,7 @@ Connect( const char* aConfigFile,
       << " Addr: " << ServerAddrs[RankInx].mName
       << " Port: " << ServerAddrs[RankInx].mPort
       << EndLogLine;
-    
+
     RankInx++;
   }
 
@@ -436,8 +436,8 @@ Connect( const char* aConfigFile,
 
 /***
  * skv_client_conn_manager_if_t::Disconnect::
- * Desc: 
- * input: 
+ * Desc:
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -481,13 +481,13 @@ Disconnect()
 
 /***
  * skv_client_conn_manager_if_t::ConnectToServer::
- * Desc: 
- * input: 
+ * Desc:
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
-ConnectToServer( int                        aServerRank, 
+ConnectToServer( int                        aServerRank,
                  skv_server_addr_t         aServerAddr,
                  skv_client_server_conn_t* aServerConn )
 {
@@ -530,14 +530,14 @@ ConnectToServer( int                        aServerRank,
 
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::ConnectToServer():: Before it_ep_rc_create"
-    << EndLogLine;  
+    << EndLogLine;
 
-  it_status_t status = it_ep_rc_create( *mPZ_Hdl, 
-                                        mEvd_Sq_Hdl, 
+  it_status_t status = it_ep_rc_create( *mPZ_Hdl,
+                                        mEvd_Sq_Hdl,
                                         mEvd_Rq_Hdl,
-                                        mEvd_Cmm_Hdl, 
-                                        ep_flags, 
-                                        & ep_attr, 
+                                        mEvd_Cmm_Hdl,
+                                        ep_flags,
+                                        & ep_attr,
                                         & aServerConn->mEP );
 
   StrongAssertLogLine( status == IT_SUCCESS )
@@ -695,7 +695,7 @@ ConnectToServer( int                        aServerRank,
     << " About to wait on connection establishment "
     << EndLogLine;
 
-  // Check for errors            
+  // Check for errors
   while( 1 )
   {
     it_event_t event_cmm;
@@ -800,16 +800,16 @@ ConnectToServer( int                        aServerRank,
     << "aServerAddr.mName: " << aServerAddr.mName
     << EndLogLine;
 
-  return SKV_SUCCESS;  
+  return SKV_SUCCESS;
 }
 
 /***
  * skv_client_conn_manager_if_t::DisconnectFromServer::
- * Desc: 
- * input: 
+ * Desc:
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
 DisconnectFromServer( skv_client_server_conn_t* aServerConn )
 {
@@ -832,20 +832,20 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
 
   size_t private_data_length = strlen((char *)private_data) + 1;
 
-  it_status_t istatus = it_ep_disconnect( EP, 
-                                          private_data, 
+  it_status_t istatus = it_ep_disconnect( EP,
+                                          private_data,
                                           private_data_length );
   AssertLogLine( istatus == IT_SUCCESS )
     << "skv_client_conn_manager_if_t::DisconnectFromServer(): ERROR:: "
     << " istatus: " << istatus
-    << EndLogLine;  
+    << EndLogLine;
 
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::DisconnectFromServer():: Finished it_ep_disconnect"
     << " istatus: " << istatus
     << EndLogLine;
 
-  // Check for errors            
+  // Check for errors
   while( 1 )
   {
     it_event_t event_cmm;
@@ -939,7 +939,7 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
 
 skv_status_t
 skv_client_conn_manager_if_t::
-GetEPHandle( int             aNodeId, 
+GetEPHandle( int             aNodeId,
              it_ep_handle_t* aEP )
 {
   AssertLogLine( aNodeId >= 0 && aNodeId < mServerConnCount )
@@ -957,11 +957,11 @@ GetEPHandle( int             aNodeId,
 
 /***
  * skv_client_conn_manager_if_t::Dispatch::
- * Desc: 
- * input: 
+ * Desc:
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
 Dispatch( skv_client_server_conn_t*    aConn,
           skv_client_ccb_t*            aCCB,
@@ -973,7 +973,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << "skv_client_conn_manager_if_t::Dispatch():: Entering"
     << " aConn: " << (void *) aConn
     << " aCCB: " << (void *) aCCB
-    << " aCmdOrd: " << aCmdOrd 
+    << " aCmdOrd: " << aCmdOrd
     << EndLogLine;
 
   // instead of posting send/recv we might have to defer the Dispatch() and push the request to an OverflowQueue
@@ -1004,7 +1004,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
   send_seg.addr.abs = aCCB->GetSendBuff();
 
   /// TODO: THIS NEEDS TO BE CALCULATED
-  send_seg.length = SKV_CONTROL_MESSAGE_SIZE;  
+  send_seg.length = SKV_CONTROL_MESSAGE_SIZE;
 
   AssertLogLine( aCmdOrd == -1 )
     << "ERROR: CmdOrd must not be set. Only support Request/Response model "
@@ -1029,7 +1029,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
   Hdr->mMarker = mCookieSeq.mSeq;
 
   BegLogLine( SKV_CLIENT_TRACK_MESSGES_LOG )
-    << "MSG_TRACKER: submit marker = " << Hdr->mMarker 
+    << "MSG_TRACKER: submit marker = " << Hdr->mMarker
     << " cmdOrd = " << CmdOrd
     << " CCB: " << (void*)aCCB
     << " rBuf: " << (void*)aCCB->GetRecvBuff()
@@ -1042,7 +1042,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << EndLogLine;
 
   it_rdma_addr_t dest_recv_slot = ( it_rdma_addr_t )( aConn->GetNextServerRecvAddress() ) ;
-  
+
   // if the server slot is 0 the do a signalled
   it_dto_flags_t dto_write_flags = (it_dto_flags_t) (0);
   if( dest_recv_slot == 0 )
@@ -1127,7 +1127,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << "skv_client_conn_manager_if_t::Dispatch():: "
     << " After it_post_rdma_write"
     << " on EP: " << (void *) aConn->mEP
-    << EndLogLine;  
+    << EndLogLine;
 
   if( status != IT_SUCCESS )
   {
@@ -1153,13 +1153,13 @@ Dispatch( skv_client_server_conn_t*    aConn,
 
 /***
  * skv_client_conn_manager_if_t::Dispatch::
- * Desc: 
- * input: 
+ * Desc:
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
-Dispatch( int                   aNodeId, 
+Dispatch( int                   aNodeId,
           skv_client_ccb_t*    aCCB )
 {
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
@@ -1186,13 +1186,13 @@ Dispatch( int                   aNodeId,
 
 /***
  * skv_client_conn_manager_if_t::ProcessCCB::
- * Desc: 
- * input: 
+ * Desc:
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
-ProcessCCB( skv_client_server_conn_t*    aConn, 
+ProcessCCB( skv_client_server_conn_t*    aConn,
             skv_client_ccb_t*            aCCB )
 {
   AssertLogLine( aConn != NULL )
@@ -1216,7 +1216,7 @@ ProcessCCB( skv_client_server_conn_t*    aConn,
 
   skv_command_type_t CommandType = aCCB->mCommand.mType;
 
-  skv_client_command_state_t State = aCCB->mState;    
+  skv_client_command_state_t State = aCCB->mState;
 
   BegLogLine( SKV_CLIENT_PROCESS_CCB_LOG )
     << "skv_client_conn_manager_if_t::ProcessCCB(): "
@@ -1228,7 +1228,7 @@ ProcessCCB( skv_client_server_conn_t*    aConn,
     << " CommandType: " << CommandType
     << EndLogLine;
 
-  StrongAssertLogLine( Hdr->mEvent >= 0 ) 
+  StrongAssertLogLine( Hdr->mEvent >= 0 )
     << "skv_client_conn_manager_if_t::ProcessCCB(): ERROR:: "
     << " Hdr->mEvent: " << Hdr->mEvent
     << EndLogLine;
@@ -1315,14 +1315,14 @@ ProcessCCB( skv_client_server_conn_t*    aConn,
 
 /***
  * skv_client_conn_manager_if_t::ProcessOverflow::
- * Desc: 
- * input: 
+ * Desc:
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
 ProcessOverflow( skv_client_server_conn_t* aConn )
-{  
+{
   // take one off the overflow and dispatch
   while( ( aConn->mOverflowCommands->size() > 0 ) &&
          ( aConn->mUnretiredRecvCount < SKV_MAX_UNRETIRED_CMDS ) )
@@ -1349,7 +1349,7 @@ ProcessOverflow( skv_client_server_conn_t* aConn )
     return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
 ProcessSqEvent(it_event_t* event_rq)
 {
@@ -1357,7 +1357,7 @@ ProcessSqEvent(it_event_t* event_rq)
     << "skv_client_conn_manager_if_t::ProcessSqEvent(): SQ Event: "
     << " event_number: " << event_rq->event_number
     << " Check for: " << IT_DTO_SEND_CMPL_EVENT
-    << EndLogLine;      
+    << EndLogLine;
 
   it_dto_cmpl_event_t* DTO_Event = (it_dto_cmpl_event_t *) event_rq;
 
@@ -1423,7 +1423,7 @@ ProcessSqEvent(it_event_t* event_rq)
     default:
     {
       StrongAssertLogLine( 0 )
-          << "skv_client_conn_manager_if_t::ProcessSqEvent(): ERROR: "	      
+          << "skv_client_conn_manager_if_t::ProcessSqEvent(): ERROR: "
           << " DTO_Event->event_number: " << DTO_Event->event_number
           << EndLogLine;
 
@@ -1466,7 +1466,7 @@ InitializeFromResponseData( skv_client_ccb_t* aCCB,
 
 #define SKV_CLIENT_SKIP_EVENT_CHECK ( SKV_MAX_COMMANDS_PER_EP * 2 )
 
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
 ProcessConnectionsRqSq()
 //ProcessConnectionsRqSimple()
@@ -1477,7 +1477,7 @@ ProcessConnectionsRqSq()
    *
    * later in the optimization process we can try to remove this copy by
    * 1) move the response buffer out of the CCB and have a pointer (requires good book-keeping)
-   * 2) add the response address to the header and let the server directly write the response 
+   * 2) add the response address to the header and let the server directly write the response
    *    + the whole CCB space is MR at the client anyway, so no extra registration required
    *    + no further memcpy
    *    - This makes polling more complicated since we need to poll in many places
@@ -1565,7 +1565,7 @@ ProcessConnectionsRqSq()
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_conn_manager_if_t::
 ProcessConnectionsRqSimple()
 //ProcessConnectionsRq()

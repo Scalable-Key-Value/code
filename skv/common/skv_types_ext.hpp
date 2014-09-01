@@ -14,7 +14,8 @@
 #ifndef __SKV_TYPES_EXT_HPP__
 #define __SKV_TYPES_EXT_HPP__
 
-#include <common/skv_errno.hpp>
+#include <skv/common/skv_errno.hpp>
+#include <skv/c/skv.h>
 
 #ifndef SKV_CLIENT_UNI
 #include <mpi.h>
@@ -68,8 +69,8 @@ struct skv_pds_id_t
 };
 
 template<class streamclass>
-static  
-streamclass& 
+static
+streamclass&
 operator<<(streamclass& os, const skv_pds_id_t& aT )
 {
   os << "skv_pds_id_t [  "
@@ -80,9 +81,6 @@ operator<<(streamclass& os, const skv_pds_id_t& aT )
   return(os);
 }
 #endif  // SKV_CLIENT_FILEBASED
-
-
-#include <skv.h>
 
 struct skv_pds_attr_t
 {
@@ -106,4 +104,3 @@ operator<<( streamclass& os, const skv_pds_attr_t& aT )
 }
 
 #endif // __SKV_TYPES_EXT_HPP__
-

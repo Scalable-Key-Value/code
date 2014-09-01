@@ -17,17 +17,17 @@
 
 
 #include <FxLogger.hpp>
-#include <common/skv_types.hpp>
-#include <common/skv_client_server_headers.hpp>
-#include <client/skv_client_server_conn.hpp>
-#include <common/skv_client_server_protocol.hpp>
-#include <server/skv_server_types.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/server/skv_server_types.hpp>
 
 // include the implementations of the local kv backend
-#include <server/skv_local_kv_interface.hpp>
+#include <skv/server/skv_local_kv_interface.hpp>
 
-#include <server/skv_server_event_source.hpp>
-#include <server/skv_server_local_kv_event_source.hpp>
+#include <skv/server/skv_server_event_source.hpp>
+#include <skv/server/skv_server_local_kv_event_source.hpp>
 
 #define SKV_SERVER_LOCAL_KV_POLL_LOOPS ( 10 )
 

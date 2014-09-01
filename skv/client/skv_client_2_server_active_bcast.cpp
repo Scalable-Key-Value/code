@@ -11,9 +11,9 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_internal.hpp>
-#include <client/skv_c2s_active_broadcast.hpp>
-#include <common/skv_utils.hpp>
+#include <skv/client/skv_client_internal.hpp>
+#include <skv/client/skv_c2s_active_broadcast.hpp>
+#include <skv/common/skv_utils.hpp>
 
 #ifndef SKV_CLIENT_C2S_ACTIVE_BCAST_LOG
 #define SKV_CLIENT_C2S_ACTIVE_BCAST_LOG ( 0 | SKV_LOGGING_ALL )
@@ -21,10 +21,10 @@
 
 /***
  * skv_client_internal_t::iSendActiveBcastReq::
- * Desc: 
+ * Desc:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iSendActiveBcastReq( int                                   aNodeId,
                      skv_c2s_active_broadcast_func_type_t aFuncType,
@@ -33,7 +33,7 @@ iSendActiveBcastReq( int                                   aNodeId,
                      void*                                 aIncommingDataMgrIF,
                      it_pz_handle_t                        aPZHdl,
                      skv_client_cmd_hdl_t*                aCmdHdl )
-{  
+{
   // Starting a new command, get a command control block
   skv_client_ccb_t* CmdCtrlBlk;
   skv_status_t rsrv_status = mCommandMgrIF.Reserve( & CmdCtrlBlk );
@@ -43,7 +43,7 @@ iSendActiveBcastReq( int                                   aNodeId,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
 
   skv_cmd_active_bcast_req_t* Req = (skv_cmd_active_bcast_req_t *) SendCtrlMsgBuff;
 
@@ -62,7 +62,7 @@ iSendActiveBcastReq( int                                   aNodeId,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType                                                  = SKV_COMMAND_ACTIVE_BCAST;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandActiveBcast.mFuncType           = aFuncType;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandActiveBcast.mNodeId             = aNodeId;
@@ -74,9 +74,9 @@ iSendActiveBcastReq( int                                   aNodeId,
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( aNodeId, CmdCtrlBlk );
 
@@ -96,10 +96,10 @@ iSendActiveBcastReq( int                                   aNodeId,
 
 /***
  * skv_client_internal_t::C2S_ActiveBroadcast::
- * Desc: 
+ * Desc:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 C2S_ActiveBroadcast( skv_c2s_active_broadcast_func_type_t aFuncType,
                      char*                                 aBuff,

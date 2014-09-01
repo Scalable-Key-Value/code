@@ -11,7 +11,7 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_internal.hpp>
+#include <skv/client/skv_client_internal.hpp>
 
 #include <sched.h>
 
@@ -22,16 +22,16 @@
 /***
  * skv_client_internal_t::TestAny::
  * Desc: Check if any command is done
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_command_manager_if_t::
 TestAny( skv_client_cmd_hdl_t* aCmdHdl )
 {
   skv_status_t status = SKV_SUCCESS;
 
-  mConnMgrIF->ProcessConnectionsRqSq();  
+  mConnMgrIF->ProcessConnectionsRqSq();
 
   skv_client_ccb_t* CCB = mCCBMgrIF->RemoveFromFrontDoneCCBQueue();
 
@@ -62,7 +62,7 @@ ReleaseAssumeDone( skv_client_cmd_hdl_t aCmdHdl )
 
   aCmdHdl->Transit( SKV_CLIENT_COMMAND_STATE_IDLE );
 
-  mCCBMgrIF->AddToFreeCCBQueue( aCmdHdl );  
+  mCCBMgrIF->AddToFreeCCBQueue( aCmdHdl );
 
   return SKV_SUCCESS;
 }
@@ -83,7 +83,7 @@ Reserve( skv_client_cmd_hdl_t* aCmdHdl )
 /***
  * skv_client_internal_t::Test::
  * Desc: Check if a command is done
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -91,7 +91,7 @@ skv_client_command_manager_if_t::
 Test( skv_client_cmd_hdl_t aCmdHdl )
 {
   // BegLogLine( SKV_CLIENT_WAIT_LOG )
-  //   << "skv_client_internal_t::Test():: Entering " 
+  //   << "skv_client_internal_t::Test():: Entering "
   //   << EndLogLine;
 
   mConnMgrIF->ProcessConnectionsRqSq();
@@ -109,7 +109,7 @@ Test( skv_client_cmd_hdl_t aCmdHdl )
   }
 
   // BegLogLine( SKV_CLIENT_WAIT_LOG )
-  //   << "skv_client_internal_t::Test():: Leaving " 
+  //   << "skv_client_internal_t::Test():: Leaving "
   //   << EndLogLine;
 
   return status;
@@ -118,7 +118,7 @@ Test( skv_client_cmd_hdl_t aCmdHdl )
 /***
  * skv_client_internal_t::WaitAny::
  * Desc: Wait on any command handle
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -144,15 +144,15 @@ WaitAny( skv_client_cmd_hdl_t* aCmdHdl )
 /***
  * skv_client_command_manager_if_t::Wait::
  * Desc: Wait on a command handle
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_command_manager_if_t::
 Wait( skv_client_cmd_hdl_t aCmdHdl )
 {
   BegLogLine( SKV_CLIENT_WAIT_LOG )
-    << "skv_client_internal_t::Wait():: Entering " 
+    << "skv_client_internal_t::Wait():: Entering "
     << EndLogLine;
 
   while( 1 )
@@ -172,16 +172,16 @@ Wait( skv_client_cmd_hdl_t aCmdHdl )
   }
 
   BegLogLine( SKV_CLIENT_WAIT_LOG )
-    << "skv_client_internal_t::Wait():: Leaving " 
+    << "skv_client_internal_t::Wait():: Leaving "
     << EndLogLine;
 
   return SKV_SUCCESS;
 }
 
 
-skv_status_t 
+skv_status_t
 skv_client_command_manager_if_t::
 Dispatch( int aNodeId, skv_client_ccb_t* aCCB )
 {
-  return mConnMgrIF->Dispatch( aNodeId, aCCB );  
+  return mConnMgrIF->Dispatch( aNodeId, aCCB );
 }

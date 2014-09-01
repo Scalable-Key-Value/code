@@ -24,8 +24,8 @@
 #include <thread>
 #include <pthread.h>
 
-#include <server/skv_server_uber_pds.hpp>
-#include <server/skv_server_partitioned_data_set_manager_if.hpp>
+#include <skv/server/skv_server_uber_pds.hpp>
+#include <skv/server/skv_server_partitioned_data_set_manager_if.hpp>
 
 typedef skv_partitioned_data_set_manager_if_t<skv_uber_pds_t> skv_pds_manager_if_t;
 

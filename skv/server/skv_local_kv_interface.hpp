@@ -41,20 +41,20 @@
 #define SKV_SERVER_LOCAL_KV skv_local_kv_inmem
 #endif
 
-#include <server/skv_local_kv_types.hpp>
+#include <skv/server/skv_local_kv_types.hpp>
 
 // Include of required data types to work with various back ends
-#include <server/skv_local_kv_request.hpp>
-#include <common/skv_mutex.hpp>
-#include <server/skv_local_kv_request_queue.hpp>
-#include <server/skv_local_kv_event_queue.hpp>
-#include <server/skv_local_kv_rdma_data_buffer.hpp>
+#include <skv/server/skv_local_kv_request.hpp>
+#include <skv/common/skv_mutex.hpp>
+#include <skv/server/skv_local_kv_request_queue.hpp>
+#include <skv/server/skv_local_kv_event_queue.hpp>
+#include <skv/server/skv_local_kv_rdma_data_buffer.hpp>
 
 
 // Include the list of defined local kv back ends
-#include <server/skv_local_kv_inmem.hpp>
-#include <server/skv_local_kv_asyncmem.hpp>
-#include <server/skv_local_kv_rocksdb.hpp>
+#include <skv/server/skv_local_kv_inmem.hpp>
+#include <skv/server/skv_local_kv_asyncmem.hpp>
+#include <skv/server/skv_local_kv_rocksdb.hpp>
 
 template<class skv_local_kv_manager>
 class skv_local_kv_interface

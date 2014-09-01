@@ -15,8 +15,8 @@
 #define __SKV_CLIENT_SERVER_CONN_HPP__
 
 #include <queue>
-#include <common/skv_array_stack.hpp>
-#include <common/skv_client_server_headers.hpp>
+#include <skv/common/skv_array_stack.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
 
 #ifndef SKV_CLIENT_RDMA_CMD_PLACEMENT_LOG
 #define SKV_CLIENT_RDMA_CMD_PLACEMENT_LOG ( 0 | SKV_LOGGING_ALL )

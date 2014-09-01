@@ -12,12 +12,12 @@
  */
 
 #include <FxLogger.hpp>
-#include <common/skv_config.hpp>
-#include <common/skv_types.hpp>
-#include <common/skv_client_server_headers.hpp>
-#include <server/skv_server_types.hpp>
-#include <server/skv_server_cursor_manager_if.hpp>
-#include <server/skv_server_network_event_manager.hpp>
+#include <skv/common/skv_config.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/server/skv_server_types.hpp>
+#include <skv/server/skv_server_cursor_manager_if.hpp>
+#include <skv/server/skv_server_network_event_manager.hpp>
 
 
 #define VP_NAME                     "vp_softrdma"
@@ -28,7 +28,7 @@
 
 skv_status_t
 skv_server_network_event_manager_if_t::
-Init( int aPartitionSize, 
+Init( int aPartitionSize,
       int aRank )
 {
   mMyRank = aRank;
@@ -42,7 +42,7 @@ Init( int aPartitionSize,
   it_status_t itstatus = it_ia_create( VP_NAME, 2, 0, & mIA_Hdl );
   StrongAssertLogLine( itstatus == IT_SUCCESS )
     << "skv_server_t::Init():: ERROR:: Failed in it_ia_create() "
-    << " VP_NAME: " << VP_NAME    
+    << " VP_NAME: " << VP_NAME
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -54,7 +54,7 @@ Init( int aPartitionSize,
    ***********************************************************/
   itstatus = it_pz_create( mIA_Hdl, & mPZ_Hdl);
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_pz_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_pz_create()"
     << " itstatus: " << itstatus
     << EndLogLine;
   /***********************************************************/
@@ -77,7 +77,7 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -86,7 +86,7 @@ Init( int aPartitionSize,
   StrongAssertLogLine( mAevdEvents != NULL )
     << "ERROR: "
     << " itEventSize: " << itEventSize
-    << EndLogLine; 
+    << EndLogLine;
 #endif
 
   itstatus = it_evd_create( mIA_Hdl,
@@ -99,7 +99,7 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -113,7 +113,7 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -131,7 +131,7 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -147,7 +147,7 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -167,7 +167,7 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
     << EndLogLine;
 
@@ -179,7 +179,7 @@ Init( int aPartitionSize,
   int sq_sevd_queue_size = ( SKV_SERVER_SENDQUEUE_SIZE ) * aPartitionSize;
 
   BegLogLine( SKV_SERVER_NETWORK_EVENT_MANAGER_LOG )
-    << "skv_server_t::Init():: " 
+    << "skv_server_t::Init():: "
     << " PartitionSize: " << aPartitionSize
     << " sq_sevd_queue_size: " << sq_sevd_queue_size
     << EndLogLine;
@@ -194,9 +194,9 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
-    << EndLogLine;  
+    << EndLogLine;
 
   itstatus = it_evd_create( mIA_Hdl,
                             IT_SOFTWARE_EVENT_STREAM,
@@ -208,14 +208,14 @@ Init( int aPartitionSize,
                             NULL );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()" 
+    << "skv_server_t::Init():: ERROR:: Failed in it_evd_create()"
     << " itstatus: " << itstatus
-    << EndLogLine;  
+    << EndLogLine;
 
 #endif
 
   BegLogLine( SKV_SERVER_NETWORK_EVENT_MANAGER_LOG )
-    << "skv_server_t::Init():: " 
+    << "skv_server_t::Init():: "
     << " mEvd_Unaff_Hdl: " << mEvd_Unaff_Hdl
     << " mEvd_Aff_Hdl: " << mEvd_Aff_Hdl
     << " mEvd_Cmr_Hdl: " << mEvd_Cmr_Hdl
@@ -227,7 +227,7 @@ Init( int aPartitionSize,
 
   /************************************************************
    * Initialize the listener
-   ***********************************************************/  
+   ***********************************************************/
   it_listen_flags_t lp_flags = IT_LISTEN_CONN_QUAL_INPUT;
 
   /*
@@ -268,9 +268,9 @@ Init( int aPartitionSize,
   while( (itstatus != IT_SUCCESS) && (listen_attempts < SKV_MAX_SERVER_PER_NODE) );
 
   StrongAssertLogLine( itstatus == IT_SUCCESS )
-    << "skv_server_t::Init(): ERROR:: Failed in it_listen_create()" 
+    << "skv_server_t::Init(): ERROR:: Failed in it_listen_create()"
     << " itstatus: " << itstatus
-    << EndLogLine;  
+    << EndLogLine;
 
   // have to update the skv server in the config in case it has changed during listen attempts
   SKVConfig->SetSKVServerPort( ntohs(conn_qual.conn_qual.lr_port.local) );
@@ -286,7 +286,7 @@ Init( int aPartitionSize,
 /***
  * skv_server_t::InitNewStateForEP::
  * Desc: Initiates the state for a new EP
- * input: 
+ * input:
  * returns: SKV_SUCCESS or SKV_ERR_NO_EVENT
  ***/
 skv_status_t
@@ -343,7 +343,7 @@ FinalizeEPState(  EPStateMap_T*         aEPStateMap,
 /***
  * skv_server_t::InitNewStateForEP::
  * Desc: Initiates the state for a new EP
- * input: 
+ * input:
  * returns: SKV_SUCCESS or SKV_ERR_NO_EVENT
  ***/
 skv_status_t
@@ -410,7 +410,7 @@ InitNewStateForEP( EPStateMap_T* aEPStateMap,
     << EndLogLine;
 
   BegLogLine( SKV_SERVER_NETWORK_EVENT_MANAGER_LOG )
-    << "skv_server_t::InitNewStateForEP():: "    
+    << "skv_server_t::InitNewStateForEP():: "
     << " ep_hdl: " << (void *) ep_hdl
     << " *aStateForEP: " << (void *) *aStateForEP
     << EndLogLine;

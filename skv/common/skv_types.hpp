@@ -14,7 +14,7 @@
 #ifndef __SKV_TYPES_HPP__
 #define __SKV_TYPES_HPP__
 
-extern "C" 
+extern "C"
 {
 #define ITAPI_ENABLE_V21_BINDINGS
 #include <it_api.h>
@@ -24,25 +24,25 @@ extern "C"
 #include <cstdint>
 #include <FxLogger.hpp>
 #include <Trace.hpp>
-#include <common/skv_errno.hpp>
-#include <common/skv_config.hpp>
+#include <skv/common/skv_errno.hpp>
+#include <skv/common/skv_config.hpp>
 
 #include <inttypes.h>
 
-#ifndef SKV_LOGGING_ALL 
+#ifndef SKV_LOGGING_ALL
 #define SKV_LOGGING_ALL ( 0 )
 #endif
 
 /*****************
- * Running the skv client/server 
+ * Running the skv client/server
  * locally on the host
  ****************/
 //#define SKV_RUNNING_LOCAL
 
 // DEBUG
 #ifndef SKV_BULK_LOAD_CHECKSUM
-//#define SKV_BULK_LOAD_CHECKSUM 
-#undef SKV_BULK_LOAD_CHECKSUM 
+//#define SKV_BULK_LOAD_CHECKSUM
+#undef SKV_BULK_LOAD_CHECKSUM
 #endif
 
 // Size of the control message buffers for send/recv
@@ -83,7 +83,7 @@ extern "C"
 #define SKV_STORE_T_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#include <common/skv_types_ext.hpp>
+#include <skv/common/skv_types_ext.hpp>
 
 #define SKV_MAX_DATA_LOAD      ( 1024 )
 #define SKV_KEY_LIMIT          ( 1024 )
@@ -94,7 +94,7 @@ extern "C"
 #define SKV_MAX_SERVER_ADDR_NAME_LENGTH ( 256 )
 #define SKV_SERVER_PORT_LENGTH          ( 10 )
 
-typedef enum 
+typedef enum
 {
   SKV_DATA_ID_TYPE_PDS_ID   = 0x0001,
   SKV_DATA_ID_TYPE_INDEX_ID = 0x0002
@@ -109,12 +109,12 @@ struct skv_data_id_t
     skv_pds_id_t                mPdsId;
     void                       *mIndexId;
   };
-}; 
+};
 
 struct skv_server_addr_t
 {
   char mName[ SKV_MAX_SERVER_ADDR_NAME_LENGTH ];
-  int  mPort;  
+  int  mPort;
 };
 
 /***
@@ -123,7 +123,7 @@ struct skv_server_addr_t
 struct skv_store_t
 {
   int   mSize;
-  char* mData;  
+  char* mData;
 
   int
   GetSize()
@@ -137,7 +137,7 @@ struct skv_store_t
     return mData;
   }
 
-  // 
+  //
   void
   Init( char* aData, int aSize )
   {
@@ -147,7 +147,7 @@ struct skv_store_t
       << EndLogLine;
 
     mData = aData;
-    mSize = aSize;      
+    mSize = aSize;
   }
 
   void
@@ -170,19 +170,19 @@ struct skv_store_t
   // ??? Default behaviour should be lexicographical order
   bool
   operator==( const skv_store_t& aStore ) const
-  {      
+  {
     BegLogLine( SKV_STORE_T_LOG )
       << "skv_store_t::operator==():: Entering "
       << EndLogLine;
 
     AssertLogLine( mData != NULL )
       << "skv_store_t::operator==():: ERROR: "
-      << " mData != NULL " 
+      << " mData != NULL "
       << EndLogLine;
 
     AssertLogLine( aStore.mData != NULL )
       << "skv_store_t::operator==():: ERROR: "
-      << " aStore.mData != NULL " 
+      << " aStore.mData != NULL "
       << EndLogLine;
 
     if( mSize == aStore.mSize )
@@ -206,12 +206,12 @@ struct skv_store_t
 
     AssertLogLine( mData != NULL )
       << "skv_store_t::operator<():: ERROR: "
-      << " mData != NULL " 
+      << " mData != NULL "
       << EndLogLine;
 
     AssertLogLine( aStore.mData != NULL )
       << "skv_store_t::operator<():: ERROR: "
-      << " aStore.mData != NULL " 
+      << " aStore.mData != NULL "
       << EndLogLine;
 
     int rc = memcmp( mData, aStore.mData, MinDataSize );
@@ -224,7 +224,7 @@ struct skv_store_t
       << " rc: " << rc
       << EndLogLine;
 
-    return ( rc < 0 );    
+    return ( rc < 0 );
   }
 };
 
@@ -400,10 +400,10 @@ operator<<( streamclass& os, const skv_lmr_triplet_t& aT )
   os << "skv_lmr_triplet_t [  "
      << (void *) aT.mLMRTriplet.lmr << ' '
      << (void *) aT.mLMRTriplet.addr.abs << ' '
-     << (int) aT.mLMRTriplet.length 
+     << (int) aT.mLMRTriplet.length
      << " ]";
 
-  return(os);    
+  return(os);
 }
 
 
@@ -482,7 +482,7 @@ operator<<( streamclass& os, const skv_rmr_triplet_t& aT )
   os << "skv_rmr_triplet_t [  "
      << (void *) aT.mRMR_Context << ' '
      << (void *) aT.mRMR_Addr << ' '
-     << (int) aT.mRMR_Len 
+     << (int) aT.mRMR_Len
      << " ]";
 
 #if 0
@@ -509,7 +509,7 @@ operator<<( streamclass& os, const skv_rmr_triplet_t& aT )
   os << " ]";
 #endif
 
-  return(os);    
+  return(os);
 }
 
 typedef char* skv_rec_lock_handle_t;

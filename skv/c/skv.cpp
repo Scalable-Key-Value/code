@@ -15,8 +15,7 @@
 #include "mpi.h"
 #endif
 
-#include <skv.h>
-#include <client/skv_client_internal.hpp>
+#include <skv/client/skv_client_internal.hpp>
 
 #if defined( SKV_NON_MPI ) || defined ( SKV_CLIENT_UNI )
 
@@ -31,7 +30,7 @@ SKV_Init( skv_client_group_id_t aCommGroupId,
     << "skv_client_t::Init():: ERROR:: Couldn't allocate client handle "
     << EndLogLine;
 
-  skv_status_t status = ((skv_client_internal_t *)(*aClient))->Init( aCommGroupId,  
+  skv_status_t status = ((skv_client_internal_t *)(*aClient))->Init( aCommGroupId,
                                                                      aFlags,
                                                                      aConfigFile );
   return status;
@@ -50,7 +49,7 @@ SKV_Init( skv_client_group_id_t aCommGroupId,
     << "skv_client_t::Init():: ERROR:: Couldn't allocate client handle "
     << EndLogLine;
 
-  skv_status_t status = ((skv_client_internal_t *)(*aClient))->Init( aCommGroupId,  
+  skv_status_t status = ((skv_client_internal_t *)(*aClient))->Init( aCommGroupId,
                                                                      aComm,
                                                                      aFlags,
                                                                      aConfigFile );
@@ -96,45 +95,45 @@ SKV_Disconnect( skv_hdl_t aClient )
 // Blocking interface
 skv_status_t
 SKV_Open( skv_hdl_t             aClient,
-           char                  *aPDSName, 
-           skv_pds_priv_t        aPrivs, 
-           skv_cmd_open_flags_t  aFlags, 
+           char                  *aPDSName,
+           skv_pds_priv_t        aPrivs,
+           skv_cmd_open_flags_t  aFlags,
            skv_pds_hdl_t        *aPDSId )
   {
   skv_pds_id_t *MyPDSId = new skv_pds_id_t;
   *aPDSId = (skv_pds_hdl_t)MyPDSId;
-  return ((skv_client_internal_t *)aClient)->Open( aPDSName, 
-                                                    aPrivs, 
-                                                    aFlags, 
+  return ((skv_client_internal_t *)aClient)->Open( aPDSName,
+                                                    aPrivs,
+                                                    aFlags,
                                                     MyPDSId );
   }
 
 
 skv_status_t
 SKV_Retrieve( skv_hdl_t           aClient,
-               skv_pds_hdl_t       aPDSId, 
+               skv_pds_hdl_t       aPDSId,
                char                *aKeyBuffer,
                int                  aKeyBufferSize,
                char                *aValueBuffer,
                int                  aValueBufferSize,
                int                 *aValueRetrievedSize,
-               int                  aOffset, 
+               int                  aOffset,
                skv_cmd_RIU_flags_t aFlags )
   {
-  return ((skv_client_internal_t *)aClient)->Retrieve( (skv_pds_id_t*)aPDSId, 
+  return ((skv_client_internal_t *)aClient)->Retrieve( (skv_pds_id_t*)aPDSId,
                                                         aKeyBuffer,
                                                         aKeyBufferSize,
                                                         aValueBuffer,
                                                         aValueBufferSize,
                                                         aValueRetrievedSize,
-                                                        aOffset, 
+                                                        aOffset,
                                                         aFlags );
   }
 
 
 skv_status_t
 SKV_Update( skv_hdl_t             aClient,
-             skv_pds_hdl_t         aPDSId, 
+             skv_pds_hdl_t         aPDSId,
              char                  *aKeyBuffer,
              int                    aKeyBufferSize,
              char                  *aValueBuffer,
@@ -154,7 +153,7 @@ SKV_Update( skv_hdl_t             aClient,
 
 skv_status_t
 SKV_Insert( skv_hdl_t            aClient,
-             skv_pds_hdl_t        aPDSId, 
+             skv_pds_hdl_t        aPDSId,
              char                 *aKeyBuffer,
              int                   aKeyBufferSize,
              char                 *aValueBuffer,
@@ -162,7 +161,7 @@ SKV_Insert( skv_hdl_t            aClient,
              int                   aValueBufferOffset,
              skv_cmd_RIU_flags_t  aFlags )
   {
-  return ((skv_client_internal_t *)aClient)->Insert( (skv_pds_id_t*)aPDSId, 
+  return ((skv_client_internal_t *)aClient)->Insert( (skv_pds_id_t*)aPDSId,
                                                       aKeyBuffer,
                                                       aKeyBufferSize,
                                                       aValueBuffer,
@@ -174,12 +173,12 @@ SKV_Insert( skv_hdl_t            aClient,
 
 skv_status_t
 SKV_Remove( skv_hdl_t               aClient,
-             skv_pds_hdl_t           aPDSId, 
+             skv_pds_hdl_t           aPDSId,
              char                    *aKeyBuffer,
              int                      aKeyBufferSize,
              skv_cmd_remove_flags_t  aFlags )
   {
-  return ((skv_client_internal_t *)aClient)->Remove( (skv_pds_id_t*)aPDSId, 
+  return ((skv_client_internal_t *)aClient)->Remove( (skv_pds_id_t*)aPDSId,
                                                       aKeyBuffer,
                                                       aKeyBufferSize,
                                                       aFlags );
@@ -218,18 +217,18 @@ SKV_PDSCntl( skv_hdl_t           aClient,
 // Async interface
 skv_status_t
 SKV_Iopen( skv_hdl_t                 aClient,
-            char                      *aPDSName, 
-            skv_pds_priv_t            aPrivs, 
-            skv_cmd_open_flags_t      aFlags, 
-            skv_pds_hdl_t            *aPDSId, 
+            char                      *aPDSName,
+            skv_pds_priv_t            aPrivs,
+            skv_cmd_open_flags_t      aFlags,
+            skv_pds_hdl_t            *aPDSId,
             skv_client_cmd_ext_hdl_t *aCmdHdl )
   {
   skv_pds_id_t  *MyPDSId = new skv_pds_id_t;
   *aPDSId = (skv_pds_hdl_t)MyPDSId;
-  return ((skv_client_internal_t *)aClient)->iOpen( aPDSName, 
-                                                     aPrivs, 
-                                                     aFlags, 
-                                                     MyPDSId, 
+  return ((skv_client_internal_t *)aClient)->iOpen( aPDSName,
+                                                     aPrivs,
+                                                     aFlags,
+                                                     MyPDSId,
                                                      (skv_client_cmd_hdl_t*) aCmdHdl );
   }
 
@@ -242,7 +241,7 @@ SKV_Iretrieve( skv_hdl_t                  aClient,
                 char                       *aValueBuffer,
                 int                         aValueBufferSize,
                 int                        *aValueRetrievedSize,
-                int                         aOffset, 
+                int                         aOffset,
                 skv_cmd_RIU_flags_t        aFlags,
                 skv_client_cmd_ext_hdl_t  *aCmdHdl )
   {
@@ -252,7 +251,7 @@ SKV_Iretrieve( skv_hdl_t                  aClient,
                                                          aValueBuffer,
                                                          aValueBufferSize,
                                                          aValueRetrievedSize,
-                                                         aOffset, 
+                                                         aOffset,
                                                          aFlags,
                                                          (skv_client_cmd_hdl_t *) aCmdHdl );
   }
@@ -274,7 +273,7 @@ SKV_Iupdate( skv_hdl_t                  aClient,
                                                        aKeyBufferSize,
                                                        aValueBuffer,
                                                        aValueUpdateSize,
-                                                       aOffset, 
+                                                       aOffset,
                                                        aFlags,
                                                        (skv_client_cmd_hdl_t *) aCmdHdl );
   }
@@ -304,13 +303,13 @@ SKV_Iinsert( skv_hdl_t                  aClient,
 
 skv_status_t
 SKV_Iremove( skv_hdl_t                 aClient,
-              skv_pds_hdl_t             aPDSId, 
+              skv_pds_hdl_t             aPDSId,
               char                      *aKeyBuffer,
               int                        aKeyBufferSize,
               skv_cmd_remove_flags_t    aFlags,
               skv_client_cmd_ext_hdl_t *aCmdHdl )
   {
-  return ((skv_client_internal_t *)aClient)->iRemove( (skv_pds_id_t*)aPDSId, 
+  return ((skv_client_internal_t *)aClient)->iRemove( (skv_pds_id_t*)aPDSId,
                                                        aKeyBuffer,
                                                        aKeyBufferSize,
                                                        aFlags,
@@ -372,8 +371,8 @@ SKV_Test( skv_hdl_t                 aClient,
  *****************************************************************************/
 // Local Cursor Interface
 skv_status_t
-SKV_OpenLocalCursor( int                           aNodeId, 
-                      skv_pds_hdl_t                aPDSId, 
+SKV_OpenLocalCursor( int                           aNodeId,
+                      skv_pds_hdl_t                aPDSId,
                       skv_client_cursor_ext_hdl_t *aCursorHdl )
   {
   return SKV_SUCCESS;
@@ -417,7 +416,7 @@ SKV_GetNextLocalElement( skv_client_cursor_ext_hdl_t  aCursorHdl,
 
 // Global Cursor
 skv_status_t
-SKV_OpenCursor( skv_pds_hdl_t                aPDSId, 
+SKV_OpenCursor( skv_pds_hdl_t                aPDSId,
                  skv_client_cursor_ext_hdl_t *aCursorHdl )
   {
   return SKV_SUCCESS;
@@ -482,7 +481,7 @@ SKV_Bulk_Insert( skv_client_bulk_inserter_ext_hdl_t                  aBulkInsert
                   char                                                *aKeyBuffer,
                   int                                                  aKeyBufferSize,
                   char                                                *aValueBuffer,
-                  int                                                  aValueBufferSize,			
+                  int                                                  aValueBufferSize,
                   skv_bulk_inserter_flags_t                           aFlags )
   {
   return SKV_SUCCESS;
@@ -523,4 +522,3 @@ skv_status_t DumpPDS( skv_pds_hdl_t aPDSId,
   {
   return SKV_SUCCESS;
   }
-

@@ -11,24 +11,24 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_server_conn.hpp>
-#include <common/skv_client_server_protocol.hpp>
-#include <server/skv_server_uber_pds.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/server/skv_server_uber_pds.hpp>
 
 #ifndef SKV_SERVER_UBER_PDS_LOG
 #define SKV_SERVER_UBER_PDS_LOG ( 0 | SKV_LOGGING_ALL  )
 #endif
 
-int 
+int
 skv_uber_pds_t::
 GetMaxDataLoad()
 {
   return mLocalData.GetMaxDataLoad();
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
-Remove( skv_pds_id_t             aPDSId, 
+Remove( skv_pds_id_t             aPDSId,
         char*                    aKeyData,
         int                      aKeySize )
 {
@@ -37,9 +37,9 @@ Remove( skv_pds_id_t             aPDSId,
                             aKeySize );
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
-Insert( skv_pds_id_t             aPDSId, 
+Insert( skv_pds_id_t             aPDSId,
         char*                    aRecordRep,
         int                      aKeySize,
         int                      aValueSize )
@@ -51,26 +51,26 @@ Insert( skv_pds_id_t             aPDSId,
 
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 Allocate( int                aSize,
           skv_lmr_triplet_t* aRemMemRep )
-{  
+{
   return mLocalData.Allocate( aSize,
                               aRemMemRep );
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 Deallocate( skv_lmr_triplet_t* aRemMemRep )
 {
-  return mLocalData.Deallocate( aRemMemRep );  
+  return mLocalData.Deallocate( aRemMemRep );
 }
 
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
-Retrieve( skv_pds_id_t             aPDSId, 
+Retrieve( skv_pds_id_t             aPDSId,
           char*                    aKeyData,
           int                      aKeySize,
           int                      aValueOffset,
@@ -78,7 +78,7 @@ Retrieve( skv_pds_id_t             aPDSId,
           skv_cmd_RIU_flags_t      aFlags,
           skv_lmr_triplet_t*       aMemRepValue )
 {
-  return mLocalData.Retrieve( aPDSId, 
+  return mLocalData.Retrieve( aPDSId,
                               aKeyData,
                               aKeySize,
                               aValueOffset,
@@ -87,7 +87,7 @@ Retrieve( skv_pds_id_t             aPDSId,
                               aMemRepValue );
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 UnlockRecord( skv_rec_lock_handle_t   aRecLock )
 {
@@ -105,7 +105,7 @@ CreateCursor( char*                    aBuff,
                                   aServCursorHdl );
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 LockRecord( skv_pds_id_t             aPDSId,
             char*                    aKeyData,
@@ -118,9 +118,9 @@ LockRecord( skv_pds_id_t             aPDSId,
                                 aRecLock);
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
-RetrieveNKeys( skv_pds_id_t       aPDSId, 
+RetrieveNKeys( skv_pds_id_t       aPDSId,
                char *             aStartingKeyData,
                int                aStartingKeySize,
                skv_lmr_triplet_t* aRetrievedKeysSizesSegs,
@@ -129,7 +129,7 @@ RetrieveNKeys( skv_pds_id_t       aPDSId,
                int                aListOfKeysMaxCount,
                skv_cursor_flags_t aFlags )
 {
-  return mLocalData.RetrieveNKeys( aPDSId, 
+  return mLocalData.RetrieveNKeys( aPDSId,
                                    aStartingKeyData,
                                    aStartingKeySize,
                                    aRetrievedKeysSizesSegs,
@@ -144,33 +144,33 @@ RetrieveNKeys( skv_pds_id_t       aPDSId,
 /***
  * skv_uber_pds_t::Open::
  * Desc: Opens a partitioned data set
- * input: 
+ * input:
  * aPDSName -> Name of the partitioned data set (PDS)
- * aFlags -> 
+ * aFlags ->
  *          SKV_CREATE: Create the PDS if it doesn't exist
  *          default:     Assumes that the PDS is already created
  * aPDSId -> The pointer is filled in as a result of the Open()
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 Open( char*                 aPDSName,
-      skv_pds_priv_t        aPrivs, 
-      skv_cmd_open_flags_t  aFlags, 
+      skv_pds_priv_t        aPrivs,
+      skv_cmd_open_flags_t  aFlags,
       skv_pds_id_t*         aPDSId )
 {
   return mLocalData.Open( aPDSName, aPrivs, aFlags, aPDSId );
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
-Stat( skv_pdscntl_cmd_t  aCmd, 
+Stat( skv_pdscntl_cmd_t  aCmd,
       skv_pds_attr_t    *aPDSAttr )
 {
   return mLocalData.Stat( aCmd, aPDSAttr );
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 Close( skv_pds_attr_t *aPDSAttr )
 {
@@ -181,12 +181,12 @@ Close( skv_pds_attr_t *aPDSAttr )
 /***
  * skv_uber_pds_t::Init::
  * Desc: Initializes the state of the skv_uber_pds_t
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
-Init( int            aNodeId, 
+Init( int            aNodeId,
       int            aNodeCount,
       skv_server_internal_event_manager_if_t* aInternalEventQueue,
       it_pz_handle_t aPZ_Hdl,
@@ -204,7 +204,7 @@ Init( int            aNodeId,
   //   StrongAssertLogLine( mPDSNameTable != NULL )
   //     << "skv_uber_pds_t::Init:: ERROR:: "
   //     << " mPDSNameTable != NULL"
-  //     << EndLogLine;  
+  //     << EndLogLine;
 
   mMyNodeId = aNodeId;
 
@@ -219,7 +219,7 @@ Init( int            aNodeId,
 
   rc = mDistributionManager.Init( aNodeCount );
   if( rc )
-    return rc; 
+    return rc;
 
   return rc;
 }
@@ -227,7 +227,7 @@ Init( int            aNodeId,
 /***
  * skv_uber_pds_t::Finalize::
  * Desc: Takes down the state of skv_uber_pds_t
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -235,11 +235,11 @@ skv_uber_pds_t::
 Finalize()
 {
   skv_status_t rc = mLocalData.Finalize();
-  if( rc ) 
+  if( rc )
     return rc;
 
   rc = mDistributionManager.Finalize();
-  if( rc ) 
+  if( rc )
     return rc;
 
   return rc;
@@ -258,21 +258,21 @@ Finalize()
 skv_distribution_t*
 skv_uber_pds_t::
 GetDistribution()
-{     
+{
   return & mDistributionManager;
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 DumpPersistenceImage( char* aPath )
 {
   return mLocalData.DumpPersistenceImage( aPath );
 }
 
-skv_status_t 
+skv_status_t
 skv_uber_pds_t::
 InBoundsCheck( const char* aContext,
-               char* aMem, 
+               char* aMem,
                int   aSize )
 {
   return mLocalData.InBoundsCheck( aContext, aMem, aSize );

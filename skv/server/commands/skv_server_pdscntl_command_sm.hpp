@@ -14,9 +14,9 @@
 #ifndef __SKV_SERVER_PDSCNTL_COMMAND_SM_HPP__
 #define __SKV_SERVER_PDSCNTL_COMMAND_SM_HPP__
 
-#include <common/skv_types.hpp>
+#include <skv/common/skv_types.hpp>
 
-#ifndef SKV_SERVER_PDSCNTL_COMMAND_SM_LOG 
+#ifndef SKV_SERVER_PDSCNTL_COMMAND_SM_LOG
 #define SKV_SERVER_PDSCNTL_COMMAND_SM_LOG  ( 0 | SKV_LOGGING_ALL )
 #endif
 
@@ -88,7 +88,7 @@ public:
     skv_server_command_state_t State = Command->GetState();
 
     // skv_server_event_type_t EventType = aEvent->mEventType;
-    skv_server_event_type_t EventType = aEvent->mCmdEventType;    
+    skv_server_event_type_t EventType = aEvent->mCmdEventType;
 
     switch( State )
     {
@@ -148,7 +148,7 @@ public:
                 status = aLocalKV->PDS_Stat( cntl_cmd, PDSAttr, cookie );
                 break;
               }
-                    
+
               case SKV_PDSCNTL_CMD_CLOSE:
               {
                 status = aLocalKV->PDS_Close( PDSAttr, cookie );
@@ -161,7 +161,7 @@ public:
                   << " unrecognized PDS-CNTL command: " << cntl_cmd
                   << EndLogLine;
             }
-                    
+
             if( status == SKV_ERRNO_LOCAL_KV_EVENT )
             {
               create_multi_stage( aEPState,

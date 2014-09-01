@@ -11,7 +11,7 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <common/skv_distribution_manager.hpp>
+#include <skv/common/skv_distribution_manager.hpp>
 
 #include <math.h>
 #include <stdlib.h>
@@ -27,7 +27,7 @@
 /***
  * DistributionManagerHash::Finalize::
  * Desc: Finalize the state of the distribution manager
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -40,7 +40,7 @@ Finalize()
 /***
  * skv_distribution_hash_t::Init::
  * Desc: Initiate the state of the distribution manager
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -64,18 +64,18 @@ Init( int aCount )
 /***
  * skv_distribution_hash_t::GetNode::
  * Desc: Initiate the state of the distribution manager
- * input: 
- * aRangeCount -> 
+ * input:
+ * aRangeCount ->
  * returns: NodeId that owns aKey
  ***/
 int
 skv_distribution_hash_t::
 GetNode( skv_key_t* aKey )
-{    
+{
   AssertLogLine( aKey != NULL )
     << "skv_distribution_hash_t::GetNode():: ERROR: "
     << " aKey != NULL"
-    << EndLogLine;    
+    << EndLogLine;
 
   char* Data = aKey->GetData();
   int   DataSize = aKey->GetSize();
@@ -90,7 +90,7 @@ GetNode( skv_key_t* aKey )
 int
 skv_distribution_hash_t::
 GetNode( char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount )
-{        
+{
   AssertLogLine( aListElementCount >= 1 )
     << EndLogLine;
 
@@ -121,7 +121,7 @@ GetNode( char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount 
 /***
  * skv_distribution_random_t::Finalize::
  * Desc: Finalize the state of the distribution manager
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -134,7 +134,7 @@ Finalize()
 /***
  * skv_distribution_random_t::Init::
  * Desc: Initiate the state of the distribution manager
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -151,7 +151,7 @@ Init( int aCount )
 /***
  * skv_distribution_random_t::GetNode::
  * Desc: Initiate the state of the distribution manager
- * input: 
+ * input:
  * returns: NodeId that owns aKey
  ***/
 int
@@ -161,7 +161,7 @@ GetNode( skv_key_t* aKey )
   AssertLogLine( aKey != NULL )
     << "skv_distribution_random_t::GetNode():: ERROR: "
     << " aKey != NULL"
-    << EndLogLine;        
+    << EndLogLine;
 
   return ((int) (mCount * ( rand() / (RAND_MAX + 1.0) ) ));
 }

@@ -12,13 +12,13 @@
  */
 
 #include <FxLogger.hpp>
-#include <common/skv_types.hpp>
-#include <common/skv_client_server_headers.hpp>
-#include <server/skv_server_types.hpp>
-#include <server/skv_server_network_event_manager.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/server/skv_server_types.hpp>
+#include <skv/server/skv_server_network_event_manager.hpp>
 
-#include <server/skv_server_event_source.hpp>
-#include <server/skv_server_command_event_source.hpp>
+#include <skv/server/skv_server_event_source.hpp>
+#include <skv/server/skv_server_command_event_source.hpp>
 
 
 #define SKV_SERVER_COMMAND_MEM_POLL_LOOPS 10
@@ -243,7 +243,7 @@ PrepareEvent( skv_server_event_t *currentEvent, skv_server_ep_state_t *aEPState 
   BegLogLine( SKV_SERVER_GET_COMMAND_LOG )
     << "skv_server_t::GetServerCmdFromEP:: IT Recv Event"
     << " EPState: " << (void *) aEPState
-    << " CmdOrd: " << CmdOrd 
+    << " CmdOrd: " << CmdOrd
     << " ServerCCB: " << (void *) CCB
     << " CmdEventType: " << skv_server_event_type_to_string ( CmdEventType )
     << " CmdType: " << skv_command_type_to_string( CmdType )
@@ -364,4 +364,3 @@ PrepareEvent( skv_server_event_t *currentEvent, skv_server_ep_state_t *aEPState 
 
   return SKV_SUCCESS;
 }
-

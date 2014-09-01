@@ -48,8 +48,8 @@
 #define SKV_SERVER_TRACE ( 0 )
 #endif
 
-#include <server/skv_server_event_type.hpp>
-#include <server/skv_server_heap_manager.hpp>
+#include <skv/server/skv_server_event_type.hpp>
+#include <skv/server/skv_server_heap_manager.hpp>
 // !! FURTHER INCLUDES FURTHER DOWN IN THE FILE !!
 
 static TraceClient gSKVServerDispatchResponseStart;
@@ -144,13 +144,13 @@ struct skv_server_command_key_t
 struct skv_server_ep_state_t;
 /***************************************************************/
 
-class skv_server_cookie_t  
+class skv_server_cookie_t
 {
   struct skv_server_cookie_params_t
   {
     unsigned short                mCookieSeqNo;
 
-    // NOTE: 
+    // NOTE:
     // * In Recv context mOrd is an ordinal of the Recv Buffer in EP state
     // * In Send context mOrd is an ordinal of the skv_server_ccb_t in EP state
     unsigned short                mOrd;
@@ -206,7 +206,7 @@ static streamclass&
 operator<<( streamclass& os, skv_server_cookie_t& A )
 {
   int SeqNo = A.GetCookieSeqNo();
-  int Ord   = A.GetOrd();  
+  int Ord   = A.GetOrd();
 
   os << "skv_server_cookie_t: ["
      << SeqNo << ' '
@@ -214,7 +214,7 @@ operator<<( streamclass& os, skv_server_cookie_t& A )
      << (void *) A.GetEPState()
      << " ]";
 
-  return(os);    
+  return(os);
 }
 
 typedef void*(*skv_server_rdma_write_cmpl_func_t)(void*);
@@ -225,7 +225,7 @@ class skv_server_rdma_write_cmpl_cookie_t
 {
   struct skv_server_rdma_write_cmpl_cookie_params_t
   {
-    skv_server_rdma_write_cmpl_func_t mFunc;    
+    skv_server_rdma_write_cmpl_func_t mFunc;
     void*                             mContext;
 
     // Needed to preserve the transaction id for tracing
@@ -260,7 +260,7 @@ public:
 
   it_dto_cookie_t
   GetCookie()
-  {    
+  {
     return mCookie;
   }
 
@@ -280,7 +280,7 @@ public:
   GetFunc( )
   {
     return mParams.mFunc;
-  }  
+  }
 };
 
 
@@ -301,9 +301,9 @@ struct skv_server_command_bulk_insert_t
   uint64_t                            mRemoteBufferAddr;
   it_rmr_context_t                    mRemoteBufferRMR;
 
-#ifdef SKV_BULK_LOAD_CHECKSUM 
+#ifdef SKV_BULK_LOAD_CHECKSUM
   uint64_t                            mRemoteBufferChecksum;
-#endif  
+#endif
 
 };
 
@@ -366,13 +366,13 @@ typedef enum {
   SKV_COMMAND_CLASS_IMMEDIATE = 0,
   SKV_COMMAND_CLASS_MULTI_STAGE
 }  skv_server_command_class_t;
-    
 
-#include <server/skv_local_kv_types.hpp>
+
+#include <skv/server/skv_local_kv_types.hpp>
 
 struct skv_server_ccb_t
 {
-  skv_server_command_state_t   mState;  
+  skv_server_command_state_t   mState;
   skv_command_type_t           mType;
 
   skv_lmr_triplet_t*           mCtrlMsgSendTriplet;
@@ -403,7 +403,7 @@ struct skv_server_ccb_t
   } mLocalKVData;
   skv_status_t mLocalKVrc;
 
-  char* 
+  char*
   GetSendBuff()
   {
     AssertLogLine( mCtrlMsgSendTriplet != NULL )
@@ -413,9 +413,9 @@ struct skv_server_ccb_t
       << EndLogLine;
 
     return (char *) mCtrlMsgSendTriplet->GetAddr();
-  } 
+  }
 
-  int 
+  int
   GetSendBuffSize()
   {
     AssertLogLine( mCtrlMsgSendTriplet != NULL )
@@ -425,7 +425,7 @@ struct skv_server_ccb_t
       << EndLogLine;
 
     return mCtrlMsgSendTriplet->GetLen();
-  } 
+  }
 
   it_lmr_handle_t &
   GetSendLMR()
@@ -451,11 +451,11 @@ struct skv_server_ccb_t
     return mCtrlMsgSendBuffOrdinal;
   }
 
-  skv_server_command_state_t 
+  skv_server_command_state_t
   GetState()
   {
     return mState;
-  }  
+  }
 
   skv_command_type_t
   GetType()
@@ -496,7 +496,7 @@ struct skv_server_ccb_t
     mCtrlMsgSendBuffOrdinal = aCtrlMsgSendBuffOrdinal;
   }
 
-  void 
+  void
   Init( it_pz_handle_t      aPZ,
         skv_lmr_triplet_t* aCtrlMsgSendTriplet,
         int                 aCtrlMsgSendBuffOrdinal )
@@ -515,7 +515,7 @@ struct skv_server_ccb_t
 
 
     mCommandClass = SKV_COMMAND_CLASS_IMMEDIATE;
-  }    
+  }
 
   skv_server_command_class_t
   GetCommandClass( )
@@ -560,9 +560,9 @@ struct skv_server_finalizable_associated_ep_state_t
     mState      = aState;
   }
 
-  bool operator==(const skv_server_finalizable_associated_ep_state_t& Arg)    
+  bool operator==(const skv_server_finalizable_associated_ep_state_t& Arg)
   {
-    return ( ( mStateType == Arg.mStateType ) && 
+    return ( ( mStateType == Arg.mStateType ) &&
              ( mState == Arg.mState ) );
   }
 };
@@ -586,8 +586,8 @@ struct skv_server_conn_finder_t
 
 struct skv_server_event_t
 {
-  skv_server_event_type_t   mCmdEventType;    
-  skv_server_event_type_t   mEventType;    
+  skv_server_event_type_t   mCmdEventType;
+  skv_server_event_type_t   mEventType;
 
 
   typedef union
@@ -601,11 +601,11 @@ struct skv_server_event_t
 
     skv_server_rdma_write_cmpl_cookie_t mRdmaWriteCmplCookie;
 
-  } skv_server_event_metadata_t ; 
+  } skv_server_event_metadata_t ;
 
-  skv_server_event_metadata_t mEventMetadata;  
+  skv_server_event_metadata_t mEventMetadata;
 
-  void 
+  void
   Init( skv_server_event_type_t  aEventType,
         skv_server_ep_state_t*   aEPState,
         unsigned                 aCommandOrd,
@@ -618,7 +618,7 @@ struct skv_server_event_t
     mEventMetadata.mCommandFinder.mCommandOrd = aCommandOrd;
   }
 
-  void 
+  void
   Init( skv_server_event_type_t  aEventType,
         skv_server_cookie_t      aCookie )
   {
@@ -669,12 +669,12 @@ struct skv_server_event_t
     mEventMetadata.mConnFinder.mResponseRMR.rmr       =  (it_rmr_handle_t)aResponseRMR->GetRMRContext();
     mEventMetadata.mConnFinder.mResponseRMR.addr.abs  =  ( void* )aResponseRMR->GetAddr();
     mEventMetadata.mConnFinder.mResponseRMR.length    =  aResponseRMR->GetLen();
-    
+
   }
 };
 
 template <class streamclass>
-static streamclass& operator<<( streamclass& os, skv_server_event_t& aArg ) 
+static streamclass& operator<<( streamclass& os, skv_server_event_t& aArg )
 {
   os << "skv_server_event_t [ ";
   os << "EventType: " << skv_server_event_type_to_string( aArg.mEventType );
@@ -683,15 +683,15 @@ static streamclass& operator<<( streamclass& os, skv_server_event_t& aArg )
   return os;
 }
 
-  // +1 for the connection command for the EP 
+  // +1 for the connection command for the EP
 #define SKV_COMMAND_TABLE_LEN ( SKV_MAX_COMMANDS_PER_EP + 1 )
 #define SKV_CONN_COMMAND_ORDINAL ( SKV_MAX_COMMANDS_PER_EP )
 
 #define SKV_RECV_BUFFERS_COUNT ( SKV_MAX_COMMANDS_PER_EP + 2 )
 #define SKV_SEND_BUFFERS_COUNT ( SKV_SERVER_SENDQUEUE_SIZE + SKV_MAX_COMMANDS_PER_EP )
 
-#include "common/skv_array_stack.hpp"
-#include "common/skv_array_queue.hpp"
+#include <skv/common/skv_array_stack.hpp>
+#include <skv/common/skv_array_queue.hpp>
 
 /*********************************************************************************/
 typedef STL_LIST( skv_server_finalizable_associated_ep_state_t ) skv_server_finalizable_associated_ep_state_list_t;
@@ -709,7 +709,7 @@ typedef skv_array_queue_t< skv_server_event_t*, SKV_SERVER_PENDING_EVENTS_PER_EP
 
 struct skv_server_ep_state_t
 {
-  skv_server_ccb_t             mCCBTable[ SKV_COMMAND_TABLE_LEN ];  
+  skv_server_ccb_t             mCCBTable[ SKV_COMMAND_TABLE_LEN ];
   skv_lmr_triplet_t            mPrimaryCmdBuffers[ SKV_SERVER_COMMAND_SLOTS ]; // command slots for immediately completable commands (completing in order)
   skv_lmr_triplet_t            mSecondaryCmdBuffers[ SKV_COMMAND_TABLE_LEN ]; // command slots for multi-phase commands (completing out of order)
 
@@ -759,7 +759,7 @@ struct skv_server_ep_state_t
   void
   AddToAssociatedState(   skv_server_finalizable_associated_ep_state_type_t      aStateType,
                           void *                                                  aState )
-  {    
+  {
     skv_server_finalizable_associated_ep_state_t FinalizableState;
     FinalizableState.Init( aStateType, aState );
 
@@ -771,18 +771,18 @@ struct skv_server_ep_state_t
   void
   RemoveFromAssociatedState(   skv_server_finalizable_associated_ep_state_type_t      aStateType,
                                void *                                                  aState )
-  {    
+  {
     skv_server_finalizable_associated_ep_state_t FinalizableState;
     FinalizableState.Init( aStateType, aState );
 
     mAssociatedStateList->remove( FinalizableState );
 
     return;
-  } 
+  }
 
   void
   Finalize()
-  {    
+  {
     BegLogLine( SKV_SERVER_CLEANUP_LOG )
       << "Finalizing EP: " << (void*)this
       << EndLogLine;
@@ -796,7 +796,7 @@ struct skv_server_ep_state_t
     delete mFreeCommandSlotList;
 
     delete mPendingEventsList;
-    
+
   }
 
 
@@ -847,7 +847,7 @@ struct skv_server_ep_state_t
 
     // simulate as if this command was dispatched
     AdvanceDispatched( );
-    
+
 
     return SKV_SUCCESS;
   }
@@ -859,7 +859,7 @@ struct skv_server_ep_state_t
     return SKV_CONN_COMMAND_ORDINAL;
   }
 
-  skv_server_ccb_t* 
+  skv_server_ccb_t*
   GetCommandForOrdinal( int aOrdinal )
   {
     AssertLogLine( (aOrdinal >= 0) && (aOrdinal < SKV_COMMAND_TABLE_LEN) )
@@ -871,7 +871,7 @@ struct skv_server_ep_state_t
     return (& mCCBTable[ aOrdinal ]);
   }
 
-  // ??? Possibly need a special command for 
+  // ??? Possibly need a special command for
   // affiliated and connection events
   void
   Init( it_ep_handle_t   aEP,
@@ -893,16 +893,16 @@ struct skv_server_ep_state_t
 
     mAssociatedStateList = new skv_server_finalizable_associated_ep_state_list_t;
 
-    StrongAssertLogLine( mAssociatedStateList != NULL ) 
+    StrongAssertLogLine( mAssociatedStateList != NULL )
       << "skv_server_ep_state_t::Init(): ERROR: "
       << EndLogLine;
-    
+
     mFreeCommandSlotList = new skv_server_free_command_slot_list_t;
 
-    StrongAssertLogLine( mFreeCommandSlotList != NULL ) 
+    StrongAssertLogLine( mFreeCommandSlotList != NULL )
       << "skv_server_ep_state_t::Init(): ERROR creating Stack for free command slots "
       << EndLogLine;
-    
+
     mUnusedCommandSlotIndex       = 0;
     mUsedCommandSlotIndex         = 0;
     mDispatchedCommandBufferIndex = 0;
@@ -910,8 +910,8 @@ struct skv_server_ep_state_t
 
     // create list for tracking of pending/deferred replies
     mPendingEventsList = new skv_server_state_pending_events_list_t;
-    
-    StrongAssertLogLine( mPendingEventsList != NULL ) 
+
+    StrongAssertLogLine( mPendingEventsList != NULL )
       << "skv_server_ep_state_t::Init(): ERROR creating FIFO for pending events"
       << EndLogLine;
 
@@ -932,7 +932,7 @@ struct skv_server_ep_state_t
       + SKV_CONTROL_MESSAGE_SIZE * SKV_COMMAND_TABLE_LEN + SAFETY_GAP;
 
     mCommandBuffsRaw   = (char *) malloc( CommandBuffSize + ALIGNMENT );
-  
+
     StrongAssertLogLine( mCommandBuffsRaw != NULL )
       << "skv_server_ep_state_t::Init():: ERROR:: not enough memory for "
       << " BuffSize: " << CommandBuffSize
@@ -955,8 +955,8 @@ struct skv_server_ep_state_t
     // privileges in the same LMR, later, we create an RMR out of it
     // to allow clients to write the RecvBuffer section. THIS IS
     // DANGEROUS, since clients might overwrite send buffers as well!
-    
-    
+
+
     // TODO: need to recheck the permissions and flags!
 
     // privs     = IT_PRIV_LOCAL;
@@ -981,7 +981,7 @@ struct skv_server_ep_state_t
     StrongAssertLogLine( status == IT_SUCCESS )
       << "skv_server_ccb_t::Init():: ERROR:: from it_lmr_create "
       << " status: " << status
-      << EndLogLine;      
+      << EndLogLine;
 
 
     BegLogLine( SKV_SERVER_COMMAND_POLLING_LOG )
@@ -993,7 +993,7 @@ struct skv_server_ep_state_t
 
     /******************************************************************
      * Init Primary Command Buffers used for immediate in-order completion of commands
-     ******************************************************************/    
+     ******************************************************************/
     char* PrimaryBuffs = mCommandBuffs;
 
     // initializse RMR-data for later use
@@ -1075,8 +1075,8 @@ struct skv_server_ep_state_t
      ******************************************************************/
     // for( int i = 0; i < SKV_RECV_BUFFERS_COUNT; i++ )
     //   {
-    //     mUnpostedRecvBuffersList->push( i ); // mark recv buffers as unposted 
-    //   }    
+    //     mUnpostedRecvBuffersList->push( i ); // mark recv buffers as unposted
+    //   }
     for( int i = 0; i < SKV_MAX_COMMANDS_PER_EP; i++ )
     {
       mFreeCommandSlotList->push( i );   // fill the free CCB slots list (omit the slot for connReqests)
@@ -1105,7 +1105,7 @@ struct skv_server_ep_state_t
       << " dispatched: " << mDispatchedCommandBufferIndex
       << " unstalling EP"
       << EndLogLine;
-    
+
     if( ( EPisStalled() ) &&
         ( mUsedCommandSlotIndex != aSignaledCommandBufferIndex ) )
     {
@@ -1169,7 +1169,7 @@ struct skv_server_ep_state_t
       return NULL;
 
     skv_server_event_t* event = mPendingEventsList->front();
-    
+
     BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG | SKV_SERVER_PENDING_EVENTS_LOG )
       << "skv_server_ep_state_t::GetNextPendingEvent()::"
       << " cmd: " << skv_server_event_type_to_string( event->mEventType )
@@ -1186,7 +1186,7 @@ struct skv_server_ep_state_t
     mPendingEventsList->pop();  // remove from queue
 
     memset( event, 0, sizeof( skv_server_event_t ) );   // reset event slot/mark as free
-    
+
     BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG | SKV_SERVER_PENDING_EVENTS_LOG )
       << "skv_server_ep_state_t::FreeFirstPendingEvent()::"
       << " remaining: " << mPendingEventsList->size()
@@ -1194,7 +1194,7 @@ struct skv_server_ep_state_t
 
     return SKV_SUCCESS;
   }
-  
+
 
   /******************************************************************
    * Managing list of free command slots for this EP
@@ -1410,7 +1410,7 @@ struct skv_server_ep_state_t
       << EndLogLine;
   }
 
-  int 
+  int
   GetCurrentCommandSlot()
   {
     return mCurrentCommandSlot;
@@ -1432,7 +1432,7 @@ struct skv_server_ep_state_t
     return mClientCurrentResponseSlot;
   }
 
-  /** \brief Get the client-side slot address for the next response to write 
+  /** \brief Get the client-side slot address for the next response to write
    */
   uintptr_t GetClientResponseBufferAddress()
   {
@@ -1453,7 +1453,7 @@ struct skv_server_ep_state_t
   {
     mClientCurrentResponseSlot = (mClientCurrentResponseSlot + 1) % SKV_SERVER_COMMAND_SLOTS;
   }
-    
+
 
 #ifdef SKV_DEBUG_MSG_MARKER
   // duplicating the structs for debugging here because of circular dependencies
@@ -1469,12 +1469,12 @@ struct skv_server_to_client_cmd_hdr_tX
 struct skv_value_in_ctrl_msg_tX
 {
   int                           mValueSize;
-  char                          mData[ 0 ];  
+  char                          mData[ 0 ];
 };
 struct skv_cmd_retrieve_resp_t
 {
-  skv_server_to_client_cmd_hdr_tX     mHdr;  
-  skv_status_t                       mStatus;  
+  skv_server_to_client_cmd_hdr_tX     mHdr;
+  skv_status_t                       mStatus;
   skv_value_in_ctrl_msg_tX            mValue;
 };
 #endif
@@ -1485,7 +1485,7 @@ struct skv_cmd_retrieve_resp_t
   Dispatch( skv_server_ccb_t      *aCCB,
             int                    *aSeqNo,
             int                     aCommandOrdinal )
-  {        
+  {
     gSKVServerDispatchResponseStart.HitOE( SKV_SERVER_TRACE,
                                            "SKVServerDispatch",
                                            aCommandOrdinal,
@@ -1609,7 +1609,7 @@ struct skv_cmd_retrieve_resp_t
 #endif
 
     it_lmr_triplet_t seg_tx;
-    seg_tx.addr.abs = (char *) aSendTriplet->GetAddr(); 
+    seg_tx.addr.abs = (char *) aSendTriplet->GetAddr();
     seg_tx.length   = aSendTriplet->GetLen();
     seg_tx.lmr      = aSendTriplet->GetLMRHandle();
 
@@ -1672,7 +1672,7 @@ struct skv_cmd_retrieve_resp_t
     }
 
     ClientResonseBufferAdvance();
-    (*aSeqNo)++;    
+    (*aSeqNo)++;
 
     return SKV_SUCCESS;
   }

@@ -22,7 +22,7 @@
 #define SKV_CONFIG_FILE_LOG ( 0 )
 #endif
 
-#include <common/skv_config.hpp>
+#include <skv/common/skv_config.hpp>
 
 skv_configuration_t *skv_configuration_t::mConfiguration = NULL;
 
@@ -47,10 +47,10 @@ skv_configuration_t::skv_configuration_t( )
   mMachineFile = DEFAULT_SKV_MACHINE_FILE;
 
   mReadyFile = DEFAULT_SKV_SERVER_READY_FILE;
-  
+
   mPersistentFilename      = DEFAULT_SKV_PERSISTENT_FILENAME;
   mPersistentFileLocalPath = DEFAULT_SKV_PERSISTENT_FILE_LOCAL_PATH;
-        
+
   mLocalInfoFile = DEFAULT_SKV_LOCAL_SERVER_INFO_FILE;
 }
 
@@ -87,7 +87,7 @@ skv_configuration_t::GetConfigurationFile( const char *aConfigFile )
     }
 
   }
-          
+
   // check for home-dir default file ~/.skv.conf
   string tmpCfg( getenv( "HOME" ) );
   tmpCfg.append( "/.skv_server.conf" );
@@ -241,10 +241,10 @@ skv_configuration_t::ReadConfigurationFile( const char *aConfigFile )
     << " verbsDev" << mCommIF.c_str()
     << EndLogLine;
 
-  return status; 
+  return status;
 }
 
-  
+
 
 skv_config_setting_t
 skv_configuration_t::GetVariableCase( const string s, size_t *valueIndex )

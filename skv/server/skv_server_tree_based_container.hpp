@@ -13,11 +13,11 @@
 
 #ifndef __SKV_TREE_BASED_CONTAINER__
 #define __SKV_TREE_BASED_CONTAINER__
-#include <common/skv_types.hpp>
+#include <skv/common/skv_types.hpp>
 
-#include <server/skv_server_heap_manager.hpp>
-#include <server/skv_server_tree_based_container_key.hpp>
-#include <server/skv_server_cursor_manager_if.hpp>
+#include <skv/server/skv_server_heap_manager.hpp>
+#include <skv/server/skv_server_tree_based_container_key.hpp>
+#include <skv/server/skv_server_cursor_manager_if.hpp>
 
 // class skv_server_pds_compare_t
 //   {
@@ -33,14 +33,14 @@ class skv_tree_based_container_t
   // In bytes
   int                                           mMaxDataLoad;
 
-  // Memory for local data 
+  // Memory for local data
   char*                                         mStartOfDataField;
   size_t                                        mDataFieldLen;
 
   it_lmr_handle_t                               mDataLMR;
   it_rmr_context_t                              mDataRMR;
 
-  // This is used to get an iterator to the records associated 
+  // This is used to get an iterator to the records associated
   // to a skv_pds_id_t. Assumes the rest of the records follow in sorted order
   skv_tree_based_container_key_t* MakeMagicKey( skv_pds_id_t* );
   skv_tree_based_container_key_t* MakeKey( skv_pds_id_t& aPDSId, skv_key_t* aKey );
@@ -177,4 +177,3 @@ public:
 
 };
 #endif
-

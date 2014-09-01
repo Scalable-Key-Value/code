@@ -15,7 +15,7 @@
 #include <mpi.h>
 #include <FxLogger.hpp>
 #include <Trace.hpp>
-#include <client/skv_client.hpp>
+#include <skv/client/skv_client.hpp>
 #include <math.h>
 
 #include <map>
@@ -24,7 +24,7 @@ skv_client_t Client;
 #define DATA_SIZE        ( 4096 )
 
 #include "test_skv_utils.hpp"
-#include <server/skv_server_heap_manager.hpp>   // to get the server space per snode!
+#include <skv/server/skv_server_heap_manager.hpp>   // to get the server space per snode!
 
 // #define NUMBER_OF_TRIES  (  16 * 512  )
 #define PURESTORAGE_FACTOR ( (double)0.8 )                                                      // factor to reflect space overhead in server space, represents the available fraction of space per server
@@ -116,9 +116,9 @@ calculateKey( int rank,
 
 
 
-int 
-main(int argc, char **argv) 
-{  
+int
+main(int argc, char **argv)
+{
   printf( "skv_client::entering main \n" ); fflush( stdout );
 
   FxLogger_Init( argv[ 0 ] );
@@ -130,18 +130,18 @@ main(int argc, char **argv)
 
   /*****************************************************************************
    * Init MPI
-   ****************************************************************************/ 
+   ****************************************************************************/
   MPI_Init( &argc, &argv );
   MPI_Comm_rank( MPI_COMM_WORLD, &Rank );
   MPI_Comm_size( MPI_COMM_WORLD, &NodeCount );
   printf(" %d: MPI_Init complete\n", Rank);
-  /****************************************************************************/ 
+  /****************************************************************************/
 
 
 
   /*****************************************************************************
    * Init the SKV Client
-   ****************************************************************************/ 
+   ****************************************************************************/
   skv_status_t status = Client.Init( 0,
 #ifndef SKV_CLIENT_UNI
                                       MPI_COMM_WORLD,
@@ -160,14 +160,14 @@ main(int argc, char **argv)
         << "skv_test_n_inserts_retrieves::main():: SKV Client Init FAILED "
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
-    }  
-  /****************************************************************************/ 
+    }
+  /****************************************************************************/
 
 
 
   /*****************************************************************************
    * Connect to the SKV Server
-   ****************************************************************************/ 
+   ****************************************************************************/
   BegLogLine( SKV_TEST_LOG )
     << "skv_test_n_inserts_retrieves::main():: About to connect "
     << EndLogLine;
@@ -187,7 +187,7 @@ main(int argc, char **argv)
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
     }
-  /****************************************************************************/ 
+  /****************************************************************************/
 
 
 
@@ -214,7 +214,7 @@ main(int argc, char **argv)
 
   MPI_Bcast( MyTestPdsName,
              SKV_MAX_PDS_NAME_SIZE,
-             MPI_CHAR, 
+             MPI_CHAR,
              0,
              MPI_COMM_WORLD );
 
@@ -310,7 +310,7 @@ main(int argc, char **argv)
 
           commandHelpers[ t ].mBufferSize = testDataSize;
           commandHelpers[ t ].mBuffer = (char *) malloc( testDataSize );
-          StrongAssertLogLine( commandHelpers[ t ].mBuffer != NULL )    
+          StrongAssertLogLine( commandHelpers[ t ].mBuffer != NULL )
             << "ERROR:: "
             << " testDataSize: " << testDataSize
             << EndLogLine;
@@ -323,10 +323,10 @@ main(int argc, char **argv)
         }
 #else
       char* Buffer = (char *) malloc( testDataSize );
-      StrongAssertLogLine( Buffer != NULL )    
+      StrongAssertLogLine( Buffer != NULL )
         << "ERROR:: "
         << " testDataSize: " << testDataSize
-        << EndLogLine;      
+        << EndLogLine;
 #endif
 
       /************************************************************************
@@ -340,7 +340,7 @@ main(int argc, char **argv)
         << EndLogLine;
 
       for( int t=0; t < NUMBER_OF_TRIES+skips; t++ )
-        {      
+        {
           int Key = calculateKey( Rank, sizeIndex, t, (NUMBER_OF_TRIES*NodeCount) );
 #ifdef SKIP_LOCAL_KEYS
           if (Key % NUMBER_OF_SNODES == DCSMAP[Rank]) {
@@ -357,14 +357,14 @@ main(int argc, char **argv)
        ****************************************************************************/
       double InsertTimeStart = MPI_Wtime();
       for( int t=0; t < NUMBER_OF_TRIES; t++ )
-        {      
+        {
           int *Key = &key_list[t];
 
           BegLogLine( SKV_TEST_LOG )
             << "skv_test_n_inserts_retrieves::main():: About to Insert "
             << " into MyPDSId: " << MyPDSId
             << " key: " << *Key
-            << EndLogLine;      
+            << EndLogLine;
 
           status = Client.iInsert( &MyPDSId,
                                    (char *) Key,
@@ -373,7 +373,7 @@ main(int argc, char **argv)
                                    commandHelpers[ t ].mBuffer,
                                    commandHelpers[ t ].mBufferSize,
 #else
-                                   Buffer, 
+                                   Buffer,
                                    testDataSize,
 #endif
                                    0,
@@ -412,7 +412,7 @@ main(int argc, char **argv)
                 << " status: " << skv_status_to_string( status )
                 << EndLogLine;
 
-            }  
+            }
 
 #ifdef SKV_TEST_MAPPED_HANDELS
           int rc = CommandHandleToTimerMap->insert( std::make_pair( commandHelpers[ t ].mCommandHdl , & commandHelpers[ t ] ) ).second;
@@ -440,7 +440,7 @@ main(int argc, char **argv)
       skv_client_cmd_ext_hdl_t CommandHdl;
       for( int t=0; t < NUMBER_OF_TRIES; t++ )
         {
-#ifdef SKV_TEST_MAPPED_HANDELS          
+#ifdef SKV_TEST_MAPPED_HANDELS
           status = Client.WaitAny( & CommandHdl );
 #else
           CommandHdl = commandHelpers[ t ].mCommandHdl;
@@ -453,11 +453,11 @@ main(int argc, char **argv)
             << " CommandHdl: " << (void *) CommandHdl
             << EndLogLine;
 
-#ifdef SKV_TEST_MAPPED_HANDELS          
+#ifdef SKV_TEST_MAPPED_HANDELS
           command_handle_to_timer_map_t::iterator iter = CommandHandleToTimerMap->find( CommandHdl );
 
           StrongAssertLogLine( iter != CommandHandleToTimerMap->end() )
-            << "ERROR: command handle not found in command map " 
+            << "ERROR: command handle not found in command map "
             << " command handle: " << (void *) CommandHdl
             << EndLogLine;
 
@@ -483,7 +483,7 @@ main(int argc, char **argv)
         }
 #endif
 
-      double RetrieveTimeStart = MPI_Wtime();      
+      double RetrieveTimeStart = MPI_Wtime();
       for( int t=0; t < NUMBER_OF_TRIES; t++ )
         {
           int RetrieveSize = -1;
@@ -498,7 +498,7 @@ main(int argc, char **argv)
                                      commandHelpers[ t ].mBufferSize,
                                      & commandHelpers[ t ].mRetrieveBufferSize,
 #else
-                                     Buffer, 
+                                     Buffer,
                                      testDataSize,
                                      & RetrivedSize,
 #endif
@@ -522,7 +522,7 @@ main(int argc, char **argv)
                 << " MyPDSId: " << MyPDSId
                 << " status: " << skv_status_to_string( status )
                 << EndLogLine;
-            }  
+            }
 
 #ifdef SKV_TEST_MAPPED_HANDELS
           int rc = CommandHandleToTimerMap->insert( std::make_pair( commandHelpers[ t ].mCommandHdl , & commandHelpers[ t ] ) ).second;
@@ -530,7 +530,7 @@ main(int argc, char **argv)
             << "ERROR: "
             << " rc: " << rc
             << " commandHelpers[ t ].mCommandHdl: " << (void *) commandHelpers[ t ].mCommandHdl
-            << EndLogLine;	  
+            << EndLogLine;
 #endif
 #ifdef SLOWDOWN
           usleep(SLOWDOWN);
@@ -546,7 +546,7 @@ main(int argc, char **argv)
        ****************************************************************************/
       for( int t=0; t < NUMBER_OF_TRIES; t++ )
         {
-#ifdef SKV_TEST_MAPPED_HANDELS          
+#ifdef SKV_TEST_MAPPED_HANDELS
           status = Client.WaitAny( & CommandHdl );
 #else
           CommandHdl = commandHelpers[ t ].mCommandHdl;
@@ -582,7 +582,7 @@ main(int argc, char **argv)
           command_handle_to_timer_map_t::iterator iter = CommandHandleToTimerMap->find( CommandHdl );
 
           StrongAssertLogLine( iter != CommandHandleToTimerMap->end() )
-            << "ERROR: command handle not found in command map " 
+            << "ERROR: command handle not found in command map "
             << " command handle: " << (void *) CommandHdl
             << EndLogLine;
 
@@ -615,7 +615,7 @@ main(int argc, char **argv)
                   BegLogLine( SKV_TEST_LOG )
                     << "Retrieve Result does NOT match: { "
                     << (int)commandHelper->mBuffer[ i ] << " != "
-                    << calculateValue( Rank, ch, t ) << " }" 
+                    << calculateValue( Rank, ch, t ) << " }"
                     << EndLogLine;
 
                   TestFailed = 1;
@@ -660,7 +660,7 @@ main(int argc, char **argv)
       /****************************************************************************/
 
 #else // DONT_RETRIEVE
-      double RetrieveTimeStart = 1;      
+      double RetrieveTimeStart = 1;
       double RetrieveTime = 1000000000;
 #endif // DONT_RETRIEVE
 
@@ -668,7 +668,7 @@ main(int argc, char **argv)
         << "Removing Data"
         << EndLogLine;
 
-      double RemoveTimeStart = MPI_Wtime();      
+      double RemoveTimeStart = MPI_Wtime();
       /****************************************************************************/
       /* REMOVE content for next try **/
       /****************************************************************************/
@@ -687,7 +687,7 @@ main(int argc, char **argv)
             << "ERROR: posting remove: " << *Key
             << " idx: " << t
             << " status: " << skv_status_to_string( status )
-            << EndLogLine;	  
+            << EndLogLine;
 
           BegLogLine( SKV_TEST_LOG )
             << "Remove command posted: "
@@ -701,7 +701,7 @@ main(int argc, char **argv)
             << "ERROR: "
             << " rc: " << rc
             << " commandHelpers[ t ].mCommandHdl: " << (void *) commandHelpers[ t ].mCommandHdl
-            << EndLogLine;	  
+            << EndLogLine;
 #endif
         }
 
@@ -711,7 +711,7 @@ main(int argc, char **argv)
        ****************************************************************************/
       for( int t=0; t < NUMBER_OF_TRIES; t++ )
         {
-#ifdef SKV_TEST_MAPPED_HANDELS          
+#ifdef SKV_TEST_MAPPED_HANDELS
           status = Client.WaitAny( & CommandHdl );
 #else
           CommandHdl = commandHelpers[ t ].mCommandHdl;
@@ -728,7 +728,7 @@ main(int argc, char **argv)
           command_handle_to_timer_map_t::iterator iter = CommandHandleToTimerMap->find( CommandHdl );
 
           StrongAssertLogLine( iter != CommandHandleToTimerMap->end() )
-            << "ERROR: command handle not found in command map " 
+            << "ERROR: command handle not found in command map "
             << " command handle: " << (void *) CommandHdl
             << EndLogLine;
 
@@ -763,14 +763,14 @@ main(int argc, char **argv)
       double RetrieveBandwidth = ( testDataSize / ( GlobalRetrieveAvgTime * 1024.0 * 1024.0 ) );
 
       BegLogLine( 1 )
-        << "skv_test_n_inserts_retrieves::main():: TIMING: " 
+        << "skv_test_n_inserts_retrieves::main():: TIMING: "
         << " log2(ValueSize): " << log2( (double) testDataSize )
         << " ValueSize: " << testDataSize
         << " TryCount: " << NUMBER_OF_TRIES
         << " InsertAvgTime: " << GlobalInsertAvgTime
         << " InsertBandwidth: " << InsertBandwidth
         << " RetrieveAvgTime: " << GlobalRetrieveAvgTime
-        << " RetrieveBandwidth: " << RetrieveBandwidth	
+        << " RetrieveBandwidth: " << RetrieveBandwidth
         << " RemoveAvgTime: " << GlobalRemoveAvgTime
         << EndLogLine;
 

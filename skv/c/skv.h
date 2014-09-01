@@ -15,10 +15,10 @@
 #define __SKV_H__
 
 #include <inttypes.h>
-#include <common/skv_errno.hpp>
+#include <skv/common/skv_errno.hpp>
 
 #if defined(__cplusplus)
-extern "C" 
+extern "C"
   {
 #endif
 
@@ -33,15 +33,15 @@ extern "C"
     } skv_pdscntl_cmd_t;
 
 
-// Open() flags 
+// Open() flags
   typedef enum
     {
-    SKV_COMMAND_OPEN_FLAGS_NONE       = 0x0000, 
+    SKV_COMMAND_OPEN_FLAGS_NONE       = 0x0000,
 
     // Create if does not exist
     SKV_COMMAND_OPEN_FLAGS_CREATE     = 0x0001,
 
-    // Return error if already exists    
+    // Return error if already exists
     SKV_COMMAND_OPEN_FLAGS_EXCLUSIVE  = 0x0002,
 
     // PDS has duplicates
@@ -59,10 +59,10 @@ extern "C"
 
   typedef enum
     {
-    SKV_COMMAND_RIU_FLAGS_NONE                       = 0x0000, 
-    
+    SKV_COMMAND_RIU_FLAGS_NONE                       = 0x0000,
+
     /***
-     * IMPORTANT: 
+     * IMPORTANT:
      * only one of the following flags can be set per request
      * SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE
      * SKV_COMMAND_RIU_INSERT_OVERWRITE_VALUE_ON_DUP
@@ -72,9 +72,9 @@ extern "C"
      ***/
 
     /***
-     * If this flag is specified, the insert 
+     * If this flag is specified, the insert
      * will create a buffer equal to Offset+Len, if neccessary
-     * Note: Every time a new buffer is created a memcpy 
+     * Note: Every time a new buffer is created a memcpy
      * of the already present data is performed
      ***/
     SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE             = 0x0001,
@@ -91,8 +91,8 @@ extern "C"
     // NOTE: This option can't be used with the EXPANDS_VALUE option
     SKV_COMMAND_RIU_INSERT_OVERWRITE_VALUE_ON_DUP    = 0x0020,
 
-    // Retrieve specified value length only. 
-    SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN      = 0x0040,    
+    // Retrieve specified value length only.
+    SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN      = 0x0040,
 
     // update and reallocation if needed
     SKV_COMMAND_RIU_UPDATE                           = 0x0080,
@@ -106,31 +106,31 @@ extern "C"
 
   typedef enum
     {
-    SKV_COMMAND_REMOVE_FLAGS_NONE                = 0x0000, 
+    SKV_COMMAND_REMOVE_FLAGS_NONE                = 0x0000,
 
     SKV_COMMAND_REMOVE_KEY_FITS_IN_CTL_MSG       = 0x0001,
 
     } skv_cmd_remove_flags_t;
 
 
-  typedef enum 
+  typedef enum
     {
     SKV_CURSOR_NONE_FLAG                   = 0x0000,
 
     // For Pure Key/Value Cursor
-    SKV_CURSOR_RETRIEVE_FIRST_ELEMENT_FLAG = 0x0001,    
+    SKV_CURSOR_RETRIEVE_FIRST_ELEMENT_FLAG = 0x0001,
     SKV_CURSOR_WITH_STARTING_KEY_FLAG      = 0x0002,
 
     // For Relational Cursor
     /*
-     * Ordered. The order is defined by the index fields. 
+     * Ordered. The order is defined by the index fields.
      * i.e. arguments to CreateIndex()
-     */    
+     */
     SKV_CURSOR_USE_ORDERED_STREAM_FLAG         = 0x0004,
 
 
     SKV_CURSOR_USE_RANDOM_STREAM_FLAG          = 0x0008,
-    SKV_CURSOR_USE_ROUND_ROBIN_STREAM_FLAG     = 0x0010,   
+    SKV_CURSOR_USE_ROUND_ROBIN_STREAM_FLAG     = 0x0010,
     SKV_CURSOR_USE_HASH_STREAM_FLAG            = 0x0020,
     SKV_CURSOR_USE_SHARED_STREAM_FLAG		= 0x0040
     } skv_cursor_flags_t;
@@ -142,12 +142,12 @@ extern "C"
 
     /*
      * Hash. Iterator is setup by the server to send
-     * records to node ids according to the hash value of the 
+     * records to node ids according to the hash value of the
      * index fields. This is used in the join.
      */
     SKV_INDEX_FLAGS_HASH_ORDERED = 0x0001,
 
-    /* 
+    /*
      * Shared iterator allows the clients to dynamically fetch the
      * next small set of records from the servers.  Servers just hold
      * a single list and ignore client id (requires shared cursor flag
@@ -230,25 +230,25 @@ extern "C"
 // Blocking interface
   skv_status_t
   SKV_Open( skv_hdl_t             aClient,
-             char                  *aPDSName, 
-             skv_pds_priv_t        aPrivs, 
-             skv_cmd_open_flags_t  aFlags, 
+             char                  *aPDSName,
+             skv_pds_priv_t        aPrivs,
+             skv_cmd_open_flags_t  aFlags,
              skv_pds_hdl_t        *aPDSId );
 
   skv_status_t
   SKV_Retrieve( skv_hdl_t           aClient,
-                 skv_pds_hdl_t       aPDSId, 
+                 skv_pds_hdl_t       aPDSId,
                  char                *aKeyBuffer,
                  int                  aKeyBufferSize,
                  char                *aValueBuffer,
                  int                  aValueBufferSize,
                  int                 *aValueRetrievedSize,
-                 int                  aOffset, 
+                 int                  aOffset,
                  skv_cmd_RIU_flags_t aFlags );
 
   skv_status_t
   SKV_Update( skv_hdl_t             aClient,
-               skv_pds_hdl_t         aPDSId, 
+               skv_pds_hdl_t         aPDSId,
                char                  *aKeyBuffer,
                int                    aKeyBufferSize,
                char                  *aValueBuffer,
@@ -258,7 +258,7 @@ extern "C"
 
   skv_status_t
   SKV_Insert( skv_hdl_t            aClient,
-               skv_pds_hdl_t        aPDSId, 
+               skv_pds_hdl_t        aPDSId,
                char                 *aKeyBuffer,
                int                   aKeyBufferSize,
                char                 *aValueBuffer,
@@ -268,7 +268,7 @@ extern "C"
 
   skv_status_t
   SKV_Remove( skv_hdl_t               aClient,
-               skv_pds_hdl_t           aPDSId, 
+               skv_pds_hdl_t           aPDSId,
                char                    *aKeyBuffer,
                int                      aKeyBufferSize,
                skv_cmd_remove_flags_t  aFlags );
@@ -287,10 +287,10 @@ extern "C"
 // Async interface
   skv_status_t
   SKV_Iopen( skv_hdl_t                 aClient,
-              char                      *aPDSName, 
-              skv_pds_priv_t            aPrivs, 
-              skv_cmd_open_flags_t      aFlags, 
-              skv_pds_hdl_t            *aPDSId, 
+              char                      *aPDSName,
+              skv_pds_priv_t            aPrivs,
+              skv_cmd_open_flags_t      aFlags,
+              skv_pds_hdl_t            *aPDSId,
               skv_client_cmd_ext_hdl_t *aCmdHdl );
 
   skv_status_t
@@ -301,7 +301,7 @@ extern "C"
                   char                       *aValueBuffer,
                   int                         aValueBufferSize,
                   int                        *aValueRetrievedSize,
-                  int                         aOffset, 
+                  int                         aOffset,
                   skv_cmd_RIU_flags_t        aFlags,
                   skv_client_cmd_ext_hdl_t  *aCmdHdl );
 
@@ -329,7 +329,7 @@ extern "C"
 
   skv_status_t
   SKV_Iremove( skv_hdl_t                 aClient,
-                skv_pds_hdl_t             aPDSId, 
+                skv_pds_hdl_t             aPDSId,
                 char                      *aKeyBuffer,
                 int                        aKeyBufferSize,
                 skv_cmd_remove_flags_t    aFlags,
@@ -368,8 +368,8 @@ extern "C"
  *****************************************************************************/
 // Local Cursor Interface
   skv_status_t
-  SKV_OpenLocalCursor( int                           aNodeId, 
-                        skv_pds_hdl_t                aPDSId, 
+  SKV_OpenLocalCursor( int                           aNodeId,
+                        skv_pds_hdl_t                aPDSId,
                         skv_client_cursor_ext_hdl_t *aCursorHdl );
 
   skv_status_t
@@ -397,7 +397,7 @@ extern "C"
 
 // Global Cursor
   skv_status_t
-  SKV_OpenCursor( skv_pds_hdl_t                aPDSId, 
+  SKV_OpenCursor( skv_pds_hdl_t                aPDSId,
                    skv_client_cursor_ext_hdl_t *aCursorHdl );
 
   skv_status_t
@@ -442,14 +442,14 @@ extern "C"
                     char                                                *aKeyBuffer,
                     int                                                  aKeyBufferSize,
                     char                                                *aValueBuffer,
-                    int                                                  aValueBufferSize,			
+                    int                                                  aValueBufferSize,
                     skv_bulk_inserter_flags_t                           aFlags );
 
   skv_status_t
   SKV_Flush( skv_client_bulk_inserter_ext_hdl_t                   aBulkInserterHandle );
 
   skv_status_t
-  SKV_CloseBulkInserter(  skv_client_bulk_inserter_ext_hdl_t      aBulkInserterHandle );  
+  SKV_CloseBulkInserter(  skv_client_bulk_inserter_ext_hdl_t      aBulkInserterHandle );
 /*****************************************************************************/
 
 

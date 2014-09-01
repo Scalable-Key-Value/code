@@ -12,13 +12,13 @@
  */
 
 #include <FxLogger.hpp>
-#include <common/skv_types.hpp>
-#include <common/skv_client_server_headers.hpp>
-#include <server/skv_server_types.hpp>
-#include <server/skv_server_network_event_manager.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/server/skv_server_types.hpp>
+#include <skv/server/skv_server_network_event_manager.hpp>
 
-#include <server/skv_server_event_source.hpp>
-#include <server/skv_server_IT_event_source.hpp>
+#include <skv/server/skv_server_event_source.hpp>
+#include <skv/server/skv_server_IT_event_source.hpp>
 
 
 int
@@ -449,4 +449,3 @@ PrepareEvents( skv_server_event_t *aEvents, int *aEventCount )
 
   return status;
 }
-

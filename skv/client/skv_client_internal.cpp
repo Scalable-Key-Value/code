@@ -11,8 +11,8 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_internal.hpp>
-#include <common/skv_utils.hpp>
+#include <skv/client/skv_client_internal.hpp>
+#include <skv/common/skv_utils.hpp>
 
 #include <netdb.h>	/* struct hostent */
 
@@ -56,7 +56,7 @@ TraceClient gSKVClientiInsertFinis;
  * Desc: Initializes the state of the skv_client
  * Gets the client ready to establish a  connection
  * with the serverp
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 #ifdef SKV_CLIENT_UNI
@@ -88,7 +88,7 @@ Init( skv_client_group_id_t aCommGroupId,
     << EndLogLine;
 
   mFlags = aFlags;
-  
+
   mState = SKV_CLIENT_STATE_DISCONNECTED;
 
   mCommGroupId = aCommGroupId;
@@ -104,14 +104,14 @@ Init( skv_client_group_id_t aCommGroupId,
   /************************************************************
    * Initialize the interface adapter
    ***********************************************************/
-  it_status_t status = it_ia_create( VP_NAME, 
-                                     2, 
-                                     0, 
+  it_status_t status = it_ia_create( VP_NAME,
+                                     2,
+                                     0,
                                      & mIA_Hdl);
 
   StrongAssertLogLine( status == IT_SUCCESS )
     << "skv_client_internal_t::Init::ERROR:: after it_ia_create()"
-    << " status: " <<  status 
+    << " status: " <<  status
     << EndLogLine;
 
   itx_init_tracing( "skv_client", mMyRank );
@@ -120,12 +120,12 @@ Init( skv_client_group_id_t aCommGroupId,
   /************************************************************
    * Initialize the protection zone
    ***********************************************************/
-  status = it_pz_create(  mIA_Hdl, 
+  status = it_pz_create(  mIA_Hdl,
                           &mPZ_Hdl );
 
   StrongAssertLogLine( status == IT_SUCCESS )
     << "skv_client_internal_t::Init::ERROR:: after it_pz_create()"
-    << " status: " << status 
+    << " status: " << status
     << EndLogLine;
   /***********************************************************/
 
@@ -133,13 +133,13 @@ Init( skv_client_group_id_t aCommGroupId,
    * Initialize the manager of command control blocks
    ***********************************************************/
   mCCBMgrIF.Init( mPZ_Hdl );
-  /***********************************************************/  
+  /***********************************************************/
 
   /************************************************************
    * Initialize the connector to servers
    ***********************************************************/
-  mConnMgrIF.Init( mCommGroupId, 
-                   mMyRank, 
+  mConnMgrIF.Init( mCommGroupId,
+                   mMyRank,
                    & mIA_Hdl,
                    & mPZ_Hdl,
                    0,
@@ -150,7 +150,7 @@ Init( skv_client_group_id_t aCommGroupId,
    * Initialize the cursor manager
    ***********************************************************/
   mCommandMgrIF.Init( & mConnMgrIF, & mCCBMgrIF );
-  /***********************************************************/  
+  /***********************************************************/
 
   BegLogLine( SKV_CLIENT_INIT_LOG )
     << "skv_client_internal_t::Init(): Leaving... "
@@ -162,15 +162,15 @@ Init( skv_client_group_id_t aCommGroupId,
 /***
  * skv_client_internal_t::Disconnect::
  * Desc: Connect to the SKV Server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 Disconnect()
 {
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
-    << "skv_client_internal_t::Disconnect():: Entering " 
+    << "skv_client_internal_t::Disconnect():: Entering "
     << EndLogLine;
 
   skv_status_t status = mConnMgrIF.Disconnect();
@@ -182,10 +182,10 @@ Disconnect()
 
   // Return all pending commands to the free list
 
-  mState = SKV_CLIENT_STATE_DISCONNECTED;  
+  mState = SKV_CLIENT_STATE_DISCONNECTED;
 
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
-    << "skv_client_internal_t::Disconnect():: Leaving " 
+    << "skv_client_internal_t::Disconnect():: Leaving "
     << EndLogLine;
 
   return status;
@@ -194,16 +194,16 @@ Disconnect()
 /***
  * skv_client_internal_t::Connect::
  * Desc: Connect to the SKV Server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 Connect( const char* aConfigFile,
          int   aFlags )
 {
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
-    << "skv_client_internal_t::Connect():: Entering " 
+    << "skv_client_internal_t::Connect():: Entering "
     << EndLogLine;
 
   StrongAssertLogLine( mState == SKV_CLIENT_STATE_DISCONNECTED )
@@ -224,13 +224,13 @@ Connect( const char* aConfigFile,
     << " status: " << skv_status_to_string( status )
     << EndLogLine;
 
-  mState = SKV_CLIENT_STATE_CONNECTED;  
+  mState = SKV_CLIENT_STATE_CONNECTED;
 
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
-    << "skv_client_internal_t::Connect():: Connected to " 
+    << "skv_client_internal_t::Connect():: Connected to "
     << " aServerGroupName: " << aConfigFile
-    << EndLogLine;  
-  /*****************************************/  
+    << EndLogLine;
+  /*****************************************/
 
   /*****************************************
    * Get Distribution from the Server
@@ -240,20 +240,20 @@ Connect( const char* aConfigFile,
   StrongAssertLogLine( status == SKV_SUCCESS )
     << "skv_client_internal_t::Connect():: ERROR:: "
     << " status: " << skv_status_to_string( status )
-    << EndLogLine;  
+    << EndLogLine;
 
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
-    << "skv_client_internal_t::Connect():: Retrieved distribution " 
-    << EndLogLine;  
-  /*****************************************/  
+    << "skv_client_internal_t::Connect():: Retrieved distribution "
+    << EndLogLine;
+  /*****************************************/
 
 #if 0
   /*****************************************
    * Open the SKVSystem table
    *****************************************/
-  status = Open( "SKVSystem", 
-                 SKV_PDS_READ, 
-                 (skv_cmd_open_flags_t) 0, 
+  status = Open( "SKVSystem",
+                 SKV_PDS_READ,
+                 (skv_cmd_open_flags_t) 0,
                  & mSKVSystemPds );
 
   StrongAssertLogLine( status == SKV_SUCCESS )
@@ -262,13 +262,13 @@ Connect( const char* aConfigFile,
     << EndLogLine;
 
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
-    << "skv_client_internal_t::Connect():: Opened the skv system table " 
-    << EndLogLine;  
-  /*****************************************/  
+    << "skv_client_internal_t::Connect():: Opened the skv system table "
+    << EndLogLine;
+  /*****************************************/
 #endif
 
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
-    << "skv_client_internal_t::Connect():: Exiting " 
+    << "skv_client_internal_t::Connect():: Exiting "
     << EndLogLine;
 
   return status;
@@ -276,22 +276,22 @@ Connect( const char* aConfigFile,
 
 /***
  * \brief skv_client_internal_t::iOpen::
- * 
+ *
  * Async interface to opening a PDS
  * \param[in]  aPDSName   name of PDS as char
- * \param[in]  aPrivs     access rights/privileges 
+ * \param[in]  aPrivs     access rights/privileges
  * \param[in]  aFlags     steering flags
  * \param[out] aPDSId     assigned ID in case the PDS is opened
- * \param[out] aCmdHdl    command handle to use with wait/test 
+ * \param[out] aCmdHdl    command handle to use with wait/test
  *
  * \return SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
-iOpen( char*                  aPDSName, 
-       skv_pds_priv_t        aPrivs, 
-       skv_cmd_open_flags_t  aFlags, 
-       skv_pds_id_t*         aPDSId, 
+iOpen( char*                  aPDSName,
+       skv_pds_priv_t        aPrivs,
+       skv_cmd_open_flags_t  aFlags,
+       skv_pds_id_t*         aPDSId,
        skv_client_cmd_hdl_t* aCmdHdl )
 {
   BegLogLine( SKV_CLIENT_OPEN_LOG )
@@ -311,7 +311,7 @@ iOpen( char*                  aPDSName,
     << EndLogLine;
 
   /*****************************************
-   * In MPI mode, decide on who opens the 
+   * In MPI mode, decide on who opens the
    * PDS here
    *****************************************/
   /*****************************************/
@@ -324,7 +324,7 @@ iOpen( char*                  aPDSName,
   skv_key_t PDSNameAsKey;
   PDSNameAsKey.Init( aPDSName, PDSNameSize );
 
-  int NodeId = mDistribution.GetNode( & PDSNameAsKey );  
+  int NodeId = mDistribution.GetNode( & PDSNameAsKey );
   /*****************************************/
 
   // Starting a new command, get a command control block
@@ -336,11 +336,11 @@ iOpen( char*                  aPDSName,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   bzero( SendCtrlMsgBuff, sizeof( skv_cmd_open_req_t ));
   skv_cmd_open_req_t* Req = (skv_cmd_open_req_t *) SendCtrlMsgBuff;
   Req->Init( SKV_COMMAND_OPEN,
-             SKV_SERVER_EVENT_TYPE_IT_DTO_OPEN_CMD, 
+             SKV_SERVER_EVENT_TYPE_IT_DTO_OPEN_CMD,
              CmdCtrlBlk,
              aPrivs,
              aFlags,
@@ -350,14 +350,14 @@ iOpen( char*                  aPDSName,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_OPEN;
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandOpen.mPDSId = aPDSId;      
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandOpen.mPDSId = aPDSId;
   /*****************************************************/
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_PENDING );
   /*****************************************************/
 
@@ -386,10 +386,10 @@ iOpen( char*                  aPDSName,
 /***
  * skv_client_internal_t::iRetrieve::
  * Desc: Async interface to retrieving a record
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iRetrieve( skv_pds_id_t*          aPDSId,
            char*                   aKeyBuffer,
@@ -397,7 +397,7 @@ iRetrieve( skv_pds_id_t*          aPDSId,
            char*                   aValueBuffer,
            int                     aValueBufferSize,
            int*                    aValueRetrievedSize,
-           int                     aOffset, 
+           int                     aOffset,
            skv_cmd_RIU_flags_t    aFlags,
            skv_client_cmd_hdl_t*  aCmdHdl )
 {
@@ -436,7 +436,7 @@ iRetrieve( skv_pds_id_t*          aPDSId,
   skv_key_t UserKey;
   UserKey.Init( aKeyBuffer, aKeyBufferSize );
 
-  int NodeId = mDistribution.GetNode( &UserKey );  
+  int NodeId = mDistribution.GetNode( &UserKey );
   /*****************************************/
 
   // Starting a new command, get a command control block
@@ -448,7 +448,7 @@ iRetrieve( skv_pds_id_t*          aPDSId,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t* Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
   int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
@@ -467,8 +467,8 @@ iRetrieve( skv_pds_id_t*          aPDSId,
   Req->Init( NodeId,
              & mConnMgrIF,
              aPDSId,
-             SKV_COMMAND_RETRIEVE, 
-             SKV_SERVER_EVENT_TYPE_IT_DTO_RETRIEVE_CMD, 
+             SKV_COMMAND_RETRIEVE,
+             SKV_SERVER_EVENT_TYPE_IT_DTO_RETRIEVE_CMD,
              CmdCtrlBlk,
              aOffset,
              aFlags,
@@ -483,23 +483,23 @@ iRetrieve( skv_pds_id_t*          aPDSId,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_RETRIEVE;
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mFlags              = aFlags;    
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mFlags              = aFlags;
   // store either address or LMR depending on value to fit in ctrl-msg or not
   if( aFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG )
-    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueAddr = aValueBuffer;  
+    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueAddr = aValueBuffer;
   else
-    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueLMR  = ValueLMR;  
+    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueLMR  = ValueLMR;
 
   // this is no longer ugly - it was just mad!!!
   // this is a little ugly but we need a temporary storage for the original buffer size in case the actual value in storage has a different size
   // if( *aValueRetrievedSize != aValueBufferSize )
   //   *aValueRetrievedSize = aValueBufferSize;
 
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueRequestedSize = aValueBufferSize;  
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueRetrievedSize = aValueRetrievedSize;  
-  /*****************************************************/  
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueRequestedSize = aValueBufferSize;
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueRetrievedSize = aValueRetrievedSize;
+  /*****************************************************/
 
   BegLogLine( 0 )
     << "iRetrieve "
@@ -511,9 +511,9 @@ iRetrieve( skv_pds_id_t*          aPDSId,
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_WAITING_FOR_VALUE_TX_ACK );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( NodeId, CmdCtrlBlk );
 
@@ -534,17 +534,17 @@ iRetrieve( skv_pds_id_t*          aPDSId,
 /***
  * skv_client_internal_t::iUpdate::
  * Desc: Async interface to updating a record
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iUpdate( skv_pds_id_t*          aPDSId,
          char*                   aKeyBuffer,
          int                     aKeyBufferSize,
          char*                   aValueBuffer,
          int                     aValueUpdateSize,
-         int                     aOffset, 
+         int                     aOffset,
          skv_cmd_RIU_flags_t    aFlags,
          skv_client_cmd_hdl_t*  aCmdHdl )
 {
@@ -573,7 +573,7 @@ iUpdate( skv_pds_id_t*          aPDSId,
   skv_key_t UserKey;
   UserKey.Init( aKeyBuffer, aKeyBufferSize );
 
-  int NodeId = mDistribution.GetNode( &UserKey );  
+  int NodeId = mDistribution.GetNode( &UserKey );
   /*****************************************/
 
   // Starting a new command, get a command control block
@@ -585,7 +585,7 @@ iUpdate( skv_pds_id_t*          aPDSId,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t * Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
   int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;   // -1 because of trailling msg-complete flag
@@ -604,8 +604,8 @@ iUpdate( skv_pds_id_t*          aPDSId,
   Req->Init( NodeId,
              & mConnMgrIF,
              aPDSId,
-             SKV_COMMAND_UPDATE, 
-             SKV_SERVER_EVENT_TYPE_IT_DTO_UPDATE_CMD, 
+             SKV_COMMAND_UPDATE,
+             SKV_SERVER_EVENT_TYPE_IT_DTO_UPDATE_CMD,
              CmdCtrlBlk,
              aOffset,
              aFlags,
@@ -620,14 +620,14 @@ iUpdate( skv_pds_id_t*          aPDSId,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_UPDATE;
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandUpdate.mValueLMR     = ValueLMR;  
-  /*****************************************************/  
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandUpdate.mValueLMR     = ValueLMR;
+  /*****************************************************/
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_PENDING );
   /*****************************************************/
 
@@ -647,10 +647,10 @@ iUpdate( skv_pds_id_t*          aPDSId,
 /***
  * skv_client_internal_t::iInsert::
  * Desc: Async interface to inserting a record
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iInsert( skv_pds_id_t*          aPDSId,
          char*                   aKeyBuffer,
@@ -662,7 +662,7 @@ iInsert( skv_pds_id_t*          aPDSId,
          skv_client_cmd_hdl_t*  aCmdHdl )
 {
   gSKVClientiInsertStart.HitOE( SKV_CLIENT_iINSERT_TRACE,
-                                 "SKVClientiInsert", 
+                                 "SKVClientiInsert",
                                  mMyRank,
                                  gSKVClientiInsertStart );
 
@@ -703,7 +703,7 @@ iInsert( skv_pds_id_t*          aPDSId,
   skv_key_t UserKey;
   UserKey.Init( aKeyBuffer, aKeyBufferSize );
 
-  int NodeId = mDistribution.GetNode( &UserKey );  
+  int NodeId = mDistribution.GetNode( &UserKey );
   /*****************************************/
 
   // Starting a new command, get a command control block
@@ -715,7 +715,7 @@ iInsert( skv_pds_id_t*          aPDSId,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t* Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
   int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1; // -1 because of trailling msg-complete flag
@@ -731,7 +731,7 @@ iInsert( skv_pds_id_t*          aPDSId,
   BegLogLine( SKV_CLIENT_INSERT_LOG )
     << "skv_client_internal_t::iInsert():: "
     << " NodeId: " << NodeId
-    << " KeyFitsInBuff: " << KeyFitsInBuff    
+    << " KeyFitsInBuff: " << KeyFitsInBuff
     << " RoomForData: " << RoomForData
     << EndLogLine;
 
@@ -741,8 +741,8 @@ iInsert( skv_pds_id_t*          aPDSId,
   Req->Init( NodeId,
              & mConnMgrIF,
              aPDSId,
-             SKV_COMMAND_INSERT, 
-             SKV_SERVER_EVENT_TYPE_IT_DTO_INSERT_CMD, 
+             SKV_COMMAND_INSERT,
+             SKV_SERVER_EVENT_TYPE_IT_DTO_INSERT_CMD,
              CmdCtrlBlk,
              aValueBufferOffset,
              aFlags,
@@ -757,17 +757,17 @@ iInsert( skv_pds_id_t*          aPDSId,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType                                     = SKV_COMMAND_INSERT;
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandInsert.mFlags      = aFlags;    
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandInsert.mValueLMR   = ValueLMR;  
-  /*****************************************************/  
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandInsert.mFlags      = aFlags;
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandInsert.mValueLMR   = ValueLMR;
+  /*****************************************************/
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( NodeId, CmdCtrlBlk );
 
@@ -783,19 +783,19 @@ iInsert( skv_pds_id_t*          aPDSId,
     << EndLogLine;
 
   gSKVClientiInsertFinis.HitOE( SKV_CLIENT_iINSERT_TRACE,
-                                 "SKVClientiInsert", 
+                                 "SKVClientiInsert",
                                  mMyRank,
                                  gSKVClientiInsertFinis );
-  return status;  
+  return status;
 }
 
 /***
  * skv_client_internal_t::iClose::
  * Desc: Async interface to closing a PDS
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iClose( skv_pds_id_t*         aPDSId,
         skv_client_cmd_hdl_t* aCmdHdl )
@@ -807,9 +807,9 @@ iClose( skv_pds_id_t*         aPDSId,
 
   /*****************************************
    * Figure out the owner of this key
-   *****************************************/  
+   *****************************************/
   AssertLogLine( aPDSId != NULL )
-    << "skv_client_internal_t::iClose():: ERROR:: "  
+    << "skv_client_internal_t::iClose():: ERROR:: "
     << " aPDSId != NULL "
     << EndLogLine;
 
@@ -830,9 +830,9 @@ iClose( skv_pds_id_t*         aPDSId,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_pdscntl_req_t* Req = (skv_cmd_pdscntl_req_t *) SendCtrlMsgBuff;
-  Req->Init( SKV_COMMAND_CLOSE, 
+  Req->Init( SKV_COMMAND_CLOSE,
              SKV_SERVER_EVENT_TYPE_IT_DTO_PDSCNTL_CMD,
              CmdCtrlBlk,
              SKV_PDSCNTL_CMD_CLOSE,
@@ -841,7 +841,7 @@ iClose( skv_pds_id_t*         aPDSId,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_CLOSE;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandPDScntl.mCmd = SKV_PDSCNTL_CMD_CLOSE;
   // we don't set further commandbundle options here because close doesn't expect any return beyond status
@@ -849,9 +849,9 @@ iClose( skv_pds_id_t*         aPDSId,
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_PENDING );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( NodeId, CmdCtrlBlk );
 
@@ -869,10 +869,10 @@ iClose( skv_pds_id_t*         aPDSId,
 /***
  * skv_client_internal_t::iClose::
  * Desc: Async interface to closing a PDS
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iPDScntl( skv_pdscntl_cmd_t     aCmd,
           skv_pds_attr_t       *aPDSAttr,
@@ -885,9 +885,9 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
 
   /*****************************************
    * Figure out the owner of this key
-   *****************************************/  
+   *****************************************/
   AssertLogLine( aPDSAttr != NULL )
-    << "skv_client_internal_t::iPDScntl():: ERROR:: "  
+    << "skv_client_internal_t::iPDScntl():: ERROR:: "
     << " aPDSAttr != NULL "
     << EndLogLine;
 
@@ -904,9 +904,9 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_pdscntl_req_t* Req = (skv_cmd_pdscntl_req_t *) SendCtrlMsgBuff;
-  Req->Init( SKV_COMMAND_PDSCNTL, 
+  Req->Init( SKV_COMMAND_PDSCNTL,
              SKV_SERVER_EVENT_TYPE_IT_DTO_PDSCNTL_CMD,
              CmdCtrlBlk,
              aCmd,
@@ -915,7 +915,7 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_PDSCNTL;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandPDScntl.mCmd     = aCmd;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandPDScntl.mPDSAttr = aPDSAttr;
@@ -923,9 +923,9 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_PENDING );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( NodeId, CmdCtrlBlk );
 
@@ -943,10 +943,10 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
 /***
  * skv_client_internal_t::TestAny::
  * Desc: Check if any command is done
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 TestAny( skv_client_cmd_hdl_t* aCmdHdl )
 {
@@ -956,7 +956,7 @@ TestAny( skv_client_cmd_hdl_t* aCmdHdl )
 /***
  * skv_client_internal_t::Test::
  * Desc: Check if a command is done
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -969,7 +969,7 @@ Test( skv_client_cmd_hdl_t aCmdHdl )
 /***
  * skv_client_internal_t::WaitAny::
  * Desc: Wait on any command handle
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -982,29 +982,29 @@ WaitAny( skv_client_cmd_hdl_t* aCmdHdl )
 /***
  * skv_client_internal_t::Wait::
  * Desc: Wait on a command handle
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 Wait( skv_client_cmd_hdl_t aCmdHdl )
 {
   return mCommandMgrIF.Wait( aCmdHdl );
-}  
+}
 
 /***
  * skv_client_internal_t::Open::
  * Desc: Create or open a new PDS (partition data set)
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
-Open( char*                   aPDSName, 
-      skv_pds_priv_t         aPrivs, 
-      skv_cmd_open_flags_t   aFlags, 
+Open( char*                   aPDSName,
+      skv_pds_priv_t         aPrivs,
+      skv_cmd_open_flags_t   aFlags,
       skv_pds_id_t*          aPDSId )
-{  
+{
   BegLogLine( SKV_CLIENT_OPEN_LOG )
     << "skv_client_internal_t::Open():: Entering"
     << " aPDSName: " << aPDSName
@@ -1014,9 +1014,9 @@ Open( char*                   aPDSName,
 
   skv_client_cmd_hdl_t CmdHdl;
 
-  skv_status_t status = iOpen( aPDSName, 
-                                aPrivs, 
-                                aFlags, 
+  skv_status_t status = iOpen( aPDSName,
+                                aPrivs,
+                                aFlags,
                                 aPDSId,
                                 & CmdHdl );
 
@@ -1028,7 +1028,7 @@ Open( char*                   aPDSName,
   if( status != SKV_SUCCESS )
     return status;
 
-  status = Wait( CmdHdl );  
+  status = Wait( CmdHdl );
 
 #if 0
   AssertLogLine( status == SKV_SUCCESS )
@@ -1047,13 +1047,13 @@ Open( char*                   aPDSName,
 /***
  * skv_client_internal_t::Close::
  * Desc: Close the pds
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 Close( skv_pds_id_t* aPDSId )
-{  
+{
   skv_client_cmd_hdl_t CmdHdl;
 
   skv_status_t status = iClose( aPDSId,
@@ -1067,7 +1067,7 @@ Close( skv_pds_id_t* aPDSId )
   if( status != SKV_SUCCESS )
     return status;
 
-  status = Wait( CmdHdl );  
+  status = Wait( CmdHdl );
 
   return status;
 }
@@ -1091,7 +1091,7 @@ PDScntl( skv_pdscntl_cmd_t  aCmd,
   if( status != SKV_SUCCESS )
     return status;
 
-  status = Wait( CmdHdl );  
+  status = Wait( CmdHdl );
 
   return status;
 }
@@ -1099,18 +1099,18 @@ PDScntl( skv_pdscntl_cmd_t  aCmd,
 /***
  * skv_client_internal_t::Retrieve::
  * Desc: Retrieve a record from the skv server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
-Retrieve( skv_pds_id_t*       aPDSId, 
+Retrieve( skv_pds_id_t*       aPDSId,
           char*                aKeyBuffer,
           int                  aKeyBufferSize,
           char*                aValueBuffer,
           int                  aValueBufferSize,
           int*                 aValueRetrievedSize,
-          int                  aOffset, 
+          int                  aOffset,
           skv_cmd_RIU_flags_t aFlags  )
 {
   skv_client_cmd_hdl_t CmdHdl;
@@ -1133,7 +1133,7 @@ Retrieve( skv_pds_id_t*       aPDSId,
   if( status != SKV_SUCCESS )
     return status;
 
-  status = Wait( CmdHdl );  
+  status = Wait( CmdHdl );
 
 #if 0
   AssertLogLine( status == SKV_SUCCESS )
@@ -1148,12 +1148,12 @@ Retrieve( skv_pds_id_t*       aPDSId,
 /***
  * skv_client_internal_t::Update::
  * Desc: Update a record on the skv server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
-Update( skv_pds_id_t*         aPDSId, 
+Update( skv_pds_id_t*         aPDSId,
         char*                  aKeyBuffer,
         int                    aKeyBufferSize,
         char*                  aValueBuffer,
@@ -1180,7 +1180,7 @@ Update( skv_pds_id_t*         aPDSId,
   if( status != SKV_SUCCESS )
     return status;
 
-  status = Wait( CmdHdl );  
+  status = Wait( CmdHdl );
 
   return status;
 }
@@ -1188,12 +1188,12 @@ Update( skv_pds_id_t*         aPDSId,
 /***
  * skv_client_internal_t::Insert::
  * Desc: Insert a record into the skv server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
-Insert( skv_pds_id_t*       aPDSId, 
+Insert( skv_pds_id_t*       aPDSId,
         char*                aKeyBuffer,
         int                  aKeyBufferSize,
         char*                aValueBuffer,
@@ -1220,7 +1220,7 @@ Insert( skv_pds_id_t*       aPDSId,
   if( status != SKV_SUCCESS )
     return status;
 
-  status = Wait( CmdHdl );  
+  status = Wait( CmdHdl );
 
 #if 0
   AssertLogLine( status == SKV_SUCCESS )
@@ -1229,16 +1229,16 @@ Insert( skv_pds_id_t*       aPDSId,
     << EndLogLine;
 #endif
 
-  return status;  
+  return status;
 }
 
 /***
  * skv_client_internal_t::RetrieveDistribution::
  * Desc: Retrieve the distribution from a random skv server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 RetrieveDistribution( skv_distribution_t* aDist )
 {
@@ -1255,28 +1255,28 @@ RetrieveDistribution( skv_distribution_t* aDist )
   skv_client_ccb_t* CmdCtrlBlk;
   skv_status_t rsrv_status = mCommandMgrIF.Reserve( & CmdCtrlBlk );
   if( rsrv_status != SKV_SUCCESS )
-    return rsrv_status;  
+    return rsrv_status;
 
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_retrieve_dist_req_t* Req = (skv_cmd_retrieve_dist_req_t *) SendCtrlMsgBuff;
-  Req->Init( SKV_COMMAND_RETRIEVE_DIST, 
-             SKV_SERVER_EVENT_TYPE_IT_DTO_RETRIEVE_DIST_CMD, 
+  Req->Init( SKV_COMMAND_RETRIEVE_DIST,
+             SKV_SERVER_EVENT_TYPE_IT_DTO_RETRIEVE_DIST_CMD,
              CmdCtrlBlk );
   /*****************************************************/
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_RETRIEVE_DIST;
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieveDist.mDist = & mDistribution;      
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieveDist.mDist = & mDistribution;
   /*****************************************************/
 
   /******************************************************
    * Send request to a random server node
-   *****************************************************/  
+   *****************************************************/
   int ServerConnCount = mConnMgrIF.GetServerConnCount();
 
   srand( mMyRank );
@@ -1284,9 +1284,9 @@ RetrieveDistribution( skv_distribution_t* aDist )
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_PENDING );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( RandomNode, CmdCtrlBlk );
 
@@ -1311,10 +1311,10 @@ RetrieveDistribution( skv_distribution_t* aDist )
 
 /***
  * skv_client_internal_t::DumpPDS::
- * Desc: 
+ * Desc:
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 DumpPDS( skv_pds_id_t aPDSId,
          int           aMaxKeySize,
@@ -1411,7 +1411,7 @@ DumpPDS( skv_pds_id_t aPDSId,
       PrintValue.Init( RetrieveValueBuffer, RetrievedValueSize );
 
       BegLogLine( 1 )
-        << "skv_client_internal_t::DumpPDS():: Iterator Results: " 
+        << "skv_client_internal_t::DumpPDS():: Iterator Results: "
         << " Key: " << PrintKey
         << " Value: " << PrintValue
         << EndLogLine;
@@ -1423,26 +1423,26 @@ DumpPDS( skv_pds_id_t aPDSId,
   BegLogLine( 1 )
     << "skv_client_internal_t::DumpPDS():: "
     << "Iterator Results Count: " << RecordCount
-    << EndLogLine;      
+    << EndLogLine;
 
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 DumpPersistentImage( char* aPath )
 {
   int pathLen = strlen( aPath ) + 1;
 
   skv_status_t status = C2S_ActiveBroadcast( SKV_ACTIVE_BCAST_DUMP_PERSISTENCE_IMAGE_FUNC_TYPE,
-                                              aPath, 
+                                              aPath,
                                               pathLen,
                                               (void *) NULL ); // pointer to the cursor control block
 
   return status;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 Finalize()
 {
@@ -1473,10 +1473,10 @@ Finalize()
  * param[in]  aKeyBufferSize   size of key
  * param[in]  aFlags           flags/modifiers
  * param[out] aCmdHdl          command handle to keep track of the command status
- * 
+ *
  * \return returns SKV_SUCCESS or error code
  */
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 iRemove( skv_pds_id_t*          aPDSId,
          char*                   aKeyBuffer,
@@ -1513,7 +1513,7 @@ iRemove( skv_pds_id_t*          aPDSId,
   skv_key_t UserKey;
   UserKey.Init( aKeyBuffer, aKeyBufferSize );
 
-  int NodeId = mDistribution.GetNode( &UserKey );  
+  int NodeId = mDistribution.GetNode( &UserKey );
   /*****************************************/
 
   // Starting a new command, get a command control block
@@ -1525,7 +1525,7 @@ iRemove( skv_pds_id_t*          aPDSId,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_remove_req_t* Req = (skv_cmd_remove_req_t *) SendCtrlMsgBuff;
 
   int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_remove_req_t ) - 1;  // -1 because of trailling msg-complete flag
@@ -1538,7 +1538,7 @@ iRemove( skv_pds_id_t*          aPDSId,
   BegLogLine( SKV_CLIENT_REMOVE_LOG )
     << "skv_client_internal_t::iRemove():: "
     << " NodeId: " << NodeId
-    << " KeyFitsInBuff: " << KeyFitsInBuff    
+    << " KeyFitsInBuff: " << KeyFitsInBuff
     << " RoomForData: " << RoomForData
     << EndLogLine;
 
@@ -1549,8 +1549,8 @@ iRemove( skv_pds_id_t*          aPDSId,
   Req->Init( NodeId,
              & mConnMgrIF,
              aPDSId,
-             SKV_COMMAND_REMOVE, 
-             SKV_SERVER_EVENT_TYPE_IT_DTO_REMOVE_CMD, 
+             SKV_COMMAND_REMOVE,
+             SKV_SERVER_EVENT_TYPE_IT_DTO_REMOVE_CMD,
              CmdCtrlBlk,
              aFlags,
              aKeyBufferSize,
@@ -1559,16 +1559,16 @@ iRemove( skv_pds_id_t*          aPDSId,
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType                                     = SKV_COMMAND_REMOVE;
-  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRemove.mFlags      = aFlags;    
-  /*****************************************************/  
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRemove.mFlags      = aFlags;
+  /*****************************************************/
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_WAITING_FOR_CMPL );
-  /*****************************************************/  
+  /*****************************************************/
 
   skv_status_t status = mConnMgrIF.Dispatch( NodeId, CmdCtrlBlk );
 
@@ -1586,9 +1586,9 @@ iRemove( skv_pds_id_t*          aPDSId,
   return status;
 }
 
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
-Remove( skv_pds_id_t*          aPDSId, 
+Remove( skv_pds_id_t*          aPDSId,
         char*                   aKeyBuffer,
         int                     aKeyBufferSize,
         skv_cmd_remove_flags_t aFlags )
@@ -1609,8 +1609,7 @@ Remove( skv_pds_id_t*          aPDSId,
   if( status != SKV_SUCCESS )
     return status;
 
-  status = Wait( CmdHdl );  
+  status = Wait( CmdHdl );
 
-  return status;  
+  return status;
 }
-

@@ -11,8 +11,8 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <client/skv_client_internal.hpp>
-#include <common/skv_utils.hpp>
+#include <skv/client/skv_client_internal.hpp>
+#include <skv/common/skv_utils.hpp>
 
 #ifndef SKV_CLIENT_CURSOR_LOG
 #define SKV_CLIENT_CURSOR_LOG ( 0 | SKV_LOGGING_ALL )
@@ -79,8 +79,8 @@ GetLocalServerRanks( int **aLocalServers, int *aCount )
  ***/
 skv_status_t
 skv_client_internal_t::
-OpenLocalCursor( int                           aNodeId, 
-                 skv_pds_id_t*                aPDSId, 
+OpenLocalCursor( int                           aNodeId,
+                 skv_pds_id_t*                aPDSId,
                  skv_client_cursor_handle_t*  aCursorHdl )
 {
   mCursorManagerIF.InitCursorHdl( mPZ_Hdl,
@@ -108,7 +108,7 @@ CloseLocalCursor( skv_client_cursor_handle_t  aCursorHdl )
  * NOTE: Assumes that the key exists in cache
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 RetrieveNextCachedKey( skv_client_cursor_handle_t   aCursorHdl,
                        char*                         aRetrievedKeyBuffer,
@@ -163,9 +163,9 @@ RetrieveNextCachedKey( skv_client_cursor_handle_t   aCursorHdl,
 
   char* SrcKeyBuffer = aCursorHdl->mCurrentCachedKey + sizeof(int);
 
-  memcpy( aRetrievedKeyBuffer, 
+  memcpy( aRetrievedKeyBuffer,
           SrcKeyBuffer,
-          CachedKeySize );  
+          CachedKeySize );
 
   BegLogLine( SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG )
     << "skv_client_internal_t::RetrieveNextCachedKey():: "
@@ -204,10 +204,10 @@ RetrieveNextCachedKey( skv_client_cursor_handle_t   aCursorHdl,
  * skv_client_internal_t::RetrieveNKeys::
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
-               char*                        aStartingKeyBuffer,  
+               char*                        aStartingKeyBuffer,
                int                          aStartingKeyBufferSize,
                skv_cursor_flags_t          aFlags )
 {
@@ -247,7 +247,7 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
   /******************************************************
    * Set the client-server protocol send ctrl msg buffer
    *****************************************************/
-  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();  
+  char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
 
   int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_retrieve_n_keys_req_t );
 
@@ -260,16 +260,16 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
 
   int KeyFitsInCtrlMsg = (aStartingKeyBufferSize <= RoomForData);
 
-  skv_cmd_retrieve_n_keys_req_t* Req = 
+  skv_cmd_retrieve_n_keys_req_t* Req =
     (skv_cmd_retrieve_n_keys_req_t *) SendCtrlMsgBuff;
 
   // If the key fits into the control message it's safe to
   // send the list of buffers to cached keys
   Req->Init( aCursorHdl->mCurrentNodeId,
              & mConnMgrIF,
-             aCursorHdl->mPdsId,	     
-             SKV_COMMAND_RETRIEVE_N_KEYS, 
-             SKV_SERVER_EVENT_TYPE_IT_DTO_RETRIEVE_N_KEYS_CMD, 
+             aCursorHdl->mPdsId,
+             SKV_COMMAND_RETRIEVE_N_KEYS,
+             SKV_SERVER_EVENT_TYPE_IT_DTO_RETRIEVE_N_KEYS_CMD,
              CmdCtrlBlk,
              aFlags,
              aStartingKeyBuffer,
@@ -278,7 +278,7 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
              aCursorHdl->mKeysDataLMRHdl,
              aCursorHdl->mKeysDataRMRHdl,
              aCursorHdl->mCachedKeys,
-             SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE );    
+             SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE );
   /*****************************************************/
 
   BegLogLine( SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG )
@@ -289,13 +289,13 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
 
   /******************************************************
    * Transit the CCB to an appropriate state
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->Transit( SKV_CLIENT_COMMAND_STATE_WAITING_FOR_VALUE_TX_ACK );
-  /*****************************************************/  
+  /*****************************************************/
 
   /******************************************************
    * Set the local client state used on response
-   *****************************************************/  
+   *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_RETRIEVE_N_KEYS;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieveNKeys.mCachedKeysCountPtr  = & aCursorHdl->mCachedKeysCount;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieveNKeys.mCachedKeysCountMax  = SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE;
@@ -308,7 +308,7 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
     << " status: " << skv_status_to_string( status )
     << EndLogLine;
 
-  status = Wait( CmdCtrlBlk );  
+  status = Wait( CmdCtrlBlk );
 
   BegLogLine( SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG )
     << "skv_client_internal_t::RetrieveNKeys():: Leaving..."
@@ -324,7 +324,7 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
  * Desc: Get the first element in the cursor
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 GetFirstLocalElement( skv_client_cursor_handle_t aCursorHdl,
                       char*                       aRetrievedKeyBuffer,
@@ -354,7 +354,7 @@ GetFirstLocalElement( skv_client_cursor_handle_t aCursorHdl,
     StartSizeToRetrieve = *aRetrievedKeySize;
   }
 
-  skv_status_t status = RetrieveNKeys( aCursorHdl, 
+  skv_status_t status = RetrieveNKeys( aCursorHdl,
                                        StartToRetrive,
                                        StartSizeToRetrieve,
                                        (skv_cursor_flags_t) ( (int)aFlags | SKV_CURSOR_RETRIEVE_FIRST_ELEMENT_FLAG ));
@@ -367,7 +367,7 @@ GetFirstLocalElement( skv_client_cursor_handle_t aCursorHdl,
     << " aCursorHdl->mCachedKeysCount: " << aCursorHdl->mCachedKeysCount
     << EndLogLine;
 
-  status = RetrieveNextCachedKey( aCursorHdl, 
+  status = RetrieveNextCachedKey( aCursorHdl,
                                   aRetrievedKeyBuffer,
                                   aRetrievedKeySize,
                                   aRetrievedKeyMaxSize,
@@ -388,7 +388,7 @@ GetFirstLocalElement( skv_client_cursor_handle_t aCursorHdl,
  * Desc: Get the next element in the cursor pointed to a node id
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 GetNextLocalElement(  skv_client_cursor_handle_t   aCursorHdl,
                       char*                         aRetrievedKeyBuffer,
@@ -455,7 +455,7 @@ GetNextLocalElement(  skv_client_cursor_handle_t   aCursorHdl,
  ***/
 skv_status_t
 skv_client_internal_t::
-OpenCursor( skv_pds_id_t*                aPDSId, 
+OpenCursor( skv_pds_id_t*                aPDSId,
             skv_client_cursor_handle_t*  aCursorHdl )
 {
   BegLogLine( SKV_CLIENT_CURSOR_LOG )
@@ -463,9 +463,9 @@ OpenCursor( skv_pds_id_t*                aPDSId,
     << " aPDSId: " << *aPDSId
     << EndLogLine;
 
-  mCursorManagerIF.InitCursorHdl( mPZ_Hdl, 
+  mCursorManagerIF.InitCursorHdl( mPZ_Hdl,
                                   0,
-                                  aPDSId, 
+                                  aPDSId,
                                   aCursorHdl );
 
   BegLogLine( SKV_CLIENT_CURSOR_LOG )
@@ -507,7 +507,7 @@ CloseCursor( skv_client_cursor_handle_t aCursorHdl )
  * NOTE: This call is only valid after a call to OpenCursor
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 GetFirstElement( skv_client_cursor_handle_t  aCursorHdl,
                  char*                        aRetrievedKeyBuffer,
@@ -578,10 +578,10 @@ GetFirstElement( skv_client_cursor_handle_t  aCursorHdl,
 
 /***
  * skv_client_internal_t::GetNextElement::
- * Desc: Get the next global element in the cursor 
+ * Desc: Get the next global element in the cursor
  * returns: SKV_SUCCESS on success or error code
  ***/
-skv_status_t 
+skv_status_t
 skv_client_internal_t::
 GetNextElement( skv_client_cursor_handle_t  aCursorHdl,
                 char*                        aRetrievedKeyBuffer,
@@ -680,5 +680,5 @@ GetNextElement( skv_client_cursor_handle_t  aCursorHdl,
     << " aCursorHdl->mCurrentNodeId: " << aCursorHdl->mCurrentNodeId
     << EndLogLine;
 
-  return status;  
+  return status;
 }

@@ -18,21 +18,14 @@
 #include <mpi.h>
 #endif
 
-#include <common/skv_config.hpp>
-
-#include <common/skv_client_server_headers.hpp>
-
-#include <client/skv_client_server_conn.hpp>
-
-#include <common/skv_client_server_protocol.hpp>
-
-#include <client/skv_client_conn_manager_if.hpp>
-
-#include <client/skv_client_command_manager_if.hpp>
-
-#include <client/skv_client_cursor_manager_if.hpp>
-
-#include <client/skv_client_bulk_inserter_manager_if.hpp>
+#include <skv/common/skv_config.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/client/skv_client_conn_manager_if.hpp>
+#include <skv/client/skv_client_command_manager_if.hpp>
+#include <skv/client/skv_client_cursor_manager_if.hpp>
+#include <skv/client/skv_client_bulk_inserter_manager_if.hpp>
 
 /*
  * Upon IA creation, a Verbs Provider is selected based on the VP name

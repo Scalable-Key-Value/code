@@ -18,7 +18,7 @@
 #define SKV_SERVER_CLIENT_CONN_EST_LOG      ( 0 )
 #endif
 
-#include <common/skv_types.hpp>
+#include <skv/common/skv_types.hpp>
 
 class skv_server_establish_client_connection_sm
 {

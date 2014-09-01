@@ -14,11 +14,11 @@
 #ifndef __SKV_SERVER_TREE_BASED_CONTAINER_KEY__
 #define __SKV_SERVER_TREE_BASED_CONTAINER_KEY__
 
-#ifndef SKV_TREE_BASED_CONTAINER_KEY_LOG 
+#ifndef SKV_TREE_BASED_CONTAINER_KEY_LOG
 #define SKV_TREE_BASED_CONTAINER_KEY_LOG  ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#include <server/skv_server_heap_manager.hpp>
+#include <skv/server/skv_server_heap_manager.hpp>
 
 class skv_tree_based_container_key_t
 {
@@ -41,12 +41,12 @@ public:
    * OVERHEAD PER RECORD OVERHEAD PER RECORD
    * OVERHEAD PER RECORD OVERHEAD PER RECORD
    * OVERHEAD PER RECORD OVERHEAD PER RECORD
-   ***************************************************/ 
+   ***************************************************/
 
   skv_pds_id_t  mPDSId;
   skv_key_t     mUserKey;
-  int            mValueSize; 
-  char           mLockState; 
+  int            mValueSize;
+  char           mLockState;
 
 
 
@@ -155,7 +155,7 @@ public:
 
   bool
   operator==( const skv_tree_based_container_key_t& aKey ) const
-  {      
+  {
     // If the magic value is set, then only compare PDSIds
     if( aKey.IsMagicValueSet() || IsMagicValueSet() )
     {
@@ -170,9 +170,9 @@ public:
     }
   }
 
-  bool 
+  bool
   operator<( const skv_tree_based_container_key_t& aKey ) const
-  {      
+  {
     if( mPDSId < aKey.mPDSId )
     {
       BegLogLine( SKV_TREE_BASED_CONTAINER_KEY_LOG )

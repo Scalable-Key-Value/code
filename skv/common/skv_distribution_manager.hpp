@@ -14,8 +14,8 @@
 #ifndef __SKV_DISTRIBUTION_MANAGER_HPP__
 #define __SKV_DISTRIBUTION_MANAGER_HPP__
 
-#include <common/skv_types.hpp>
-#include <common/skv_utils.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_utils.hpp>
 
 typedef unsigned int HashKeyT;
 
@@ -32,16 +32,16 @@ struct skv_hash_func_t
   void
   Init()
   {
-    // ( 2^32 - 267 ) is a prime according to 
+    // ( 2^32 - 267 ) is a prime according to
     // http://primes.utm.edu/lists/2small/0bit.html
-    mP = 4294967029ull; 
+    mP = 4294967029ull;
 
     // According to:
     // J. Lawrence Carter and Mark N. Wegman's original paper "Universal Classes of Hash Functions"
-    // If one picks random value for A and B then f( x ) = ( a * x + b ) % p makes for a 
+    // If one picks random value for A and B then f( x ) = ( a * x + b ) % p makes for a
     // reasonable hash function
     mA = 65413;
-    mB = 16777049;    
+    mB = 16777049;
   }
 
   HashKeyT
@@ -59,7 +59,7 @@ struct skv_hash_func_t
 
   HashKeyT
   GetHashSimple( char* aData, int aLen )
-  {      
+  {
     AssertLogLine( aData != NULL )
       << "skv_hash_func_t::GetHash() "
       << " aData != NULL "
@@ -68,10 +68,10 @@ struct skv_hash_func_t
     AssertLogLine( aLen > 0 )
       << "skv_hash_func_t::GetHash() "
       << " aLen: " << aLen
-      << EndLogLine;    
+      << EndLogLine;
 
-    // Fold in the last non-integer aligned block into the last 
-    // integer aligned block using XOR    
+    // Fold in the last non-integer aligned block into the last
+    // integer aligned block using XOR
     int NumberOfFullBlocks = aLen / sizeof( unsigned int );
     int NumberInLastBlock  = aLen % sizeof( unsigned int );
 
@@ -105,7 +105,7 @@ struct skv_hash_func_t
     return hashValue;
   }
 
-  HashKeyT 
+  HashKeyT
   GetHash( char* aData, int aLen )
   {
     AssertLogLine( aData != NULL )
@@ -116,7 +116,7 @@ struct skv_hash_func_t
     AssertLogLine( aLen > 0 )
       << "skv_hash_func_t::GetHash() "
       << " aLen: " << aLen
-      << EndLogLine;    
+      << EndLogLine;
 
 #ifdef USE_BOB_JENKINS_HASH_FUNCTION
     HashKeyT hashValue = hashbig( aData, aLen, 0 );
@@ -125,7 +125,7 @@ struct skv_hash_func_t
 #endif
 
     return hashValue;
-  }  
+  }
 
   void
   GetRange( unsigned int &aLow, unsigned int &aHigh )
@@ -133,9 +133,9 @@ struct skv_hash_func_t
 #ifdef USE_BOB_JENKINS_HASH_FUNCTION
     aLow  = 0;
     aHigh = UINT_MAX;
-#else    
+#else
     aLow = 0;
-    aHigh = mP - 1;      
+    aHigh = mP - 1;
 #endif
   }
 
@@ -148,13 +148,13 @@ operator<<( streamclass& os, const skv_hash_func_t& A )
   os << "skv_hash_func_t [ "
      << A.mP << ' '
      << A.mA << ' '
-     << A.mB 
+     << A.mB
      << " ]";
 
-  return(os);    
+  return(os);
 }
 
-struct skv_distribution_hash_t 
+struct skv_distribution_hash_t
 {
   int                 mCount;
   skv_hash_func_t     mHashFunc;
@@ -177,7 +177,7 @@ operator<<( streamclass& os, const skv_distribution_hash_t& A )
      << A.mHashFunc
      << " ]";
 
-  return(os);    
+  return(os);
 }
 
 

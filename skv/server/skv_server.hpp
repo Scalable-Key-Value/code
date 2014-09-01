@@ -17,9 +17,9 @@
 #include <mpi.h>
 #include <pthread.h>
 
-#include <common/skv_config.hpp>
+#include <skv/common/skv_config.hpp>
 
-// These are flags so that the polling 
+// These are flags so that the polling
 // thread can differentiate between events
 // Primarily needed for debugging
 typedef enum
@@ -34,7 +34,7 @@ typedef enum
 } skv_poll_type_t;
 
 static
-const char* 
+const char*
 skv_poll_type_to_string( skv_poll_type_t aType )
 {
   switch( aType )
@@ -64,7 +64,7 @@ struct ThreadArgs
   skv_poll_type_t  mEVDType;
   it_evd_handle_t   mEVDHandle;
   it_event_t*       mEventPtr;
-  pthread_mutex_t*  mEventPresent;             
+  pthread_mutex_t*  mEventPresent;
   pthread_mutex_t*  mReadyToPollNextEvent;
   double            mPadding1[ 32 ];
 };
@@ -76,7 +76,7 @@ typedef enum
   SKV_SERVER_COMMAND_EVENT_SRC_INDEX = 2,
   SKV_SERVER_LOCAL_KV_EVENT_SRC_INDEX = 3,
 
-  // !!!! GIVING NO NUMBER HERE ASSUMES enum USES THE NEXT INTEGER VALUE BY DEFAULT !!!! 
+  // !!!! GIVING NO NUMBER HERE ASSUMES enum USES THE NEXT INTEGER VALUE BY DEFAULT !!!!
   SKV_SERVER_EVENT_SOURCES   // always the last (== number of possible indices)
 } skv_server_event_source_index_t;
 
@@ -85,7 +85,7 @@ class skv_server_t
 public:
   // skv configuration container
   skv_configuration_t                         *mSKVConfiguration;
-  
+
   skv_local_kv_t                               mLocalKV;
 
   // Local user event manager
@@ -103,7 +103,7 @@ public:
 
 
   // Thread Args
-#define SKV_EVD_THREAD_COUNT 7  
+#define SKV_EVD_THREAD_COUNT 7
   pthread_t   mEvdPollThreadIds[ SKV_EVD_THREAD_COUNT ];
   ThreadArgs  mEvdPollThreadArgs[ SKV_EVD_THREAD_COUNT ];
 
@@ -124,14 +124,14 @@ public:
 
   skv_status_t GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount );
 
-  skv_status_t ProcessEvent( skv_server_state_t  aState, 
+  skv_status_t ProcessEvent( skv_server_state_t  aState,
                                     skv_server_event_t* aEvent );
 
   skv_status_t ProcessPendingEvents( skv_server_event_t * aEvent );
   skv_status_t ProcessPendingEvents( skv_server_ep_state_t * aEPStatePtr );
   skv_status_t ProgressAnyEP();
 
-  skv_status_t PollOnITEventClass( it_evd_handle_t aEvdHdl, 
+  skv_status_t PollOnITEventClass( it_evd_handle_t aEvdHdl,
                                     it_event_t*      aEvent,
                                     it_event_t*      aEventInPthread,
                                     pthread_mutex_t* aEventPresentMutex,

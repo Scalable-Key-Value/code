@@ -18,41 +18,41 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
-#include <common/skv_types.hpp>
-#include <utils/skv_trace_clients.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/utils/skv_trace_clients.hpp>
 
-#include <common/skv_client_server_headers.hpp>
-#include <client/skv_client_server_conn.hpp>
-#include <common/skv_client_server_protocol.hpp>
-#include <server/skv_server_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/server/skv_server_types.hpp>
 
-#include <server/skv_server_network_event_manager.hpp>
+#include <skv/server/skv_server_network_event_manager.hpp>
 
 // include the implementations of the local kv backend
-#include <server/skv_local_kv_interface.hpp>
+#include <skv/server/skv_local_kv_interface.hpp>
 
 // include the various event sources
-#include <server/skv_server_event_source.hpp>
-#include <server/skv_server_IT_event_source.hpp>
-#include <server/skv_server_internal_event_source.hpp>
-#include <server/skv_server_command_event_source.hpp>
-#include <server/skv_server_local_kv_event_source.hpp>
+#include <skv/server/skv_server_event_source.hpp>
+#include <skv/server/skv_server_IT_event_source.hpp>
+#include <skv/server/skv_server_internal_event_source.hpp>
+#include <skv/server/skv_server_command_event_source.hpp>
+#include <skv/server/skv_server_local_kv_event_source.hpp>
 
-#include <server/skv_server.hpp>
+#include <skv/server/skv_server.hpp>
 
 /****************************************
  * Supported flows of the SKV Server
  ***************************************/
-#include <server/commands/skv_server_establish_client_connection_sm.hpp>
-#include <server/commands/skv_server_open_command_sm.hpp>
-#include <server/commands/skv_server_retrieve_dist_command_sm.hpp>
-#include <server/commands/skv_server_insert_command_sm.hpp>
-#include <server/commands/skv_server_bulk_insert_command_sm.hpp>
-#include <server/commands/skv_server_retrieve_command_sm.hpp>
-#include <server/commands/skv_server_retrieve_n_keys_command_sm.hpp>
-#include <server/commands/skv_server_remove_command_sm.hpp>
-#include <server/commands/skv_server_active_bcast_command_sm.hpp>
-#include <server/commands/skv_server_pdscntl_command_sm.hpp>
+#include <skv/server/commands/skv_server_establish_client_connection_sm.hpp>
+#include <skv/server/commands/skv_server_open_command_sm.hpp>
+#include <skv/server/commands/skv_server_retrieve_dist_command_sm.hpp>
+#include <skv/server/commands/skv_server_insert_command_sm.hpp>
+#include <skv/server/commands/skv_server_bulk_insert_command_sm.hpp>
+#include <skv/server/commands/skv_server_retrieve_command_sm.hpp>
+#include <skv/server/commands/skv_server_retrieve_n_keys_command_sm.hpp>
+#include <skv/server/commands/skv_server_remove_command_sm.hpp>
+#include <skv/server/commands/skv_server_active_bcast_command_sm.hpp>
+#include <skv/server/commands/skv_server_pdscntl_command_sm.hpp>
 
 
 #ifdef SKV_SERVER_LOOP_STATISTICS
@@ -184,7 +184,7 @@ EPSTATE_CountSendCompletionsCallback( void* Arg )
   BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG )
     << "CountSendCompletionsCallback:: from RDMA-write"
     << EndLogLine;
-  
+
   StrongAssertLogLine( Arg != NULL )
     << "CountSendCompletionsCallback: ERROR EPState == NULL"
     << EndLogLine;
@@ -210,7 +210,7 @@ EPSTATE_RetrieveWriteComplete( void* Arg )
 {
   BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG )
     << " EPSTATE_RetrieveWriteComplete() Callback from retrieve RDMA-write"
-    << " THIS IS DUMMY, WE SHOULD NOT GET CALLED!!" 
+    << " THIS IS DUMMY, WE SHOULD NOT GET CALLED!!"
     << EndLogLine;
 
   return NULL;
@@ -218,15 +218,15 @@ EPSTATE_RetrieveWriteComplete( void* Arg )
 
 /***
  * skv_server_t::EvdPollThread::
- * Desc: This is thread polls on one EVD as 
+ * Desc: This is thread polls on one EVD as
  * specified by the ThreadArgs
- * input: 
+ * input:
  * returns: SKV_SUCCESS or SKV_ERR_NO_EVENT
  ***/
-void* 
+void*
 skv_server_t::
 EvdPollThread( void* args )
-{  
+{
   ThreadArgs* TA = (ThreadArgs *) args;
 
   while( 1 )
@@ -302,23 +302,23 @@ EvdPollThread( void* args )
 /***
  * skv_server_t::SetCurrentState::
  * Desc: Assigns the current state
- * input: 
+ * input:
  * returns:
  ***/
-void 
+void
 skv_server_t::
 SetState( skv_server_state_t aState )
 {
-  mState = aState; 
+  mState = aState;
 }
 
 /***
  * skv_server_t::SetCurrentState::
  * Desc: Assigns the current state
- * input: 
+ * input:
  * returns:
  ***/
-skv_server_state_t 
+skv_server_state_t
 skv_server_t::
 GetState()
 {
@@ -329,12 +329,12 @@ GetState()
  * skv_server_t::PollOnITEventClass::
  * Desc: Poll the 1 evd (Event Dispatchers) and return
  * the event
- * input: 
+ * input:
  * returns: SKV_SUCCESS or SKV_ERR_NO_EVENT
  ***/
-skv_status_t 
+skv_status_t
 skv_server_t::
-PollOnITEventClass( it_evd_handle_t  aEvdHdl, 
+PollOnITEventClass( it_evd_handle_t  aEvdHdl,
                     it_event_t*       aEventCopy,
                     it_event_t*       aEventInPthread,
                     pthread_mutex_t*  aEventPresentMutex,
@@ -363,7 +363,7 @@ PollOnITEventClass( it_evd_handle_t  aEvdHdl,
 /***
  * skv_server_t::GetEvent::
  * Desc: Poll either an IT_API event or an MPI event
- * input: 
+ * input:
  * returns: SKV_SUCCESS or SKV_ERR_NO_EVENT
  ***/
 skv_status_t
@@ -379,7 +379,7 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
   // initialize global counter for priority
   static int priority_index = 0;
 
-#ifdef PKTRACE_ON  
+#ifdef PKTRACE_ON
   static unsigned long long TraceCount = 0;
 // #ifdef SKV_SERVER_USE_AGGREGATE_EVD
 //   if( TraceCount % (40) )
@@ -396,7 +396,7 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
 
   // status = GetMPIEvent( aEvents, aEventCount, aMaxEventCount );
   // if( status == SKV_SUCCESS )
-  //   return status;  
+  //   return status;
 
   gSKVServerEventOtherFinis.HitOE( SKV_SERVER_TRACE,
                                    "SKVServerNonCommand",
@@ -439,7 +439,7 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
 /***
  * skv_server_t::GetMPIEvent::
  * Desc: Poll for an MPI event
- * input: 
+ * input:
  * returns: SKV_SUCCESS or SKV_ERR_NO_EVENT
  ***/
 skv_status_t
@@ -454,14 +454,14 @@ GetMPIEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
  * skv_server_t::ProcessEvent::
  * Desc: This is the entry point of an event
  * into the server state machine
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
 skv_server_t::
-ProcessEvent( skv_server_state_t  aState, 
+ProcessEvent( skv_server_state_t  aState,
               skv_server_event_t* aEvent )
-{  
+{
   skv_status_t status = SKV_SUCCESS;
   skv_server_event_type_t EventType = aEvent->mEventType;
 
@@ -1235,7 +1235,7 @@ ProgressAnyEP()
 /***
  * skv_server_t::Run::
  * Desc: Starts the state machine on the server
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 skv_status_t
@@ -1360,7 +1360,7 @@ Run()
  * skv_server_t::Init::
  * Desc: Initializes the state of the skv_server_t
  * Gets the server ready to accept/service connections
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 int
@@ -1385,8 +1385,8 @@ Init( int   aRank,
   mSKVConfiguration = skv_configuration_t::GetSKVConfiguration();
 
   /***********************************************************
-   *  INITIALIZE EVENT MANAGERS,  SOURCES (AND SINKS)        
-   ***********************************************************/  
+   *  INITIALIZE EVENT MANAGERS,  SOURCES (AND SINKS)
+   ***********************************************************/
 
   // Initialize the internal (local) event handling
   mInternalEventManager.Init();
@@ -1410,7 +1410,7 @@ Init( int   aRank,
   mEventSources[ SKV_SERVER_COMMAND_EVENT_SRC_INDEX ] = new skv_server_command_event_source_t();
   ((skv_server_command_event_source_t*)(mEventSources[ SKV_SERVER_COMMAND_EVENT_SRC_INDEX ]))->Init( mEPStateMap,
                                                                                                      SKV_SERVER_COMMAND_SRC_PRIORITY );
-  
+
 
   skv_status_t status = mLocalKV.Init( Rank,
                                        PartitionSize,
@@ -1436,7 +1436,7 @@ Init( int   aRank,
   int prio_sum = 0;
   for( int evt_src=0; evt_src< SKV_SERVER_EVENT_SOURCES; evt_src++ )
     prio_sum +=  mPriorityCDN / mEventSources[ evt_src ]->GetPriority();
-    
+
   for( int evt_src = 0; evt_src < SKV_SERVER_EVENT_SOURCES; evt_src++ )
   {
     double slot_fraction = (double) (mPriorityCDN / mEventSources[evt_src]->GetPriority()) / (double) (prio_sum);
@@ -1505,7 +1505,7 @@ Init( int   aRank,
     << "skv_server_t::Init():: ERROR: Servername " << ServerName
     << " too long"
     << EndLogLine;
-    
+
   snprintf( ServerName+(SKV_MAX_SERVER_ADDR_NAME_LENGTH-SKV_SERVER_PORT_LENGTH),
             SKV_SERVER_PORT_LENGTH,
             "%d", mSKVConfiguration->GetSKVServerPort() );
@@ -1533,7 +1533,7 @@ Init( int   aRank,
   if( aRank == 0 )
   {
     fd = open( ServerAddrInfoFilename,
-               O_CREAT | O_RDWR | O_TRUNC, 
+               O_CREAT | O_RDWR | O_TRUNC,
                S_IRUSR | S_IWUSR | S_IROTH );
 
     StrongAssertLogLine( fd > 0 )
@@ -1565,7 +1565,7 @@ Init( int   aRank,
       << EndLogLine;
 
     fd = open( ServerAddrInfoFilename,
-               O_CREAT | O_RDWR | O_TRUNC, 
+               O_CREAT | O_RDWR | O_TRUNC,
                S_IRUSR | S_IWUSR | S_IROTH );
 
     StrongAssertLogLine( fd > 0 )
@@ -1596,7 +1596,7 @@ Init( int   aRank,
       write( fd, buff, strlen( buff ) );
       write( fd, "\n", strlen("\n") );
     }
-    close( fd );      
+    close( fd );
   }
 
   MPI_Barrier( MPI_COMM_WORLD );
@@ -1609,7 +1609,7 @@ Init( int   aRank,
 /***
  * skv_server_t::Finalize::
  * Desc: Stops the server and deallocates the state
- * input: 
+ * input:
  * returns: SKV_SUCCESS on success or error code
  ***/
 int

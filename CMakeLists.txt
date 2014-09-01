@@ -90,7 +90,7 @@ set(IT_API_DEFS
 #------------------------------------------------------------------------------
 # include dirs
 #------------------------------------------------------------------------------
-include_directories(skv it_api/include lib/include FxLogger)
+include_directories(it_api/include lib/include FxLogger)
 
 #------------------------------------------------------------------------------
 # Define source files

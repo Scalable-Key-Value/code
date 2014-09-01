@@ -16,16 +16,16 @@
 
 //#define SKV_DEBUG_MSG_MARKER
 
-#include <common/skv_types.hpp>
-#include <common/skv_distribution_manager.hpp>
-#include <client/skv_client_types.hpp>
-#include <server/skv_server_event_type.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_distribution_manager.hpp>
+#include <skv/client/skv_client_types.hpp>
+#include <skv/server/skv_server_event_type.hpp>
 
-#include <common/skv_client_server_headers.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
 
-//#include <server/skv_server_types.hpp>
-//#include <server/skv_server_cursor_manager_if.hpp>
-#include <client/skv_client_conn_manager_if.hpp>
+//#include <skv/server/skv_server_types.hpp>
+//#include <skv/server/skv_server_cursor_manager_if.hpp>
+#include <skv/client/skv_client_conn_manager_if.hpp>
 
 /***************************************************
  * Structures for the CLIENT to SERVER communication
@@ -67,7 +67,7 @@ struct skv_cmd_open_req_t
     mPrivs = aPrivs;
     mFlags = aFlags;
 
-    AssertLogLine( aPDSNameSize > 0 && 
+    AssertLogLine( aPDSNameSize > 0 &&
                    aPDSNameSize <= SKV_MAX_PDS_NAME_SIZE )
       << "skv_cmd_open_req_t::Init():: ERROR:: Length of PDS name is too long. "
       << " NameLen: " << aPDSNameSize
@@ -99,7 +99,7 @@ struct skv_cmd_pdscntl_req_t
     mCntlCmd = aCntlCmd;
     mPDSAttr = *aPDSAttr;
 
-    // AssertLogLine( aPDSNameSize > 0 && 
+    // AssertLogLine( aPDSNameSize > 0 &&
     //                aPDSNameSize <= SKV_MAX_PDS_NAME_SIZE )
     //   << "skv_cmd_open_req_t::Init():: ERROR:: Length of PDS name is too long. "
     //   << " NameLen: " << aPDSNameSize
@@ -115,20 +115,20 @@ struct skv_cmd_pdscntl_req_t
 // struct skv_key_in_ctrl_msg_t
 // {
 //   int                           mKeySize;
-//   char                          mKeyData[ 0 ];  
+//   char                          mKeyData[ 0 ];
 // };
 
 struct skv_key_value_in_ctrl_msg_t
 {
   int                           mKeySize;
   int                           mValueSize;
-  char                          mData[ 0 ];  
+  char                          mData[ 0 ];
 };
 
 struct skv_value_in_ctrl_msg_t
 {
   int                           mValueSize;
-  char                          mData[ 0 ];  
+  char                          mData[ 0 ];
 };
 
 
@@ -167,9 +167,9 @@ struct skv_cmd_RIU_req_t
   skv_rmr_triplet_t                    mRMRTriplet;
 
   /// CAREFUL!!! KeyInCtrlMsg can be a char[ 0 ]
-  // This has to be the last field. 
+  // This has to be the last field.
   // NEED: Check that the key is not larger then the
-  // message buffer  
+  // message buffer
   skv_key_value_in_ctrl_msg_t          mKeyValue;
 
   void
@@ -288,9 +288,9 @@ struct skv_cmd_remove_req_t
   skv_pds_id_t                         mPDSId;
 
   /// CAREFUL!!! KeyInCtrlMsg can be a char[ 0 ]
-  // This has to be the last field. 
+  // This has to be the last field.
   // NEED: Check that the key is not larger then the
-  // message buffer  
+  // message buffer
   skv_key_value_in_ctrl_msg_t          mKeyValue;
 
   void
@@ -339,7 +339,7 @@ struct skv_cmd_bulk_insert_req_t
   it_rmr_context_t                     mBufferRMR;
   uint64_t                             mBuffer;
 
-#ifdef SKV_BULK_LOAD_CHECKSUM 
+#ifdef SKV_BULK_LOAD_CHECKSUM
   uint64_t                             mBufferChecksum;
 #endif
 
@@ -362,7 +362,7 @@ struct skv_cmd_bulk_insert_req_t
       << " SKV_CONTROL_MESSAGE_SIZE: " << SKV_CONTROL_MESSAGE_SIZE
       << EndLogLine;
 
-#ifdef SKV_BULK_LOAD_CHECKSUM 
+#ifdef SKV_BULK_LOAD_CHECKSUM
     mBufferChecksum = aBufferChecksum;
     BegLogLine( 1 )
       // << "On Client mBufferChecksum: " << mBufferChecksum
@@ -378,7 +378,7 @@ struct skv_cmd_bulk_insert_req_t
 
     /**
      * Need to get the actual rmr context for a given end point (ep)
-     * Since the rmr key is specific to the network device 
+     * Since the rmr key is specific to the network device
      * The network device is disambiguated by the ep handle
      */
     it_ep_handle_t epHandle;
@@ -390,8 +390,8 @@ struct skv_cmd_bulk_insert_req_t
     it_status_t status = itx_get_rmr_context_for_ep( epHandle, aBufferLMR, & mBufferRMR );
 
     AssertLogLine( status == IT_SUCCESS )
-      << "ERROR: status: " << status 
-      << EndLogLine;    
+      << "ERROR: status: " << status
+      << EndLogLine;
 
     mHdr.SetCmdLength( sizeof(skv_cmd_bulk_insert_req_t) );
   }
@@ -405,13 +405,13 @@ struct skv_cmd_retrieve_n_keys_req_t
   skv_pds_id_t                           mPDSId;
   skv_cursor_flags_t                     mFlags;
 
-  union 
+  union
   {
     it_lmr_handle_t                       mKeysDataCacheLMR;
 
     // If we had the RDMA Read the RMR is all we would need
-    // The rmr could both be used to RDMA Read the starting key from the client 
-    // in case it doesn't fit into the buffer. Could also be used 
+    // The rmr could both be used to RDMA Read the starting key from the client
+    // in case it doesn't fit into the buffer. Could also be used
     // for the server to RDMA Write the list of keys to the client
     it_rmr_context_t                      mKeysDataCacheRMR;
   } mKeyDataCacheMemReg ;
@@ -452,7 +452,7 @@ struct skv_cmd_retrieve_n_keys_req_t
 
     /**
      * Need to get the actual rmr context for a given end point (ep)
-     * Since the rmr key is specific to the network device 
+     * Since the rmr key is specific to the network device
      * The network device is disambiguated by the ep handle
      */
     it_ep_handle_t epHandle;
@@ -461,12 +461,12 @@ struct skv_cmd_retrieve_n_keys_req_t
       << "ERROR: skv status: " << skv_status_to_string( pstatus )
       << EndLogLine;
 
-    it_status_t status = itx_get_rmr_context_for_ep( epHandle, 
-                                                     aKeysDataCacheLMR, 
+    it_status_t status = itx_get_rmr_context_for_ep( epHandle,
+                                                     aKeysDataCacheLMR,
                                                      & mKeyDataCacheMemReg.mKeysDataCacheRMR );
 
     AssertLogLine( status == IT_SUCCESS )
-      << "ERROR: status: " << status 
+      << "ERROR: status: " << status
       << EndLogLine;
 
     AssertLogLine( aMaxCachedKeysCount <= SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE )
@@ -481,13 +481,13 @@ struct skv_cmd_retrieve_n_keys_req_t
 
     mStartingKeySize = aStartingKeyBufferSize;
 
-    memcpy( mStartingKeyData, 
-            aStartingKeyBuffer, 
+    memcpy( mStartingKeyData,
+            aStartingKeyBuffer,
             mStartingKeySize );
 
     mHdr.SetCmdLength( sizeof(skv_cmd_retrieve_n_keys_req_t) + mStartingKeySize );
     return;
-  }  
+  }
 };
 
 struct skv_cmd_active_bcast_req_t
@@ -538,7 +538,7 @@ struct skv_cmd_active_bcast_req_t
 
     /**
      * Need to get the actual rmr context for a given end point (ep)
-     * Since the rmr key is specific to the network device 
+     * Since the rmr key is specific to the network device
      * The network device is disambiguated by the ep handle
      */
     it_ep_handle_t epHandle;
@@ -550,7 +550,7 @@ struct skv_cmd_active_bcast_req_t
     status = itx_get_rmr_context_for_ep( epHandle, lmrHandle, &rmrHandle );
 
     AssertLogLine( status == IT_SUCCESS )
-      << "ERROR: status: " << status 
+      << "ERROR: status: " << status
       << EndLogLine;
 
     mBufferRep.Init( rmrHandle, aBuff, aBuffSize );
@@ -571,7 +571,7 @@ struct skv_cmd_active_bcast_req_t
  **************************************************************************/
 struct skv_cmd_open_resp_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
   skv_status_t                       mStatus;
 
   skv_pds_id_t                       mPDSId;
@@ -587,7 +587,7 @@ operator<<( streamclass& os, const skv_cmd_open_resp_t& A )
      << A.mPDSId
      << " ]";
 
-  return(os);    
+  return(os);
 }
 /**************************************************************************/
 
@@ -609,7 +609,7 @@ struct skv_cmd_pdscntl_resp_t
  **************************************************************************/
 struct skv_cmd_retrieve_dist_resp_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
   skv_status_t                       mStatus;
 
   skv_distribution_t                 mDist;
@@ -631,7 +631,7 @@ operator<<( streamclass& os, const skv_cmd_retrieve_dist_resp_t& A )
 
 struct skv_cmd_err_resp_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
 
   skv_status_t                       mStatus;
   uint64_t                           mChecksum;
@@ -639,42 +639,42 @@ struct skv_cmd_err_resp_t
 
 struct skv_cmd_insert_resp_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
 
   skv_status_t                       mStatus;
 };
 
 struct skv_cmd_insert_cmpl_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
 
   skv_status_t                       mStatus;
 };
 
 
 /******************
- *    Remove 
+ *    Remove
  ******************/
 struct skv_cmd_remove_cmpl_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
 
   skv_status_t                       mStatus;
 };
 
 /******************
- *    Retrieve 
+ *    Retrieve
  ******************/
 struct skv_cmd_retrieve_value_rdma_write_ack_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
 
-  skv_status_t                       mStatus;  
+  skv_status_t                       mStatus;
 
   /// CAREFUL!!! KeyInCtrlMsg can be a char[ 0 ]
-  // This has to be the last field. 
+  // This has to be the last field.
   // NEED: Check that the key is not larger then the
-  // message buffer  
+  // message buffer
   skv_value_in_ctrl_msg_t            mValue;
 };
 /******************/
@@ -684,8 +684,8 @@ struct skv_cmd_retrieve_value_rdma_write_ack_t
  ******************/
 struct skv_cmd_retrieve_n_keys_rdma_write_ack_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
-  skv_status_t                       mStatus;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
+  skv_status_t                       mStatus;
 
   int                                mCachedKeysCount;
 };
@@ -696,11 +696,11 @@ struct skv_cmd_retrieve_n_keys_rdma_write_ack_t
  ***************************/
 struct skv_cmd_active_bcast_resp_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
 
   skv_status_t                       mStatus;
 
-  union 
+  union
   {
     uint64_t                         mServerHandle;
   };
@@ -713,7 +713,7 @@ struct skv_cmd_active_bcast_resp_t
  ***************************/
 struct skv_cmd_cursor_prefetch_resp_t
 {
-  skv_server_to_client_cmd_hdr_t     mHdr;  
+  skv_server_to_client_cmd_hdr_t     mHdr;
 
   skv_status_t                       mStatus;
 

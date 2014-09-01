@@ -14,7 +14,7 @@
 #ifndef __PARTITIONED_DATA_SET_MANAGER_IF_HPP__
 #define __PARTITIONED_DATA_SET_MANAGER_IF_HPP__
 
-#include <common/skv_types.hpp>
+#include <skv/common/skv_types.hpp>
 
 template<class PartitionedDataSetManagerT>
 class skv_partitioned_data_set_manager_if_t
@@ -28,7 +28,7 @@ public:
 
   /***
    * Desc: Initites storage manager's state
-   * input: none  
+   * input: none
    * returns: 0 on success, or error code
    ***/
   skv_status_t Init( int aNodeId,
@@ -42,7 +42,7 @@ public:
 
   /***
    * Desc: Closes the storage manager
-   * input: none  
+   * input: none
    * returns: 0 on success, or error code
    ***/
   skv_status_t Finalize()

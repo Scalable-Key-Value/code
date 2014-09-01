@@ -24,21 +24,21 @@
 #endif
 
 #include <unistd.h>
-#include <common/skv_types.hpp>
-#include <common/skv_mutex.hpp>
-#include <utils/skv_trace_clients.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_mutex.hpp>
+#include <skv/utils/skv_trace_clients.hpp>
 
-#include <common/skv_client_server_headers.hpp>
-#include <client/skv_client_server_conn.hpp>
-#include <common/skv_client_server_protocol.hpp>
-#include <server/skv_server_types.hpp>
+#include <skv/common/skv_client_server_headers.hpp>
+#include <skv/client/skv_client_server_conn.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
+#include <skv/server/skv_server_types.hpp>
 
-#include <server/skv_local_kv_types.hpp>
-#include <server/skv_local_kv_request.hpp>
-#include <server/skv_local_kv_request_queue.hpp>
-#include <server/skv_local_kv_event_queue.hpp>
+#include <skv/server/skv_local_kv_types.hpp>
+#include <skv/server/skv_local_kv_request.hpp>
+#include <skv/server/skv_local_kv_request_queue.hpp>
+#include <skv/server/skv_local_kv_event_queue.hpp>
 
-#include <server/skv_local_kv_asyncmem.hpp>
+#include <skv/server/skv_local_kv_asyncmem.hpp>
 
 static
 void AsyncProcessing( skv_local_kv_asyncmem *aBackEnd )

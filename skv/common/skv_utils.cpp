@@ -11,7 +11,7 @@
  *     arayshu, lschneid - initial implementation
  */
 
-#include <common/skv_utils.hpp>
+#include <skv/common/skv_utils.hpp>
 
 #include <stdlib.h>
 #include <fstream>
@@ -23,10 +23,10 @@ using namespace std;
 int GetBGPRank()
 {
   ifstream fin("/etc/personality");
-  
+
   int MAX_LENGTH = 100;
   char line[ MAX_LENGTH ];
-  
+
   int RankFound = 0;
   int Rank = -1;
   while( fin.getline( line, MAX_LENGTH ) )
@@ -49,10 +49,10 @@ int GetBGPRank()
 int GetBGPPartitionSize()
 {
   ifstream fin("/etc/personality");
-  
+
   int MAX_LENGTH = 100;
   char line[ MAX_LENGTH ];
-  
+
   int NodesInPset      = -1;
   int NodesInPsetFound =  0;
 
@@ -88,4 +88,3 @@ int GetBGPPartitionSize()
     return -1;
   }
 }
-

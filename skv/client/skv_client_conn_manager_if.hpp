@@ -21,10 +21,10 @@
 #ifndef __SKV_CLIENT_CONN_MANAGER_IF_HPP__
 #define __SKV_CLIENT_CONN_MANAGER_IF_HPP__
 
-#include <common/skv_client_server_protocol.hpp>
+#include <skv/common/skv_client_server_protocol.hpp>
 
 #include <queue>
-#include "common/skv_array_stack.hpp"
+#include <skv/common/skv_array_stack.hpp>
 // #include <stack>
 
 
@@ -45,8 +45,8 @@ struct skv_client_cookie_t
 };
 
 template<class streamclass>
-static  
-streamclass& 
+static
+streamclass&
 operator<<(streamclass& os, const skv_client_cookie_t& aHdr)
 {
   os << "skv_client_cookie_t [ "
@@ -55,7 +55,7 @@ operator<<(streamclass& os, const skv_client_cookie_t& aHdr)
      << aHdr.mSeq
      << " ]";
 
-  return(os);    
+  return(os);
 }
 
 
@@ -75,13 +75,13 @@ class skv_client_conn_manager_if_t
 
   // Event Dispatchers
   it_evd_handle_t               mEvd_Unaff_Hdl;
-  it_evd_handle_t               mEvd_Aff_Hdl; 
+  it_evd_handle_t               mEvd_Aff_Hdl;
   it_evd_handle_t		mEvd_Cmr_Hdl;
   it_evd_handle_t               mEvd_Cmm_Hdl;
   it_evd_handle_t               mEvd_Rq_Hdl;
   it_evd_handle_t		mEvd_Sq_Hdl;
 
-  // Need for security reasons to validate the 
+  // Need for security reasons to validate the
   // client-server connection
   skv_client_cookie_t          mCookieSeq;
 
@@ -107,7 +107,7 @@ public:
   skv_client_conn_manager_if_t() {};
   ~skv_client_conn_manager_if_t() {};
 
-  skv_status_t Init( skv_client_group_id_t aClientGroupId, 
+  skv_status_t Init( skv_client_group_id_t aClientGroupId,
                       int              aMyRank,
                       it_ia_handle_t*  aIA_Hdl,
                       it_pz_handle_t*  aPZ_Hdl,
@@ -141,7 +141,7 @@ public:
   inline int GetServerConnCount() { return mServerConnCount; }
   inline skv_client_server_conn_t* GetServerConnections() { return mServerConns; }
 
-  skv_status_t GetEPHandle( int             aNodeId, 
+  skv_status_t GetEPHandle( int             aNodeId,
                              it_ep_handle_t* aEP );
 
 };

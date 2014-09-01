@@ -14,9 +14,9 @@
 #ifndef __SKV_SERVER_CURSOR_MANAGER_IF_HPP__
 #define __SKV_SERVER_CURSOR_MANAGER_IF_HPP__
 
-#include <common/skv_types.hpp>
-#include <common/skv_utils.hpp>
-#include <server/skv_server_tree_based_container_key.hpp>
+#include <skv/common/skv_types.hpp>
+#include <skv/common/skv_utils.hpp>
+#include <skv/server/skv_server_tree_based_container_key.hpp>
 
 #ifndef SKV_SERVER_CURSOR_MANAGER_IF_LOG
 #define SKV_SERVER_CURSOR_MANAGER_IF_LOG ( 0 | SKV_LOGGING_ALL )
@@ -30,7 +30,7 @@
 #define SKV_SERVER_CURSOR_BUFFER_COUNT ( 32 )
 
 struct skv_server_cursor_buffer_t
-{  
+{
   int                           mSize;
   it_lmr_handle_t               mLMR;
 
@@ -122,7 +122,7 @@ typedef enum
 } skv_server_cursor_state_t;
 
 static
-const char* 
+const char*
 skv_server_cursor_state_to_string( skv_server_cursor_state_t aA )
 {
   switch( aA )
@@ -130,13 +130,13 @@ skv_server_cursor_state_to_string( skv_server_cursor_state_t aA )
     case SKV_SERVER_CURSOR_STATE_RUNNING: { return "SKV_SERVER_CURSOR_STATE_RUNNING"; }
     case SKV_SERVER_CURSOR_STATE_DONE:    { return "SKV_SERVER_CURSOR_STATE_DONE"; }
     default:
-      StrongAssertLogLine( 0 ) 
+      StrongAssertLogLine( 0 )
         << "skv_server_cursor_state_to_string(): ERROR:: State not recognized "
         << " aA: " << aA
         << EndLogLine;
   }
   return "SKV_SERVER_CURSOR_STATE_UNRECOGNIZED";
-} 
+}
 
 struct skv_server_cursor_index_iterator_positions_t
 {
@@ -183,7 +183,7 @@ struct skv_server_cursor_index_iterator_positions_t
     {
       mPositionIndecies[ i ] = 0;
     }
-  }  
+  }
 
   void
   Finalize()
@@ -195,16 +195,16 @@ struct skv_server_cursor_index_iterator_positions_t
 };
 
 
-#include <server/skv_server_types.hpp>
+#include <skv/server/skv_server_types.hpp>
 
-class skv_server_cursor_control_block_t 
+class skv_server_cursor_control_block_t
 {
 public:
   skv_data_id_t                     mDataId;
   int32_t*                           mProjColDesc;
   int                                mProjColDescCount;
 
-  skv_cursor_flags_t                 mFlags;    
+  skv_cursor_flags_t                 mFlags;
 
   skv_data_container_t::iterator                mCursorPos;
   skv_server_cursor_index_iterator_positions_t  mIndexCursorPos;
@@ -271,7 +271,7 @@ public:
   {
     mEventWaitList->push( *aEvent );
 
-    BegLogLine( SKV_SERVER_CURSOR_MANAGER_IF_LOG ) 
+    BegLogLine( SKV_SERVER_CURSOR_MANAGER_IF_LOG )
       << "skv_server_cursor_control_block_t::AddToWaitingList(): "
       << " now size: " << mEventWaitList->size()
       << EndLogLine;
@@ -280,7 +280,7 @@ public:
   void
   ProcessWaitingList()
   {
-    BegLogLine( SKV_SERVER_CURSOR_MANAGER_IF_LOG ) 
+    BegLogLine( SKV_SERVER_CURSOR_MANAGER_IF_LOG )
       << "skv_server_cursor_control_block_t::ProcessWaitingList(): "
       << " size: " << mEventWaitList->size()
       << EndLogLine;
@@ -320,12 +320,12 @@ public:
 
     int SizePerBufferMetadata = sizeof( skv_server_cursor_buffer_t );
     int SizePerBufferData     = SKV_SERVER_CURSOR_BUFFER_DATA_SIZE * sizeof( char );
-    int SizePerBuffer         = SizePerBufferMetadata + SizePerBufferData;    
+    int SizePerBuffer         = SizePerBufferMetadata + SizePerBufferData;
 
     mWorkingBufferSize = SKV_SERVER_CURSOR_BUFFER_COUNT * SizePerBuffer;
 
     mWorkingBuffer = (char *) malloc( mWorkingBufferSize );
-    StrongAssertLogLine( mWorkingBuffer != NULL ) 
+    StrongAssertLogLine( mWorkingBuffer != NULL )
       << "skv_server_cursor_control_block_t::Init():: ERROR:: "
       << " mWorkingBufferSize: " << mWorkingBufferSize
       << EndLogLine;
@@ -335,7 +335,7 @@ public:
 
     it_rmr_context_t TempRMR;
 
-    it_status_t istatus = it_lmr_create( aPZ_Hdl, 
+    it_status_t istatus = it_lmr_create( aPZ_Hdl,
                                          mWorkingBuffer,
                                          NULL,
                                          mWorkingBufferSize,
@@ -411,7 +411,7 @@ public:
   Print()
   {
     PrintFreeList();
-    PrintPendingList();    
+    PrintPendingList();
   }
 
   void
@@ -447,7 +447,7 @@ public:
   {
     AssertLogLine( aBuffer != NULL ) << EndLogLine;
 
-    int rc = mPendingBufferList.remove( aBuffer );    
+    int rc = mPendingBufferList.remove( aBuffer );
     AssertLogLine( rc != -1 )
       << "skv_server_cursor_control_block_t::RemoveFromPendingList(): ERROR: "
       << " rc: " << rc
@@ -458,7 +458,7 @@ public:
       << " skv_server_cursor_control_block_t::RemoveFromPendingList(): "
       << " aBuffer: " << (void *) aBuffer
       << " aBuffer->GetSize(): " << aBuffer->GetSize()
-      << EndLogLine;    
+      << EndLogLine;
   }
 
   skv_server_cursor_buffer_t *
@@ -558,7 +558,7 @@ public:
       << " bytes"
       << EndLogLine;
 
-    skv_status_t status = ServCursorCCB->Init( aPZ_Hdl, 
+    skv_status_t status = ServCursorCCB->Init( aPZ_Hdl,
                                                aInternalEventManager,
                                                aBuff,
                                                aBuffSize );
