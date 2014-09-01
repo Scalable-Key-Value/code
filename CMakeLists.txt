@@ -1,4 +1,4 @@
-project(SKV)
+project(skv)
 cmake_minimum_required(VERSION 2.8)
 
 set(VERSION_MAJOR 0)
@@ -221,3 +221,5 @@ foreach(_test ${TEST_SOURCES})
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
     ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()
+
+include(skvCPack)
