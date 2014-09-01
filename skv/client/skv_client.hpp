@@ -39,7 +39,7 @@ public:
                      MPI_Comm aComm,
                      int aFlags,
                      const char* aConfigFile = NULL );
-  #endif
+#endif
 
   /**
    * Releases client's state

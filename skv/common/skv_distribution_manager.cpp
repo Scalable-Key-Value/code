@@ -70,7 +70,7 @@ Init( int aCount )
  ***/
 int
 skv_distribution_hash_t::
-GetNode( skv_key_t* aKey )
+GetNode( skv_key_t* aKey ) const
 {
   AssertLogLine( aKey != NULL )
     << "skv_distribution_hash_t::GetNode():: ERROR: "
@@ -89,7 +89,7 @@ GetNode( skv_key_t* aKey )
  ***/
 int
 skv_distribution_hash_t::
-GetNode( char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount )
+GetNode( char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount ) const
 {
   AssertLogLine( aListElementCount >= 1 )
     << EndLogLine;
@@ -156,7 +156,7 @@ Init( int aCount )
  ***/
 int
 skv_distribution_random_t::
-GetNode( skv_key_t* aKey )
+GetNode( skv_key_t* aKey ) const
 {
   AssertLogLine( aKey != NULL )
     << "skv_distribution_random_t::GetNode():: ERROR: "

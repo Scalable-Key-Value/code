@@ -22,18 +22,18 @@ class skv_client_command_manager_if_t
 {
 public:
 
-  skv_client_conn_manager_if_t*             mConnMgrIF;  
+  skv_client_conn_manager_if_t*             mConnMgrIF;
   skv_client_ccb_manager_if_t*              mCCBMgrIF;
 
   void
-  Init( skv_client_conn_manager_if_t*             aConnMgrIF,  
+  Init( skv_client_conn_manager_if_t*             aConnMgrIF,
         skv_client_ccb_manager_if_t*              aCCBMgrIF )
   {
     mConnMgrIF = aConnMgrIF;
     mCCBMgrIF = aCCBMgrIF;
   }
 
-  void  Finalize() {} 
+  void  Finalize() {}
 
   // Returns a handle that has completed
   skv_status_t WaitAny( skv_client_cmd_hdl_t* aCmdHdl );
