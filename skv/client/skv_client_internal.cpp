@@ -303,7 +303,7 @@ iOpen( char*                  aPDSName,
     << " aCmdHdl: " << (void *) aCmdHdl
     << EndLogLine;
 
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::iOpen():: "
     << " aPDSName: " << aPDSName
     << " aFlags: " << aFlags
@@ -415,7 +415,7 @@ iRetrieve( skv_pds_id_t*          aPDSId,
     << " Key: " << DebugKey
     << EndLogLine;
 
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::iRetrieve():: "
     << " aFlags: " << aFlags
     << " mState: " << mState
@@ -552,7 +552,7 @@ iUpdate( skv_pds_id_t*          aPDSId,
     << "skv_client_internal_t::iUpdate(): Not yet implemented."
     << EndLogLine;
 
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::iUpdate():: "
     << " aFlags: " << aFlags
     << " mState: " << mState
@@ -682,7 +682,7 @@ iInsert( skv_pds_id_t*          aPDSId,
     << " Value: " << DebugValue
     << EndLogLine;
 
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::iInsert():: "
     << " aFlags: " << aFlags
     << " mState: " << mState
@@ -800,7 +800,7 @@ skv_client_internal_t::
 iClose( skv_pds_id_t*         aPDSId,
         skv_client_cmd_hdl_t* aCmdHdl )
 {
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::iClose():: ERROR:: "
     << " mState: " << mState
     << EndLogLine;
@@ -878,7 +878,7 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
           skv_pds_attr_t       *aPDSAttr,
           skv_client_cmd_hdl_t *aCmdHdl )
   {
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::iPDScntl():: ERROR:: "
     << " mState: " << mState
     << EndLogLine;
@@ -1246,7 +1246,7 @@ RetrieveDistribution( skv_distribution_t* aDist )
     << "skv_client_internal_t::RetrieveDistribution():: Entering"
     << EndLogLine;
 
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::RetrieveDistribution():: "
     << " mState: " << mState
     << EndLogLine;
@@ -1495,7 +1495,7 @@ iRemove( skv_pds_id_t*          aPDSId,
     << " Key: " << DebugKey
     << EndLogLine;
 
-  StrongAssertLogLine( mState = SKV_CLIENT_STATE_CONNECTED )
+  StrongAssertLogLine( mState == SKV_CLIENT_STATE_CONNECTED )
     << "skv_client_internal_t::iRemove():: "
     << " aFlags: " << aFlags
     << " mState: " << mState
