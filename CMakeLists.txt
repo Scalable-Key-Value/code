@@ -106,6 +106,7 @@ set(IT_API_SOURCES
   it_api/src/it_api_o_verbs.cpp
   it_api/src/it_api_o_verbs_thread.cpp
 )
+set(IT_API_LINK_LIBRARIES ${OFED_LIBRARIES})
 
 set(TEST_SOURCES
   test/skv_base_test.cpp
@@ -168,7 +169,7 @@ foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
-    ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+    ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()
 
 include(skvCPack)
