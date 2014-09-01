@@ -52,13 +52,10 @@ else()
   include(MPI/${SKV_MPI})
 endif()
 
-include_directories(${MPI_INCLUDE_PATH})
+find_package(OFED REQUIRED)
+find_package(Threads REQUIRED)
 
-#------------------------------------------------------------------------------
-# OFED verbs libraries
-#------------------------------------------------------------------------------
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/CMake)
-find_package(OFED)
+include_directories(${MPI_INCLUDE_PATH})
 
 #------------------------------------------------------------------------------
 # Options
@@ -221,20 +218,13 @@ target_link_libraries(SKVServer skv_common it_api fxlogger
 
 add_executable(skv_server ${SERVER_SOURCES})
 target_link_libraries(skv_server skv_common it_api fxlogger
-  ${OFED_LIBRARIES} ${MPI_LIBRARIES})
+  ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
-  target_link_libraries(${TEST_NAME}
-    skvc
-    skv_client
-    skv_common
-    it_api
-    fxlogger
-    ${OFED_LIBRARIES}
-    ${MPI_LIBRARY}
-  )
+  target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
+    ${OFED_LIBRARIES} ${MPI_LIBRARY} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()
 
 foreach(_test ${UNITTEST_SOURCES})
@@ -243,12 +233,8 @@ foreach(_test ${UNITTEST_SOURCES})
   target_compile_definitions(${TEST_NAME} PUBLIC
     "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
   )
-  target_link_libraries(${TEST_NAME}
-    skv_client
-    skv_common
-    it_api
-    fxlogger
-    ${OFED_LIBRARIES}
+  target_link_libraries(${TEST_NAME} skv_client skv_common it_api fxlogger
+    ${OFED_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES}
  #   ${MPI_LIBRARY}
   )
 endforeach()
