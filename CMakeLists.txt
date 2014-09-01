@@ -90,77 +90,42 @@ set(IT_API_DEFS
 #------------------------------------------------------------------------------
 # include dirs
 #------------------------------------------------------------------------------
-include_directories(./include it_api/include lib/include FxLogger)
+include_directories(skv it_api/include lib/include FxLogger)
 
 #------------------------------------------------------------------------------
 # Define source files
 #------------------------------------------------------------------------------
 
 set(FXLOGGER_SOURCES
-  ./FxLogger/FxLogger.cpp
-  ./FxLogger/Trace.cpp
-  ./FxLogger/dlmalloc.c
+  FxLogger/FxLogger.cpp
+  FxLogger/Trace.cpp
+  FxLogger/dlmalloc.c
 )
 
 set(IT_API_SOURCES
-  ./it_api/src/it_api_o_verbs.cpp
-  ./it_api/src/it_api_o_verbs_thread.cpp
-)
-
-set(SKVC_SOURCES ./lib/src/skv.cpp)
-set(SKVC_MPI_SOURCES ${SKVC_SOURCES})
-
-set(SKV_CLIENT_SOURCES
-  ./src/client/skv_client.cpp
-  ./src/client/skv_client_2_server_active_bcast.cpp
-  ./src/client/skv_client_bulk_inserter.cpp
-  ./src/client/skv_client_command_manager_if.cpp
-  ./src/client/skv_client_conn_manager_if.cpp
-  ./src/client/skv_client_cursor.cpp
-  ./src/client/skv_client_internal.cpp
-)
-set(SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES})
-
-set(SKV_COMMON_SOURCES
-  ./src/common/skv_config.cpp
-  ./src/common/skv_distribution_manager.cpp
-  ./src/common/skv_utils.cpp
-)
-
-set(SERVER_SOURCES
-  ./src/server/skv_local_kv_asyncmem.cpp
-  ./src/server/skv_local_kv_inmem.cpp
-  ./src/server/skv_local_kv_rocksdb.cpp
-  ./src/server/skv_server.cpp
-  ./src/server/skv_server_IT_event_source.cpp
-  ./src/server/skv_server_command_event_source.cpp
-  ./src/server/skv_server_local_kv_event_source.cpp
-  ./src/server/skv_server_main.cpp
-  ./src/server/skv_server_network_event_manager.cpp
-  ./src/server/skv_server_tree_based_container.cpp
-  ./src/server/skv_server_uber_pds.cpp
-  ./system/bgq/etc/skv_server.conf
+  it_api/src/it_api_o_verbs.cpp
+  it_api/src/it_api_o_verbs_thread.cpp
 )
 
 set(TEST_SOURCES
-  ./test/skv_base_test.cpp
+  test/skv_base_test.cpp
 )
 
 set(TEST_C_SOURCES
-  ./test/skv_test_clib.c
+  test/skv_test_clib.c
 )
 
 set(TEST_MPI_SOURCES
-  ./test/skv_test_bulk.cpp
-  ./test/skv_test_insert_retrieve_async.cpp
-  ./test/skv_test_insert_retrieve_sync.cpp
-  ./test/test_skv_insert_command.cpp
-  ./test/test_skv_remove_command.cpp
+  test/skv_test_bulk.cpp
+  test/skv_test_insert_retrieve_async.cpp
+  test/skv_test_insert_retrieve_sync.cpp
+  test/test_skv_insert_command.cpp
+  test/test_skv_remove_command.cpp
 )
 
 set(UNITTEST_SOURCES
-  ./unittest/test_skv_rdma_data_buffer.cpp
-  ./unittest/test_skv_ringbuffer_ptr.cpp
+  unittest/test_skv_rdma_data_buffer.cpp
+  unittest/test_skv_ringbuffer_ptr.cpp
 )
 
 #------------------------------------------------------------------------------
@@ -197,23 +162,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 common_library(fxlogger)
 common_library(it_api)
-common_library(skv_common)
-common_library(skv_client)
-common_library(skv_client_mpi)
-common_library(skvc)
-common_library(skvc_mpi)
-
-target_compile_definitions(skv_client PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
-target_compile_definitions(skvc PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
-
-#------------------------------------------------------------------------------
-# executables
-
-set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
-
-add_executable(SKVServer ${SERVER_SOURCES})
-target_link_libraries(SKVServer skv_common it_api fxlogger
-  ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+add_subdirectory(skv)
 
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
