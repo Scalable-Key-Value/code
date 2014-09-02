@@ -107,7 +107,7 @@ class skv_server_heap_manager_t
 public:
 
   static
-  void*    
+  void*
   Allocate( int bytes )
   {
     void* Ptr = mspace_malloc( mMspace, bytes );
@@ -121,7 +121,7 @@ public:
   }
 
   static
-  void     
+  void
   Free( void * addr )
   {
     mspace_free( mMspace, addr );
@@ -196,10 +196,10 @@ public:
                MyRank );
 #endif
     }
-    //     sprintf( ScpCommand, 
-    //              "rcp %s %s:%s", 
+    //     sprintf( ScpCommand,
+    //              "rcp %s %s:%s",
     //              PERSISTENT_FILE_LOCAL_PATH,
-    //              IONODE_IP, 
+    //              IONODE_IP,
     //              persistentFilename );
 
     BegLogLine( SKV_SERVER_HEAP_MANAGER_LOG )
@@ -296,8 +296,8 @@ public:
     int mmapFlags = MAP_FIXED | MAP_SHARED;
 
     mMemoryAllocation = (char *) mmap( persistentFileMapAddress,
-                                       mTotalLen, 
-                                       PROT_READ | PROT_WRITE, 
+                                       mTotalLen,
+                                       PROT_READ | PROT_WRITE,
                                        mmapFlags,
                                        mFd,
                                        0 );
@@ -321,12 +321,12 @@ public:
 
   static
   void
-  Init( int                      aHeapMegs, 
-        char**                   aPersistanceMetadataStart, 
+  Init( int                      aHeapMegs,
+        char**                   aPersistanceMetadataStart,
         char*                    aRestartImagePath,
         skv_persistance_flag_t  aFlag )
-  {  
-    //mTotalLen = aHeapMegs * 1024 * 1024; 
+  {
+    //mTotalLen = aHeapMegs * 1024 * 1024;
     mTotalLen = PERSISTENT_IMAGE_MAX_LEN ;
     //mTotalLen = 2147483648u;
 
@@ -404,7 +404,7 @@ public:
       }
       else
       {
-#if 0            
+#if 0
         sprintf( ScpCommand,
                  "rsh %s cat %s | tar -zxOf - > %s.%d",
                  IONODE_IP,
@@ -468,8 +468,8 @@ public:
     }
 
     mMemoryAllocation = (char *) mmap( persistentFileMapAddress,
-                                       mTotalLen, 
-                                       PROT_READ | PROT_WRITE, 
+                                       mTotalLen,
+                                       PROT_READ | PROT_WRITE,
                                        mmapFlags,
                                        mFd,
                                        0 );
@@ -493,7 +493,7 @@ public:
       << " mMemoryAllocation: " << (void *) mMemoryAllocation
       << EndLogLine;
 
-    skv_server_persistance_heap_hdr_t * Hdr = 
+    skv_server_persistance_heap_hdr_t * Hdr =
         (skv_server_persistance_heap_hdr_t *) mMemoryAllocation;
 
     if( aFlag & SKV_PERSISTANCE_FLAG_RESTART )
@@ -511,13 +511,12 @@ public:
         << " mTotalLen: " << mTotalLen
         << EndLogLine;
 
-      int page_size = getpagesize();
+      const size_t page_size = getpagesize();
+      const size_t page_count = (size_t) ceil( (1.0*mTotalLen)  / (1.0*page_size) );
 
-      int page_count = (int) ceil( (1.0*mTotalLen)  / (1.0*page_size) );
-
-      for( int page_idx = 0; page_idx < page_count; page_idx++ )
+      for( size_t page_idx = 0; page_idx < page_count; page_idx++ )
       {
-        int byte_idx = page_idx * page_size + 1;
+        const size_t byte_idx = page_idx * page_size + 1;
         mMemoryAllocation[ byte_idx ] = 0;
       }
 
@@ -553,7 +552,7 @@ public:
 
     BegLogLine( SKV_SERVER_HEAP_MANAGER_LOG )
       << "skv_server_heap_manager_t::Init(): Exiting"
-      << EndLogLine;    
+      << EndLogLine;
 
     return;
   }
