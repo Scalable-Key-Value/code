@@ -56,7 +56,7 @@ set(SKV_CLIENT_LINK_LIBRARIES it_api fxlogger skv_common)
 set(SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES})
 set(SKV_CLIENT_MPI_LINK_LIBRARIES ${SKV_CLIENT_LINK_LIBRARIES})
 
-set(SERVER_SOURCES
+set(SKVSERVER_SOURCES
   server/skv_local_kv_asyncmem.cpp
   server/skv_local_kv_inmem.cpp
   server/skv_local_kv_rocksdb.cpp
@@ -70,6 +70,9 @@ set(SERVER_SOURCES
   server/skv_server_uber_pds.cpp
   system/bgq/etc/skv_server.conf
 )
+set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES} ${MPI_LIBRARIES}
+  skv_common it_api fxlogger)
+
 #------------------------------------------------------------------------------
 # libraries
 
@@ -88,9 +91,4 @@ target_compile_definitions(skvc PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
 
 #------------------------------------------------------------------------------
 # executables
-
-set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
-
-add_executable(SKVServer ${SERVER_SOURCES})
-target_link_libraries(SKVServer skv_common it_api fxlogger
-  ${OFED_LIBRARIES} ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+common_application(SKVServer)
