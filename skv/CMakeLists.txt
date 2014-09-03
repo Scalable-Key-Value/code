@@ -86,8 +86,10 @@ common_library(skv_client_mpi)
 common_library(skvc)
 common_library(skvc_mpi)
 
-target_compile_definitions(skv_client PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
-target_compile_definitions(skvc PUBLIC "-DSKV_CLIENT_UNI -DSKV_NON_MPI")
+set_target_properties(skv_client PROPERTIES COMPILE_DEFINITIONS
+  "SKV_CLIENT_UNI;SKV_NON_MPI")
+set_target_properties(skvc PROPERTIES COMPILE_DEFINITIONS
+  "SKV_CLIENT_UNI;SKV_NON_MPI")
 
 #------------------------------------------------------------------------------
 # executables
