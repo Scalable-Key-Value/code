@@ -109,7 +109,7 @@ class skv_server_retrieve_n_keys_command_sm
     it_dto_flags_t dto_flags = (it_dto_flags_t) ( 0 );
 
     BegLogLine( SKV_SERVER_RETRIEVE_N_KEYS_DATA_LOG )
-      << "skv_server_retrieve_n_keys_command_sm::post_rdma_write(): LMRs: "
+      << "skv_server_retrieve_n_keys_command_sm::post_rdma_write(): " << aRetrievedKeysSizesSegsCount << " LMRs: "
       << " " << aRetrievedKeysSizesSegs[0]
       << " " << aRetrievedKeysSizesSegs[1]
       << " " << aRetrievedKeysSizesSegs[2]
@@ -182,7 +182,7 @@ class skv_server_retrieve_n_keys_command_sm
       << " status: " << skv_status_to_string( status )
       << EndLogLine;
 
-    delete aRetrievedKeysSizesSegs;
+    delete [] aRetrievedKeysSizesSegs;
 
     return status;
   }
@@ -213,12 +213,13 @@ public:
           {
             int RetrievedKeysCount = 0;
             int RetrievedKeysSizesSegsCount = 0;
-            // NEED NEED NEED:: This will live on the stack for now. Think about how to allocate this memory based
-            // on aRemoteMemKeysMaxCount. Need a better place to put this.
-            //
 #define SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE_SEND_VEC ( 2 * SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE )
-//            skv_lmr_triplet_t RetrievedKeysSizesSegs[ SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE_SEND_VEC ];
-            skv_lmr_triplet_t *RetrievedKeysSizesSegs = (skv_lmr_triplet_t*)new char( SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE_SEND_VEC * sizeof(skv_lmr_triplet_t) );
+            skv_lmr_triplet_t *RetrievedKeysSizesSegs = new skv_lmr_triplet_t[ SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE_SEND_VEC ];
+
+            BegLogLine( SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG )
+              << "skv_server_retrieve_n_keys_command_sm: allocated " << SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE_SEND_VEC
+              << " KeysSegs@" << (void*)RetrievedKeysSizesSegs
+              << EndLogLine;
 
             status = retrieve_n_start( aEPState,
                                        aLocalKV,
