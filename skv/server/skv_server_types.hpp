@@ -1597,17 +1597,6 @@ struct skv_cmd_retrieve_resp_t
 
     it_rdma_addr_t dest_resp_addr = (it_rdma_addr_t) (GetClientResponseBufferAddress());
 
-#ifdef SKV_DEBUG_MSG_MARKER
-    skv_cmd_retrieve_resp_t *Resp = (skv_cmd_retrieve_resp_t*) (seg_rx.addr.abs);
-    BegLogLine( 1 )
-      << "skv_server_ep_state_t::Dispatch(): "
-      << " about to send data mBuf: " << (void*)Resp->mValue.mData
-      << " mvalue: " << (void*) (*(uint64_t*)(Resp->mValue.mData))
-      << " size: " << Resp->mValue.mValueSize
-      << " msg: " << Resp->mHdr.mMarker
-      << EndLogLine;
-#endif
-
     it_lmr_triplet_t seg_tx;
     seg_tx.addr.abs = (char *) aSendTriplet->GetAddr();
     seg_tx.length   = aSendTriplet->GetLen();
