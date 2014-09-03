@@ -28,7 +28,7 @@ set_property(CACHE SKV_ENV
 set(SKV_MPI "AUTO" CACHE STRING 
   "Select an MPI configuration {AUTO, MVAPICH2_RHEL65, MPICH_BGQ, BGAS-MVAPICH}")
 set_property(CACHE SKV_MPI
-  PROPERTY STRINGS "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
+  PROPERTY STRINGS "AUTO" "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
 
 
 #------------------------------------------------------------------------------
@@ -137,10 +137,8 @@ set(SKV_COMMON_SOURCES
   ./src/common/skv_utils.cpp
 )
 
-set(SERVER_SOURCES
-  ./src/server/skv_local_kv_asyncmem.cpp
-  ./src/server/skv_local_kv_inmem.cpp
-  ./src/server/skv_local_kv_rocksdb.cpp
+set(SKVSERVER_SOURCES
+  ./src/server/skv_local_kv_${SKV_LOCAL_KV_BACKEND}.cpp
   ./src/server/skv_server.cpp
   ./src/server/skv_server_IT_event_source.cpp
   ./src/server/skv_server_command_event_source.cpp
@@ -149,7 +147,6 @@ set(SERVER_SOURCES
   ./src/server/skv_server_network_event_manager.cpp
   ./src/server/skv_server_tree_based_container.cpp
   ./src/server/skv_server_uber_pds.cpp
-  ./system/bgq/etc/skv_server.conf
 )
 
 set(TEST_SOURCES
@@ -209,30 +206,45 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 # c-lib
 # c-lib-mpi
 
-add_library(fxlogger STATIC ${FXLOGGER_SOURCES})
-add_library(it_api STATIC ${IT_API_SOURCES})
-add_library(skv_common STATIC ${SKV_COMMON_SOURCES})
+set( PROJECT_INCLUDE_NAME skv )
 
-add_library(skv_client STATIC ${SKV_CLIENT_SOURCES})
+set( FXLOGGER_LIBRARY_TYPE STATIC )
+set( FXLOGGER_PUBLIC_HEADERS  FxLogger/FxLogger.hpp FxLogger/Trace.hpp FxLogger/Time.hpp )
+common_library( fxlogger )
+
+set( IT_API_LIBRARY_TYPE STATIC )
+set( IT_API_PUBLIC_HEADERS  it_api/include/it_api.h it_api/include/it_api_os_specific.h )
+common_library( it_api )
+
+set( SKV_COMMON_LIBRARY_TYPE STATIC )
+common_library( skv_common )
+
+set( SKV_CLIENT_LIBRARY_TYPE STATIC )
+set( SKV_CLIENT_PUBLIC_HEADERS lib/include/skv.h include/client/skv_client.hpp )
+common_library( skv_client )
 target_compile_definitions(skv_client PUBLIC
   "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
 )
-add_library(skv_client_mpi STATIC ${SKV_CLIENT_SOURCES})
 
-add_library(skvc STATIC ${SKV_CLIB_SOURCES})
-target_compile_definitions(skvc PUBLIC
+set( SKV_CLIENT_MPI_LIBRARY_TYPE STATIC )
+set( SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES} )
+common_library( skv_client_mpi )
+
+set( SKV_CLIB_LIBRARY_TYPE STATIC )
+common_library( skv_clib )
+target_compile_definitions(skv_clib PUBLIC
   "-DSKV_CLIENT_UNI -DSKV_NON_MPI"
 )
-add_library(skvc_mpi STATIC ${SKV_CLIB_SOURCES})
+
+set( SKV_CLIB_MPI_LIBRARY_TYPE STATIC )
+set( SKV_CLIB_MPI_SOURCES ${SKV_CLIB_SOURCES} )
+common_library( skv_clib_mpi )
 
 
 #------------------------------------------------------------------------------
 # build the server
-add_executable(SKVServer ${SERVER_SOURCES})
-set(SKV_COMMON_LINK_LIBRARIES pthread m dl)
-target_link_libraries(SKVServer
-  skv_common it_api fxlogger ${OFED_LIBRARIES} ${MPI_LIBRARY} ${SKV_COMMON_LINK_LIBRARIES})
-
+set( SKVSERVER_LINK_LIBRARIES skv_common it_api fxlogger ${OFED_LIBRARIES} ${MPI_CXX_LIBRARIES} pthread m dl)
+common_application( SKVServer )
 
 #------------------------------------------------------------------------------
 # build the tests
@@ -245,7 +257,7 @@ foreach(_test ${TEST_MPI_SOURCES})
     it_api
     fxlogger
     ${OFED_LIBRARIES}
-    ${MPI_LIBRARY}
+    ${MPI_CXX_LIBRARIES}
   )
 endforeach()
 
@@ -261,7 +273,6 @@ foreach(_test ${TEST_SOURCES})
     it_api
     fxlogger
     ${OFED_LIBRARIES}
-#    ${MPI_LIBRARY}
   )
 endforeach()
 
@@ -269,13 +280,13 @@ foreach(_test ${TEST_C_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   target_link_libraries(${TEST_NAME}
-    skvc
+    skv_clib
     skv_client
     skv_common
     it_api
     fxlogger
     ${OFED_LIBRARIES}
-    ${MPI_LIBRARY}
+    ${MPI_C_LIBRARIES}
   )
 endforeach()
 
@@ -291,6 +302,18 @@ foreach(_test ${UNITTEST_SOURCES})
     it_api
     fxlogger
     ${OFED_LIBRARIES}
- #   ${MPI_LIBRARY}
   )
 endforeach()
+
+
+if( CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT )
+  set (CMAKE_INSTALL_PREFIX "/opt/SKV" CACHE PATH "SKV default location" FORCE )
+endif( CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT )
+
+set( SKV_CONFIG_FILES
+  system/bgq/etc/skv_server.conf
+)
+
+install(FILES ${SKV_CONFIG_FILES}
+  DESTINATION etc
+)
