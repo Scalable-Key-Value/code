@@ -172,10 +172,4 @@ foreach(_test ${TEST_SOURCES})
     ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()
 
-#------------------------------------------------------------------------------
-# etc/ stuff
-
-set( SKV_CONFIG_FILES system/bgq/etc/skv_server.conf)
-install(FILES ${SKV_CONFIG_FILES} DESTINATION etc)
-
 include(skvCPack)

@@ -91,3 +91,10 @@ set_target_properties(skvc PROPERTIES COMPILE_DEFINITIONS
 #------------------------------------------------------------------------------
 # executables
 common_application(SKVServer)
+
+
+#------------------------------------------------------------------------------
+# etc/ stuff
+
+set( SKV_CONFIG_FILES system/bgq/etc/skv_server.conf)
+install(FILES ${SKV_CONFIG_FILES} DESTINATION etc)
