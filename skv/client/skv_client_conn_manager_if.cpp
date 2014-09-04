@@ -758,8 +758,8 @@ ConnectToServer( int                        aServerRank,
     {
       BegLogLine( 1 )
         << "skv_client_conn_manager_if_t::ConnectToServer():: ERROR:: "
-        << " getting connection established event failed"
-        << EndLogLine;
+        << " getting connection established event failed with status: "
+        << status << EndLogLine;
 
       return SKV_ERRNO_CONN_FAILED;
     }
