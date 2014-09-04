@@ -57,9 +57,7 @@ set(SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES})
 set(SKV_CLIENT_MPI_LINK_LIBRARIES ${SKV_CLIENT_LINK_LIBRARIES})
 
 set(SKVSERVER_SOURCES
-  server/skv_local_kv_asyncmem.cpp
-  server/skv_local_kv_inmem.cpp
-  server/skv_local_kv_rocksdb.cpp
+  server/skv_local_kv_${SKV_LOCAL_KV_BACKEND}.cpp
   server/skv_server.cpp
   server/skv_server_IT_event_source.cpp
   server/skv_server_command_event_source.cpp
@@ -68,7 +66,6 @@ set(SKVSERVER_SOURCES
   server/skv_server_network_event_manager.cpp
   server/skv_server_tree_based_container.cpp
   server/skv_server_uber_pds.cpp
-  system/bgq/etc/skv_server.conf
 )
 set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES} ${MPI_LIBRARIES}
   skv_common it_api fxlogger)
