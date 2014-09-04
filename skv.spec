@@ -2,7 +2,7 @@ Summary: SKV
 Name: bgas-skv
 Version: %{RPM_VERSION}
 Release: 1
-License: GPL
+License: EPL
 Group: BGAS
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 
