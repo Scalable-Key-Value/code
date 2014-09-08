@@ -696,7 +696,8 @@ ConnectToServer( int                        aServerRank,
     << EndLogLine;
 
   // Check for errors            
-  while( 1 )
+  int ConnectTimeOut = 20;
+  while( ConnectTimeOut > 0 )
   {
     it_event_t event_cmm;
 
@@ -794,14 +795,24 @@ ConnectToServer( int                        aServerRank,
 
       return SKV_ERRNO_CONN_FAILED;
     }
+    // prevent extreme polling for connections and countdown for timeout
+    BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+      << "skv_client_conn_manager_if_t::ConnectToServer():: No connection event, retrying: " << ConnectTimeOut
+      << EndLogLine;
+
+    sleep(1);
+    ConnectTimeOut--;
   }
 
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
-    << "skv_client_conn_manager_if_t::ConnectToServer():: Leaving with SUCCESS"
-    << "aServerAddr.mName: " << aServerAddr.mName
+    << "skv_client_conn_manager_if_t::ConnectToServer():: Leaving with " << ConnectTimeOut
+    << " retries left. aServerAddr.mName: " << aServerAddr.mName
     << EndLogLine;
 
-  return SKV_SUCCESS;  
+  if( ConnectTimeOut > 0 )
+    return SKV_SUCCESS;
+  else
+    return SKV_ERRNO_CONN_FAILED;
 }
 
 /***
@@ -921,7 +932,7 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
     if( status == IT_SUCCESS )
     {
       BegLogLine( 1 )
-        << "skv_client_conn_manager_if_t::ConnectToServer()::ERROR:: "
+        << "skv_client_conn_manager_if_t::DisconnectFromServer()::ERROR:: "
         << " event_number: " << event_unaff.event_number
         << EndLogLine;
 
