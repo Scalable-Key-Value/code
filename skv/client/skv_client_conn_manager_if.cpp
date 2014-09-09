@@ -696,72 +696,74 @@ ConnectToServer( int                        aServerRank,
     << EndLogLine;
 
   // Check for errors
-  while( 1 )
+  int ConnectTimeOut = 20;
+  while( ConnectTimeOut > 0 )
   {
     it_event_t event_cmm;
 
     it_status_t status = it_evd_dequeue( mEvd_Cmm_Hdl,
                                          &event_cmm );
 
-    if( status == IT_SUCCESS )
+    switch( status )
     {
-      if( event_cmm.event_number == IT_CM_MSG_CONN_ESTABLISHED_EVENT )
-      {
-        // Run the varification protocol.
-        BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
-          << "skv_client_conn_manager_if_t::ConnectToServer():: "
-          << " Connection established"
-          << EndLogLine;
-
-        if( event_cmm.conn.private_data_present )
+      case IT_SUCCESS:
+        if( event_cmm.event_number == IT_CM_MSG_CONN_ESTABLISHED_EVENT )
         {
+          // Run the varification protocol.
           BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
-            << " Retrieved Private Data value: " << *(reinterpret_cast<skv_rmr_triplet_t*>(event_cmm.conn.private_data))
+            << "skv_client_conn_manager_if_t::ConnectToServer():: "
+            << " Connection established"
             << EndLogLine;
 
-          aServerConn->mServerCommandMem = *((it_rmr_triplet_t*) (event_cmm.conn.private_data));
-          // host-endian conversions. Data gets transferred in BE
-          aServerConn->mServerCommandMem.mRMR_Addr = be64toh( aServerConn->mServerCommandMem.mRMR_Addr );
-          aServerConn->mServerCommandMem.mRMR_Len = be64toh( aServerConn->mServerCommandMem.mRMR_Len );
-          aServerConn->mServerCommandMem.mRMR_Context = be64toh( aServerConn->mServerCommandMem.mRMR_Context );
+          if( event_cmm.conn.private_data_present )
+          {
+            BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+              << " Retrieved Private Data value: " << *(reinterpret_cast<skv_rmr_triplet_t*>(event_cmm.conn.private_data))
+              << EndLogLine;
+
+            aServerConn->mServerCommandMem = *((it_rmr_triplet_t*) (event_cmm.conn.private_data));
+            // host-endian conversions. Data gets transferred in BE
+            aServerConn->mServerCommandMem.mRMR_Addr = be64toh( aServerConn->mServerCommandMem.mRMR_Addr );
+            aServerConn->mServerCommandMem.mRMR_Len = be64toh( aServerConn->mServerCommandMem.mRMR_Len );
+            aServerConn->mServerCommandMem.mRMR_Context = be64toh( aServerConn->mServerCommandMem.mRMR_Context );
+          }
+          else
+          {
+            StrongAssertLogLine( 0 )
+              << "skv_client_conn_manager_if_t::ConnectToServer():: No Private Data present in connection established event. Cannot proceed"
+              << EndLogLine;
+
+            return SKV_ERRNO_CONN_FAILED;
+          }
+
+          aServerConn->mState = SKV_CLIENT_CONN_CONNECTED;
+
+          BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+            << "skv_client_conn_manager_if_t::ConnectToServer():: Leaving with SUCCESS"
+            << "aServerAddr.mName: " << aServerAddr.mName
+            << EndLogLine;
+
+          return SKV_SUCCESS;
         }
         else
         {
-
-          StrongAssertLogLine( 0 )
-            << "skv_client_conn_manager_if_t::ConnectToServer():: No Private Data present in connection established event. Cannot proceed"
+          BegLogLine( 1 )
+            << "skv_client_conn_manager_if_t::ConnectToServer()::ERROR:: "
+            << " event_number: " << event_cmm.event_number
             << EndLogLine;
 
           return SKV_ERRNO_CONN_FAILED;
         }
-
-        aServerConn->mState = SKV_CLIENT_CONN_CONNECTED;
-
-        BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
-          << "skv_client_conn_manager_if_t::ConnectToServer():: Leaving with SUCCESS"
-          << "aServerAddr.mName: " << aServerAddr.mName
-          << EndLogLine;
-
-        return SKV_SUCCESS;
-      }
-      else
-      {
+      case IT_ERR_QUEUE_EMPTY:
+        // retry...
+        break;
+      default:
         BegLogLine( 1 )
-          << "skv_client_conn_manager_if_t::ConnectToServer()::ERROR:: "
-          << " event_number: " << event_cmm.event_number
+          << "skv_client_conn_manager_if_t::ConnectToServer():: ERROR:: "
+          << " getting connection established event failed"
           << EndLogLine;
 
         return SKV_ERRNO_CONN_FAILED;
-      }
-    }
-    else
-    {
-      BegLogLine( 1 )
-        << "skv_client_conn_manager_if_t::ConnectToServer():: ERROR:: "
-        << " getting connection established event failed with status: "
-        << status << EndLogLine;
-
-      return SKV_ERRNO_CONN_FAILED;
     }
 
     it_event_t event_aff;
@@ -769,7 +771,7 @@ ConnectToServer( int                        aServerRank,
     status = it_evd_dequeue( mEvd_Aff_Hdl,
                              &event_aff );
 
-    if( status != IT_SUCCESS )
+    if(( status != IT_SUCCESS ) && ( status != IT_ERR_QUEUE_EMPTY ) )
     {
       BegLogLine( 1 )
         << "skv_client_conn_manager_if_t::ConnectToServer()::ERROR:: "
@@ -784,7 +786,7 @@ ConnectToServer( int                        aServerRank,
     status = it_evd_dequeue( mEvd_Unaff_Hdl,
                              &event_unaff );
 
-    if( status != IT_SUCCESS )
+    if(( status != IT_SUCCESS ) && ( status != IT_ERR_QUEUE_EMPTY ) )
     {
       BegLogLine( 1 )
         << "skv_client_conn_manager_if_t::ConnectToServer()::ERROR:: "
@@ -793,14 +795,24 @@ ConnectToServer( int                        aServerRank,
 
       return SKV_ERRNO_CONN_FAILED;
     }
+    // prevent extreme polling for connections and countdown for timeout
+    BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+      << "skv_client_conn_manager_if_t::ConnectToServer():: No connection event, retrying: " << ConnectTimeOut
+      << EndLogLine;
+
+    sleep(1);
+    ConnectTimeOut--;
   }
 
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
-    << "skv_client_conn_manager_if_t::ConnectToServer():: Leaving with SUCCESS"
-    << "aServerAddr.mName: " << aServerAddr.mName
+    << "skv_client_conn_manager_if_t::ConnectToServer():: Leaving with " << ConnectTimeOut
+    << " retries left. aServerAddr.mName: " << aServerAddr.mName
     << EndLogLine;
 
-  return SKV_SUCCESS;
+  if( ConnectTimeOut > 0 )
+    return SKV_SUCCESS;
+  else
+    return SKV_ERRNO_CONN_FAILED;
 }
 
 /***
@@ -920,7 +932,7 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
     if( status == IT_SUCCESS )
     {
       BegLogLine( 1 )
-        << "skv_client_conn_manager_if_t::ConnectToServer()::ERROR:: "
+        << "skv_client_conn_manager_if_t::DisconnectFromServer()::ERROR:: "
         << " event_number: " << event_unaff.event_number
         << EndLogLine;
 
