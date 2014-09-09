@@ -12,7 +12,7 @@ add_definitions(
 # enable logging in general
  -DPKFXLOG
 # all logging enabled
-# -DSKV_LOGGING_ALL=1
+ -DSKV_LOGGING_ALL=1
 
 # general detailed logging
 # -DSKV_DISTRIBUTION_MANAGER_LOG=1
