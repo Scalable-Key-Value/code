@@ -33,7 +33,7 @@ MPI_OBJ=$(SRC_CPP:%.cpp=${SKV_BUILD_DIR}/mpi/%.o)
 UNI_DEP=$(SRC_CPP:%.cpp=${SKV_BUILD_DIR}/%.d)
 MPI_DEP=$(SRC_CPP:%.cpp=${SKV_BUILD_DIR}/mpi/%.d)
 
-IT_API_OBJ=it_api_o_verbs.o it_api_o_verbs_thread.o
+IT_API_OBJ=it_api_o_${IT_API_IMPL}.o it_api_o_${IT_API_IMPL}_thread.o
 PATHED_IT_OBJ=$(IT_API_OBJ:%.o=${SKV_TOP}/build/%.o)
 
 COMMON_OBJ=skv_utils.o skv_distribution_manager.o skv_config.o

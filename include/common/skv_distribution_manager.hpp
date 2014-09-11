@@ -23,6 +23,10 @@ typedef unsigned int HashKeyT;
 #define SKV_HASH_DISTRIBUTION_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
+#endif
+
 struct skv_hash_func_t
 {
   unsigned long long mP;
@@ -43,6 +47,17 @@ struct skv_hash_func_t
     mA = 65413;
     mB = 16777049;    
   }
+  void EndianConvert(void)
+    {
+      mP=be64toh(mP) ;
+      mA=ntohl(mA) ;
+      mB=ntohl(mB) ;
+      BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+        << "Endian-converting hash function to mP=" << mP
+        << " mA=" << mA
+        << " mB=" << mB
+        << EndLogLine ;
+    }
 
   HashKeyT
   GetHashUINT( unsigned int aX )
@@ -58,7 +73,7 @@ struct skv_hash_func_t
   }
 
   HashKeyT
-  GetHashSimple( char* aData, int aLen )
+  GetHashSimple( const char* aData, int aLen )
   {      
     AssertLogLine( aData != NULL )
       << "skv_hash_func_t::GetHash() "
@@ -106,7 +121,7 @@ struct skv_hash_func_t
   }
 
   HashKeyT 
-  GetHash( char* aData, int aLen )
+  GetHash( const char* aData, int aLen )
   {
     AssertLogLine( aData != NULL )
       << "skv_hash_func_t::GetHash() "
@@ -161,6 +176,14 @@ struct skv_distribution_hash_t
 
   skv_status_t Init( int aCount );
   skv_status_t Finalize();
+  void EndianConvert(void)
+    {
+      mCount=ntohl(mCount) ;
+      BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+        << "mCount endian-converted to " << mCount
+        << EndLogLine ;
+      mHashFunc.EndianConvert() ;
+    }
   int GetNode( skv_key_t* aKey );
 
   // Input is a list of points to data

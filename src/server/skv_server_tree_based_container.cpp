@@ -261,6 +261,8 @@ InBoundsCheck( const char* aContext,
   uint64_t req_end = (uint64_t)aMem + (uint64_t)aSize;
   uint64_t sto_end = (uint64_t)mStartOfDataField + (uint64_t)mDataFieldLen;
 
+#if defined(DEBUG_USE_GLIBC_MALLOC)
+#else
   StrongAssertLogLine( aMem >= mStartOfDataField && 
                        req_end < sto_end )
     << "ERROR: "
@@ -269,7 +271,8 @@ InBoundsCheck( const char* aContext,
     << " aSize: " << aSize
     << " mDataFieldLen: " << mDataFieldLen
     << " mStartOfDataField: " << (void *) mStartOfDataField
-    << EndLogLine;  
+    << EndLogLine;
+#endif
 
   return SKV_SUCCESS;
 }
@@ -296,6 +299,19 @@ skv_status_t
 skv_tree_based_container_t::
 Deallocate( skv_lmr_triplet_t* aRemMemRep )
 {  
+  char* MemAddr = (char *) aRemMemRep->GetAddr();
+  if( MemAddr != NULL )
+  {
+    skv_server_heap_manager_t::Free( MemAddr );
+    aRemMemRep->SetAddr( NULL );
+  }
+
+  return SKV_SUCCESS;
+}
+
+static skv_status_t
+Deallocate( skv_lmr_triplet_t* aRemMemRep )
+{
   char* MemAddr = (char *) aRemMemRep->GetAddr();
   if( MemAddr != NULL )
   {
@@ -452,15 +468,22 @@ RetrieveNKeys( skv_pds_id_t       aPDSId,
         << " aListOfKeysMaxCount: " << aListOfKeysMaxCount
         << " Key: " << *key
         << EndLogLine;
+      BegLogLine(SKV_SERVER_TREE_BASED_CONTAINER_LOG)
+        << "Freestore &aRetrievedKeysSizesSegs[" << Index
+        << "]=" << & aRetrievedKeysSizesSegs[Index]
+        << EndLogLine ;
 
       aRetrievedKeysSizesSegs[Index].InitAbs( mDataLMR,
-                                              (char *) &key->mUserKey.mSize,
+                                              (char *) &key->mUserKey.mSizeBE,
                                               sizeof(int) );
 
       aRetrievedKeysSizesSegs[Index + 1].InitAbs( mDataLMR,
                                                   key->mUserKey.GetData(),
                                                   key->mUserKey.GetSize() );
 
+      BegLogLine(SKV_SERVER_TREE_BASED_CONTAINER_LOG)
+        << "Freestore"
+        << EndLogLine ;
       IterCount++;
       iter++;
       key = (skv_tree_based_container_key_t *) &(*iter);
@@ -488,7 +511,65 @@ RetrieveNKeys( skv_pds_id_t       aPDSId,
     return SKV_SUCCESS;
 }
 
+template<unsigned int N>
+class QueuedDeallocator
+  {
+  public:
+  unsigned int mIndex ;
+  char * mQueue[N] ;
+  QueuedDeallocator(void)
+    {
+      for(unsigned int i=0;i<N;i+=1)
+        {
+          mQueue[i] = NULL ;
+        }
+      mIndex = 0 ;
+    }
+  skv_status_t DeallocateOne(char * aRecordPtr)
+    {
+      if ( aRecordPtr != NULL)
+        {
+          BegLogLine(SKV_SERVER_TREE_BASED_CONTAINER_LOG)
+              << "Deallocating " << (void *) aRecordPtr
+              << " from queue"
+              << EndLogLine ;
+          skv_lmr_triplet_t TmpRMR;
+          TmpRMR.SetAddr( (char *) aRecordPtr );
+          return Deallocate( & TmpRMR );
+        }
+      return SKV_SUCCESS ;
+    }
+  void Flush(void)
+    {
+      for(unsigned int i=0;i<N;i+=1)
+        {
+          DeallocateOne(mQueue[(mIndex+i) % N]) ;
+          mQueue[(mIndex+i) % N] = NULL ;
+        }
+    }
+  ~QueuedDeallocator()
+    {
+      Flush() ;
+    }
+  skv_status_t QueuedDeallocate(char * aRecordPtr)
+    {
+      skv_status_t rc=DeallocateOne(mQueue[mIndex % N] ) ;
+      BegLogLine(SKV_SERVER_TREE_BASED_CONTAINER_LOG)
+        << "Queueing " << (void *) aRecordPtr
+        << " for deallocation"
+        << EndLogLine ;
+      mQueue[mIndex % N] = aRecordPtr ;
+      mIndex += 1 ;
+      return rc ;
+    }
+  };
 
+static skv_status_t
+QueuedDeallocate(char * aRecordPtr)
+  {
+    static QueuedDeallocator<8> QD ;
+    return QD.QueuedDeallocate(aRecordPtr) ;
+  }
 
 /***
  * skv_tree_based_container_t::Remove::
@@ -544,14 +625,16 @@ Remove( skv_pds_id_t             aPDSId,
     return SKV_ERRNO_ELEM_NOT_FOUND;
   }
 
-  skv_lmr_triplet_t TmpRMR;
-  TmpRMR.SetAddr( (char *) RecordPtr );
+//  skv_lmr_triplet_t TmpRMR;
+//  TmpRMR.SetAddr( (char *) RecordPtr );
 
   BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
     << "skv_tree_based_container_t::Remove():: Deallocating RMR and Leaving... "
     << EndLogLine;
 
-   return Deallocate( & TmpRMR );
+  return QueuedDeallocate((char *) RecordPtr) ;
+//   return Deallocate( & TmpRMR );
+//   return SKV_SUCCESS ;
 }
 
 
@@ -896,6 +979,10 @@ skv_status_t
 skv_tree_based_container_t::
 Finalize()
 {
+    BegLogLine(SKV_SERVER_TREE_BASED_CONTAINER_LOG)
+        << "Freeing mDataLMR=" << (void *) mDataLMR
+        << EndLogLine ;
+    it_lmr_free(mDataLMR) ;
 #if 0
   if( mDataMap != NULL )
   {

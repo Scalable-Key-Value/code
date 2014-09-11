@@ -281,11 +281,6 @@ main(int argc, char **argv)
         }
 #else
       char* Buffer = (char *) malloc( testDataSize );
-      if( commandHelpers[ t ].mBuffer == NULL )    
-        {
-        BegLogLine( 1, "error allocating command handles");
-        exit(1);
-        }
 #endif
 
       double InsertTimeStart = MPI_Wtime();

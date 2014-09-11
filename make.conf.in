@@ -27,6 +27,11 @@ SKV_FOR_NONBGQ=no
 # rocksdb  - rocksdb backend (tbd)
 SKV_LOCAL_KV_BACKEND=inmem
 
+# which implementation of it_api to use
+# verbs    - use the verbs based implementation (default)
+# sockets  - use the sockets based implementation
+IT_API_IMPL?=verbs
+
 # variable for build process verbosity
 # if set to no, only warnings, brief status and errors will show up
 # otherwise standard verbosity is used (showing executed commands etc)
@@ -43,14 +48,14 @@ endif
 
 
 # set backend options according to name of local kv back end
-LOCAL_KV_INCLUDE_OPTS_inmem=
+LOCAL_KV_INCLUDE_OPTS_inmem=-DSKV_LOCAL_KV=0
 LOCAL_KV_LIB_OPTS_inmem=
 
-LOCAL_KV_INCLUDE_OPTS_asyncmem=
+LOCAL_KV_INCLUDE_OPTS_asyncmem=-DSKV_LOCAL_KV=1
 LOCAL_KV_LIB_OPTS_asyncmem=
 
-LOCAL_KV_INCLUDE_OPTS_rocksdb=-I$(LOCAL_KV_DIR)/include
-LOCAL_KV_LIB_OPTS_rocksdb=$(LOCAL_KV_DIR)/librocksdb.a
+LOCAL_KV_INCLUDE_OPTS_rocksdb=-DSKV_LOCAL_KV=2 -I$(LOCAL_KV_DIR)/include
+LOCAL_KV_LIB_OPTS_rocksdb=-L/lib64 -lz -lbz2 $(LOCAL_KV_DIR)/librocksdb.a
 
 LOCAL_KV_INCLUDE_OPTS=${LOCAL_KV_INCLUDE_OPTS_${SKV_LOCAL_KV_BACKEND}}
 LOCAL_KV_LIB_OPTS=${LOCAL_KV_LIB_OPTS_${SKV_LOCAL_KV_BACKEND}}
@@ -149,9 +154,11 @@ SKV_CONFIG+=-DSKV_SERVER_LOCAL_KV=skv_local_kv_$(SKV_LOCAL_KV_BACKEND)
 ########################
 # server side local kv logging
 #SKV_CONFIG+=-DSKV_LOCAL_KV_ASYNCMEM_PROCESSING_LOG=1
+#SKV_CONFIG+=-DSKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG=1
 #SKV_CONFIG+=-DSKV_LOCAL_KV_BACKEND_LOG=1
 #SKV_CONFIG+=-DSKV_LOCAL_KV_QUEUES_LOG=1
-
+#SKV_CONFIG+=-DSKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG=1
+#SKV_CONFIG+=-DSKV_RDMA_BUFFER_ALLOCATOR_LOG=1
 
 ################
 # client logging
@@ -176,13 +183,13 @@ SKV_CONFIG+=-DSKV_SERVER_LOCAL_KV=skv_local_kv_$(SKV_LOCAL_KV_BACKEND)
 #SKV_CONFIG+=-DSKV_CLIENT_RETRIEVE_LOG=1
 #SKV_CONFIG+=-DSKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG=1
 #SKV_CONFIG+=-DSKV_CLIENT_REMOVE_LOG=1
+#SKV_CONFIG+=-DSKV_CLIENT_ENDIAN_LOG=1
 
 #SKV_CONFIG+=-DSKV_DEBUG_MSG_MARKER
 
 ##################################
 # logging in tests
 # activate inner-loop logging for test programm
-#SKV_CONFIG+=-DFXLOG_SKV_TEST_SINGLE_STEPS=1
 #SKV_CONFIG+=-DSKV_TEST_LOG=1
 SKV_CONFIG+=-DDO_CHECK
 #SKV_CONFIG+=-DSKV_TESTS_ENABLED
@@ -244,7 +251,7 @@ SKV_INCLUDE_DIRS=-I${FXLOGGER_DIR} -I${FXLOGGER_DIR}/Pk -I${SKV_TOP}/it_api/incl
 SKV_GLOBAL_CXXFLAGS=${SKV_CONFIG} ${SKV_INCLUDE_DIRS}  ${SKV_CCFLAGS}
 SKV_GLOBAL_CFLAGS=${SKV_CONFIG} ${SKV_INCLUDE_DIRS}  -std=c99
 
-SKV_GLOBAL_LDFLAGS=${SKV_CONFIG} ${SKV_CCFLAGS} ${FXLOGGER_DIR}/libPkLinux.a ${SKV_TOP}/build/libit_api_o_verbs.a -L${MPI_DIR}/lib ${LOCAL_KV_LIB_OPTS} ${SKV_GLOBAL_LDFLAGS_EXTENSION} -lrt
+SKV_GLOBAL_LDFLAGS=${SKV_CONFIG} ${SKV_CCFLAGS} ${FXLOGGER_DIR}/libPkLinux.a ${SKV_TOP}/build/libit_api_o_${IT_API_IMPL}.a -L${MPI_DIR}/lib ${LOCAL_KV_LIB_OPTS} ${SKV_GLOBAL_LDFLAGS_EXTENSION} -lrt
 
 
 #############################################

@@ -614,8 +614,14 @@ ProcessEvent( skv_server_state_t  aState,
         {
           // Figure out the command
           skv_server_ep_state_t* StateForEP;
+          BegLogLine(SKV_PROCESS_IT_EVENT_LOG)
+            << "About to call InitNewStateForEP"
+            << EndLogLine ;
           status = mNetworkEventManager.InitNewStateForEP( mEPStateMap,
                                                            &StateForEP );
+          BegLogLine(SKV_PROCESS_IT_EVENT_LOG)
+            << "Back from InitNewStateForEP"
+            << EndLogLine ;
 
           int ConnCommandOrdinal = StateForEP->GetConnCommandOrdinal();
 
@@ -1475,8 +1481,17 @@ Init( int   aRank,
    *   and we loose the automatic setup of this by placing only one address into the machinefile
    */
   ifent = iflist;
+  BegLogLine(SKV_SERVER_INIT_LOG)
+    << "Examining from ifent=" << ifent
+    << EndLogLine ;
   while( ifent )
   {
+    BegLogLine(SKV_SERVER_INIT_LOG)
+        << "ifa_name=" << ifent->ifa_name
+        << " sa_family=" << ifent->ifa_addr->sa_family
+        << " GetCommIF()=" << mSKVConfiguration->GetCommIF()
+        << " AF_INET=" << AF_INET
+        << EndLogLine ;
     if( strncmp( ifent->ifa_name, mSKVConfiguration->GetCommIF(), strlen( ifent->ifa_name ) ) == 0 )
     {
       if( ifent->ifa_addr->sa_family == AF_INET )
@@ -1490,7 +1505,7 @@ Init( int   aRank,
                   (int) ((char*) &(tmp->sin_addr.s_addr))[2],
                   (int) ((char*) &(tmp->sin_addr.s_addr))[3] );
         BegLogLine( 1 )
-          << "skv_server_t: got addr: " << (void*)my_addr.sin_addr.s_addr << "; fam: " << tmp->sin_family
+          << "skv_server_t: got addr: " << (void*)(uintptr_t)my_addr.sin_addr.s_addr << "; fam: " << tmp->sin_family
           << " ServerName:" << ServerName
           << EndLogLine;
         break;

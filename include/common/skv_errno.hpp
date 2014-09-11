@@ -65,10 +65,10 @@ typedef enum
 
 static
 const char*
-skv_status_to_string( skv_status_t aStatus )
+skv_status_to_string( const skv_status_t aStatus )
 {
   switch( aStatus )
-    {
+  {
     case SKV_SUCCESS:                                          { return "SKV_SUCCESS"; }
     case SKV_ERRNO_NODE_NOT_OWNER:                             { return "SKV_ERRNO_NODE_NOT_OWNER"; } 
     case SKV_ERRNO_NODE_FULL:                                  { return "SKV_ERRNO_NODE_FULL"; }
@@ -111,11 +111,11 @@ skv_status_to_string( skv_status_t aStatus )
     case SKV_ERRNO_STATE_MACHINE_ERROR:                        { return "SKV_ERRNO_STATE_MACHINE_ERROR"; }
     case SKV_ERRNO_UNSPECIFIED_ERROR:                          { return "SKV_ERRNO_UNSPECIFIED_ERROR"; }
     default:
-      {
-        printf( "skv_status_to_string: ERROR:: aStatus: %d is not recognized\n", aStatus );
-        return "SKV_ERRNO_UNKNOWN_STATE";
-      }
+    {
+      printf( "skv_status_to_string: ERROR:: aStatus: %d is not recognized or wrong endian\n", aStatus );
+      return "SKV_ERRNO_UNKNOWN_STATE";
     }
+  }
 }
 
 #endif

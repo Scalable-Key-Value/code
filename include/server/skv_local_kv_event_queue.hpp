@@ -36,7 +36,7 @@ public:
     for( int i=0; i<SKV_LOCAL_KV_MAX_EVENTS; i++ )
     {
       mEventPool[ i ].mType = SKV_SERVER_EVENT_TYPE_NONE;
-      mEventPool[ i ].mCookie = NULL;
+      mEventPool[ i ].mCookie = 0;
       mFreeEvents.push( &(mEventPool[ i ]) );
 
     }
@@ -46,12 +46,11 @@ public:
   {
     skv_local_kv_event_t *Event = NULL;
 
+    mQueueSerializer.lock();
     if( ! mActiveEventQueue.empty() )
     {
-      mQueueSerializer.lock();
       Event = mActiveEventQueue.front();
       mActiveEventQueue.pop();
-      mQueueSerializer.unlock();
 
       BegLogLine( SKV_LOCAL_KV_QUEUES_LOG )
         << "skv_local_kv_event_queue_t::GetEvent(): Event fetched"
@@ -59,6 +58,7 @@ public:
         << " type: " << skv_server_event_type_to_string( Event->mType )
         << EndLogLine;
     }
+    mQueueSerializer.unlock();
 
     return Event;
   }
@@ -66,9 +66,9 @@ public:
   skv_status_t AckEvent( skv_local_kv_event_t *aEvent )
   {
     mQueueSerializer.lock();
-    mFreeEvents.push(aEvent);
     aEvent->mType = SKV_SERVER_EVENT_TYPE_NONE;
-    aEvent->mCookie = NULL;
+    aEvent->mCookie = 0;
+    mFreeEvents.push(aEvent);
     mQueueSerializer.unlock();
     return SKV_SUCCESS;
   }
@@ -79,20 +79,19 @@ public:
 
     skv_local_kv_event_t *Event = NULL;
 
+    mQueueSerializer.lock();
     if( mFreeEvents.empty() )
     {
+      mQueueSerializer.unlock();
       return SKV_ERRNO_PENDING_COMMAND_LIMIT_REACHED;
     }
 
-    mQueueSerializer.lock();
     Event = mFreeEvents.top();
     mFreeEvents.pop();
-    mQueueSerializer.unlock();
 
     Event->mType = SKV_SERVER_EVENT_TYPE_LOCAL_KV_CMPL;
     Event->mCookie = *aCookie;
 
-    mQueueSerializer.lock();
     mActiveEventQueue.push(Event);
     mQueueSerializer.unlock();
 

@@ -22,6 +22,8 @@
 #define SKV_SERVER_RETRIEVE_TRACE ( 0 )
 #endif
 
+//#define SKV_RETRIEVE_DATA_LOG
+
 class skv_server_retrieve_command_sm
 {
   static inline
@@ -59,6 +61,8 @@ class skv_server_retrieve_command_sm
 
     skv_server_rdma_write_cmpl_cookie_t Cookie;
     skv_rmr_triplet_t *RemoteMemRepValue = &(aReq->mRMRTriplet);
+
+    RemoteMemRepValue->EndianConvert() ;
 
     Cookie.Init( aEPState,
                  EPSTATE_RetrieveWriteComplete,
@@ -143,6 +147,7 @@ class skv_server_retrieve_command_sm
       << EndLogLine;
 
     aCmpl->mStatus = aRC;
+    aCmpl->EndianConvert() ;
 
     skv_status_t status = aEPState->Dispatch( aCommand,
                                               aSeqNo,
@@ -262,6 +267,8 @@ public:
             skv_lmr_triplet_t ValueMemRep;
             int TotalSize = 0;
 
+            Req->EndianConvert() ;
+
             if( Req->mFlags & (SKV_COMMAND_RIU_INSERT_KEY_FITS_IN_CTL_MSG|SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
             {
               status = retrieve_sequence( aEPState,
@@ -275,6 +282,9 @@ public:
             }
             else
             {
+                BegLogLine(1)
+                    << "Key does not fit in ctl msg -- setting status to SKV_ERRNO_KEY_TOO_LARGE"
+                    << EndLogLine ;
               status = SKV_ERRNO_KEY_TOO_LARGE;
             }
 
@@ -283,6 +293,15 @@ public:
               case SKV_SUCCESS:
                 if( Req->mFlags & (SKV_COMMAND_RIU_INSERT_KEY_FITS_IN_CTL_MSG|SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
                 {
+#ifdef SKV_RETRIEVE_DATA_LOG
+                  HexDump FxString( (const void*)ValueMemRep.GetAddr(), ValueMemRep.GetLen() );
+
+                  BegLogLine( 1 )
+                    << "skv_server_retrieve_command_sm:: "
+                    << " Size: " << ValueMemRep.GetLen()
+                    << " FxString: " << FxString
+                    << EndLogLine;
+#endif
                   memcpy( Resp->mValue.mData,
                         (const void*) ValueMemRep.GetAddr(),
                         ValueMemRep.GetLen() );
@@ -385,6 +404,15 @@ public:
 
                 if( Req->mFlags & (SKV_COMMAND_RIU_INSERT_KEY_FITS_IN_CTL_MSG|SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
                 {
+#ifdef SKV_RETRIEVE_DATA_LOG
+                  HexDump FxString( (const void*)ValueMemRep->GetAddr(), ValueMemRep->GetLen() );
+
+                  BegLogLine( 1 )
+                    << "skv_server_retrieve_command_sm:: "
+                    << " Size: " << ValueMemRep->GetLen()
+                    << " FxString: " << FxString
+                    << EndLogLine;
+#endif
                   memcpy( Resp->mValue.mData,
                           (const void*) ValueMemRep->GetAddr(),
                           ValueMemRep->GetLen() );
@@ -395,7 +423,7 @@ public:
                     << "skv_server_retrieve_command_sm:: BUG: data doesn't fit into Ctrl-msg with incorrect return code."
                     << EndLogLine;
 
-                status = aLocalKV->RetrievePostProcess( &(Command->mLocalKVData.mRDMA.mReqCtx) );
+                status = aLocalKV->RetrievePostProcess( Command->mLocalKVData.mRDMA.mReqCtx );
                 if( status == SKV_ERRNO_LOCAL_KV_EVENT )
                   status = SKV_SUCCESS;
 
@@ -434,7 +462,7 @@ public:
         {
           case SKV_SERVER_EVENT_TYPE_IT_DTO_RDMA_WRITE_CMPL:
           {
-            status = aLocalKV->RetrievePostProcess( &(Command->mLocalKVData.mRDMA.mReqCtx) );
+            status = aLocalKV->RetrievePostProcess( Command->mLocalKVData.mRDMA.mReqCtx );
             status = command_completion( status,
                                          aEPState,
                                          (skv_cmd_retrieve_value_rdma_write_ack_t*)Command->GetSendBuff(),

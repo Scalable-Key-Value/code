@@ -145,6 +145,9 @@ AllocateAndMoveKey( skv_cmd_RIU_req_t *aReq,
           aReq->mKeyValue.mData,
           aReq->mKeyValue.mKeySize );
   /******************************************/
+  BegLogLine(SKV_LOCAL_KV_BACKEND_LOG)
+    << "Key placed in memory at " << (void *) (aNewRecordAllocRep->GetAddr())
+    << EndLogLine ;
 
   return status;
 }
@@ -578,6 +581,9 @@ skv_local_kv_inmem::Insert( skv_cmd_RIU_req_t *aReq,
             &aReq->mKeyValue.mData[KeySize],
             ValueSize );
 
+    BegLogLine(SKV_LOCAL_KV_BACKEND_LOG)
+      << "Value placed in memory at " << (void *)(aValueRDMADest->GetAddr())
+      << EndLogLine ;
   }
   else
     // signal that this command is going to require async data transfer
@@ -873,7 +879,6 @@ skv_local_kv_inmem::BulkInsert( skv_pds_id_t aPDSId,
     {
       static unsigned long long DupCount = 0;
 
-      Deallocate( aLocalBuffer );
       LoopStatus = SKV_ERRNO_RECORD_ALREADY_EXISTS;
 
       DupCount++;
@@ -882,7 +887,6 @@ skv_local_kv_inmem::BulkInsert( skv_pds_id_t aPDSId,
         << DupCount
         << EndLogLine;
 
-      // SKV_SERVER_BULK_INSERT_DISPATCH_ERROR_RESP( SKV_ERRNO_RECORD_ALREADY_EXISTS, 0 );
       continue;
     }
 
@@ -962,12 +966,18 @@ skv_status_t
 skv_local_kv_inmem::Allocate( int aBuffSize,
                               skv_lmr_triplet_t *aRDMARep )
 {
+    BegLogLine(SKV_LOCAL_KV_BACKEND_LOG)
+        << "Allocating buffer, size=" << aBuffSize
+        << EndLogLine ;
   return mPDSManager.Allocate( aBuffSize, aRDMARep );
 }
 
 skv_status_t
 skv_local_kv_inmem::Deallocate ( skv_lmr_triplet_t *aRDMARep )
 {
+    BegLogLine(SKV_LOCAL_KV_BACKEND_LOG)
+        << "Deallocating buffer"
+        << EndLogLine ;
    return mPDSManager.Deallocate( aRDMARep );
 }
 

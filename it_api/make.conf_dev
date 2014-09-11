@@ -1,5 +1,39 @@
+########################################
+# Copyright (c) IBM Corp. 2014
+# All rights reserved. This program and the accompanying materials
+# are made available under the terms of the Eclipse Public License v1.0
+# which accompanies this distribution, and is available at
+# http://www.eclipse.org/legal/epl-v10.html
+########################################
 ifndef FXLOGGER_DIR
    FXLOGGER_DIR=$(shell if ! test -e ${ITAPE_TOP}/../FxLogger; then echo "${ITAPE_TOP}/../../shared/FxLogger"; else echo "${ITAPE_TOP}/../FxLogger"; fi)
    export FXLOGGER_DIR
 endif
 
+SKV_TARGET?=linux
+
+# set version to C11 if you build for rocksdb backend (use something else like C0x otherwise)
+GCCVER=C0x
+
+ifeq (${SKV_TARGET}, linux)
+	# branch settings for newer gcc (c++11 support)
+	ifeq (${GCCVER}, C11)
+	  CC_DIR=/home/lschneid/opt/gcc47
+	  export LD_LIBRARY_PATH=${CC_DIR}/../mpc/lib:${CC_DIR}/lib:${CC_DIR}/lib64
+	  SKV_CXXFLAGS=-mcpu=a2 -mtune=a2 -Wno-unused-but-set-variable -Wno-int-to-pointer-cast -O3 -std=c++11
+	else
+	  SKV_CXXFLAGS=-std=c++0x -Wno-int-to-pointer-cast
+	  CC_DIR=/usr
+	endif
+	
+	export CC=${CC_DIR}/bin/gcc
+	export CXX=${CC_DIR}/bin/g++
+
+else
+  # Target the build for compute nodes
+  SKV_CCFLAGS=-std=c++0x -Wno-int-to-pointer-cast -I /bgsys/drivers/ppcfloor -DPK_CNK
+  CC_DIR=/bgsys/drivers/ppcfloor/gnu-linux
+  PREFIX=powerpc64-bgq-linux-
+  export CC=${CC_DIR}/bin/${PREFIX}gcc
+  export CXX=${CC_DIR}/bin/${PREFIX}g++
+endif

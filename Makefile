@@ -75,7 +75,11 @@ ${FXLOGGER_DIR}/libPkLinux.a:
 	$(MAKE) -C $(FXLOGGER_DIR)
 
 ARCH=`/bin/arch`
-.PHONY: rpm
+FULL_PATH_LIST=$(shell cat release/skv_files.list)
+MODULE_NAME=skv
+TARGZ_FILE=$(MODULE_NAME)-$(VERSION_LABEL).tar.gz
+
+.PHONY: rpm release
 rpm:
 	rpmbuild -bb \
 		--define "_topdir $(RPM_DIR)"  \
@@ -86,3 +90,11 @@ rpm:
 	cp $(RPM_DIR)/RPMS/$(ARCH)/bgas-skv-$(RPM_VERSION)*.rpm $(RPM_DIR)/ionode-opt-RPMS
 	mkdir -p $(RPM_DIR)/frontendnode-opt-RPMS && \
 	cp $(RPM_DIR)/RPMS/$(ARCH)/bgas-skv-devel-$(RPM_VERSION)*.rpm $(RPM_DIR)/frontendnode-opt-RPMS
+
+
+release: $(RPM_DIR)/SOURCES/$(TARGZ_FILE)
+
+$(RPM_DIR)/SOURCES/$(TARGZ_FILE):  Makefile
+	mkdir -p $(RPM_DIR)/SOURCES
+	tar cvfz $@ -C ..  $(FULL_PATH_LIST)
+

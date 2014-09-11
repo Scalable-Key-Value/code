@@ -237,7 +237,7 @@ skv_local_kv_asyncmem::PerformOpen( skv_local_kv_request_t *aReq )
                                           aReq->mRequest.mOpen.mPrivs,
                                           aReq->mRequest.mOpen.mFlags,
                                           &PDSId );
-  BegLogLine(1)
+  BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
     << "OPEN REQUEST COMPLETE"
     << EndLogLine;
 
@@ -818,7 +818,7 @@ skv_local_kv_asyncmem::Insert( skv_pds_id_t& aPDSId,
 }
 
 skv_status_t
-skv_local_kv_asyncmem::InsertPostProcess(  skv_local_kv_req_ctx_t *aReqCtx,
+skv_local_kv_asyncmem::InsertPostProcess(  skv_local_kv_req_ctx_t aReqCtx,
                                            skv_lmr_triplet_t *aValueRDMADest,
                                            skv_local_kv_cookie_t *aCookie )
 {
@@ -932,7 +932,7 @@ skv_local_kv_asyncmem::PerformBulkInsert( skv_local_kv_request_t *aReq )
 #endif
 
   BegLogLine(  SKV_LOCAL_KV_BACKEND_LOG )
-    << "skv_local_kv_inmem:: "
+    << "skv_local_kv_asyncmem:: "
     << " PDSId: " << BIReq->mPDSId
     << " LocalBufferSize: " << LocalBufferSize
     << " LocalBuffer: " << (void *) LocalBufferAddr
@@ -957,7 +957,7 @@ skv_local_kv_asyncmem::PerformBulkInsert( skv_local_kv_request_t *aReq )
                                                      ValueSize );
 
     AssertLogLine( ( KeySize > 0 ) && ( KeySize <= SKV_KEY_LIMIT ) )
-      << "skv_server_bulk_insert_command_sm::Execute(): ERROR: "
+      << "skv_local_kv_asyncmem: ERROR: "
       << " KeySize: " << KeySize
       << " SKV_KEY_LIMIT: " << SKV_KEY_LIMIT
       << " TotalProcessed: " << TotalProcessed
@@ -999,16 +999,14 @@ skv_local_kv_asyncmem::PerformBulkInsert( skv_local_kv_request_t *aReq )
     {
       static unsigned long long DupCount = 0;
 
-      Deallocate( &BIReq->mLocalBuffer );
       LoopStatus = SKV_ERRNO_RECORD_ALREADY_EXISTS;
 
       DupCount++;
       BegLogLine( 0 )
-        << "skv_server_bulk_insert_command_sm::Execute(): DUP_COUNT: "
+        << "skv_local_kv_asyncmem: DUP_COUNT: "
         << DupCount
         << EndLogLine;
 
-      // SKV_SERVER_BULK_INSERT_DISPATCH_ERROR_RESP( SKV_ERRNO_RECORD_ALREADY_EXISTS, 0 );
       continue;
     }
 
@@ -1017,7 +1015,7 @@ skv_local_kv_asyncmem::PerformBulkInsert( skv_local_kv_request_t *aReq )
                        & NewRecordAllocRep );
 
     AssertLogLine( status == SKV_SUCCESS )
-      << "skv_server_bulk_insert_command_sm::Execute(): ERROR:: "
+      << "skv_local_kv_asyncmem: ERROR:: "
       << " status: " << skv_status_to_string( status )
       << EndLogLine;
 
@@ -1040,7 +1038,7 @@ skv_local_kv_asyncmem::PerformBulkInsert( skv_local_kv_request_t *aReq )
                      (skv_local_kv_cookie_t*)NULL );
 
     AssertLogLine( status == SKV_SUCCESS )
-      << "skv_server_bulk_insert_command_sm::Execute(): ERROR:: "
+      << "skv_local_kv_asyncmem: ERROR:: "
       << " status: " << skv_status_to_string( status )
       << EndLogLine;
     /****************************************************/
@@ -1188,7 +1186,7 @@ skv_local_kv_asyncmem::PerformRetrieve( skv_local_kv_request_t *aReq )
 }
 
 skv_status_t
-skv_local_kv_asyncmem::RetrievePostProcess(   skv_local_kv_req_ctx_t *aReqCtx )
+skv_local_kv_asyncmem::RetrievePostProcess( skv_local_kv_req_ctx_t aReqCtx )
 {
   // with a real async backend, we would have to clean up state after the rdma transfer (e.g. release buffers, locks, etc...)
   skv_status_t status = SKV_SUCCESS;

@@ -19,16 +19,16 @@ endif
 # e.g.: IT_API_DEST, IT_API_BASE_DIR, IT_API_GLOBAL_*FLAGS, ...
 include $(ITAPE_TOP)/make.conf
 
-SRC_CPP=it_api_o_verbs.cpp it_api_o_verbs_thread.cpp
+SRC_CPP=it_api_o_${IT_API_IMPL}.cpp it_api_o_${IT_API_IMPL}_thread.cpp
 
-IT_API_CXXFLAGS=-O2 -g -I${IT_API_INCLUDE_DIR} ${IT_API_GLOBAL_CXXFLAGS}
+IT_API_CXXFLAGS=-g -O3 -I${IT_API_INCLUDE_DIR} ${IT_API_GLOBAL_CXXFLAGS}
 
 OBJ=$(SRC_CPP:%.cpp=${BUILD_DIR}/%.o)
 DEP=$(SRC_CPP:%.cpp=${BUILD_DIR}/%.d)
 
 all: build
 
-build: ${OBJ} ${BUILD_DIR}/libit_api_o_verbs.a
+build: ${OBJ} ${BUILD_DIR}/libit_api_o_${IT_API_IMPL}.a
 	@echo "Finished common build..."
 
 
@@ -36,10 +36,8 @@ install: build
 	@echo "Starting install now..."
 
 
-${BUILD_DIR}/libit_api_o_verbs.a: ${OBJ}
+${BUILD_DIR}/libit_api_o_${IT_API_IMPL}.a: ${OBJ}
 	$(AR) r $@ $^
-
-
 
 ${BUILD_DIR}/%.o: %.cpp
 	$(CXX) -c $(IT_API_CXXFLAGS) $< -o $@
@@ -49,7 +47,7 @@ ${BUILD_DIR}/%.o: %.cpp
 
 .PHONY: clean distclean
 clean distclean:
-	-rm ${OBJ} ${DEP} ${BUILD_DIR}/libit_api_o_verbs.a
+	-rm ${OBJ} ${DEP} ${BUILD_DIR}/libit_api_o_${IT_API_IMPL}.a
 
 
 

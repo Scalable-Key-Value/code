@@ -27,21 +27,32 @@
 /* class implements a wrapping ringbuffer pointer and provides several arithmetic and boolean operators */
 class skv_ringbuffer_ptr {
   char *mBase;   // start address of memory
-  size_t mSize;  // length of the memory
   char *mPtr;    // current location
+  size_t mSize;  // length of the memory
+  size_t mGranularity; // minimum alignment for pointers and sizes
   bool mWrapped; // double buffering to allow comparison of addresses beyond the wrap-around
 
-public:
-  skv_ringbuffer_ptr( const char *aBase=NULL, size_t aSize=0 )
+  inline char* alignedPtr( const char *a )
   {
-    mBase = (char*)aBase;
-    mPtr = mBase;
-    mSize = aSize;
-    mWrapped = false;
+    return ((uintptr_t)a % mGranularity) ? (char*)( (uintptr_t)a + (mGranularity- ( (uintptr_t)a % mGranularity)) ) : (char*)a;
+  }
+  inline size_t alignedSize( const size_t s )
+  {
+    return (s % mGranularity) ? s + ( mGranularity - ( s % mGranularity )) : s;
+  }
+public:
+  skv_ringbuffer_ptr( const char *aBase=NULL, size_t aSize=0, size_t aGranularity=sizeof(uintptr_t) )
+  {
+    Init( aBase, aSize, aGranularity );
   }
   ~skv_ringbuffer_ptr() {}
-  void Init( const char *aBase=NULL, size_t aSize=0 )
+  void Init( const char *aBase=NULL, size_t aSize=0, size_t aGranularity=sizeof(uintptr_t) )
   {
+    StrongAssertLogLine( ((uintptr_t)aBase % aGranularity == 0) && (aSize % aGranularity == 0) )
+      << "skv_ringbuffer_ptr(): unaligned memory base pointer: " << (void*)aBase
+      << " requested granularity: " << aGranularity
+      << EndLogLine;
+    mGranularity = aGranularity;
     mBase = (char*)aBase;
     mPtr = mBase;
     mSize = aSize;
@@ -56,20 +67,28 @@ public:
   // operators
   skv_ringbuffer_ptr& operator+( const int aAdd )
   {
-    bool towrap = (( intptr_t(mPtr-mBase) + aAdd) >= (intptr_t)mSize);
+    size_t addSize = alignedSize( aAdd );
+    bool towrap = (( intptr_t(mPtr-mBase) + (intptr_t)addSize) >= (intptr_t)mSize);
     mWrapped = ( mWrapped != towrap );
-    mPtr = mBase + (GetOffset() + aAdd) % mSize;
+    mPtr = mBase + (GetOffset() + addSize) % mSize;
     return (*this);
   }
   skv_ringbuffer_ptr& operator-( const int aSub )
   {
-    bool towrap = ( intptr_t(mPtr - mBase) < (intptr_t)aSub );
+    size_t subSize = alignedSize( aSub );
+    bool towrap = ( intptr_t(mPtr - mBase) < (intptr_t)subSize );
     mWrapped = ( mWrapped != towrap );
-    mPtr = mBase + (GetOffset() + mSize - aSub ) % mSize;
+    mPtr = mBase + (( (intptr_t)GetOffset() + 2 * mSize ) - subSize) % mSize;
     return (*this);
   }
   skv_ringbuffer_ptr& operator-( const skv_ringbuffer_ptr &aSub )
   {
+    StrongAssertLogLine( ( aSub.mPtr - aSub.mBase ) % mGranularity == 0 )
+      << "skv_ringbuffer_ptr:operator-(): unaligned ptr in operand (maybe incompatible ringbuffer pointers with different granularity) "
+      << " offset: " << aSub.mPtr - aSub.mBase
+      << " gran: " << mGranularity
+      << EndLogLine;
+
     bool towrap = ( (mPtr - mBase) < (aSub.mPtr - aSub.mBase) );
     mWrapped = ( mWrapped != towrap );
     mPtr = mBase + ( mPtr + mSize - aSub.mPtr ) % mSize;
@@ -149,18 +168,24 @@ struct skv_lmr_wait_queue_t {
 
 class skv_local_kv_rdma_data_buffer_t {
   char *mDataArea;
+  size_t mChunkSize;
+  size_t mAlignment;
   skv_lmr_triplet_t mLMR;
   skv_rmr_triplet_t mRMR;
 
   skv_ringbuffer_ptr mFirstFree;
   skv_ringbuffer_ptr mLastBusy;
+  skv_mutex_t mSerializer;
 
-  static const int mHeadSpace = sizeof( skv_lmr_wait_queue_t );
+  int mHeadSpace;
 
 public:
   skv_local_kv_rdma_data_buffer_t()
   {
     mDataArea = NULL;
+    mChunkSize = 0;
+    mAlignment = 0;
+    mHeadSpace = sizeof( skv_lmr_wait_queue_t );
     mRMR.Init( (it_rmr_context_t)0, 0, 0 );
     mLMR.InitAbs( (it_lmr_handle_t)0, 0, 0 );
   }
@@ -177,13 +202,26 @@ public:
   }
   skv_status_t Init( it_pz_handle_t aPZ_Hdl,
                      size_t aDataAreaSize,
-                     size_t aDataChunkSize )
+                     size_t aDataChunkSize,
+                     size_t aAlignment=sizeof(uintptr_t) )
   {
-    mDataArea = new char[ aDataAreaSize ];
+    StrongAssertLogLine( aDataAreaSize % aAlignment == 0 )
+      << "skv_local_kv_rdma_data_buffer_t::Init(): Area size has to be multiple of Alignment"
+      << " size=" << aDataAreaSize
+      << " align=" << aAlignment
+      << EndLogLine;
 
+    mAlignment = aAlignment;
+    size_t pad = sizeof( skv_lmr_wait_queue_t) - (sizeof( skv_lmr_wait_queue_t ) % aAlignment);
+    if( pad==aAlignment ) pad = 0;
+    mHeadSpace = sizeof( skv_lmr_wait_queue_t) + pad;
+
+    mDataArea = new char[ aDataAreaSize ];
     StrongAssertLogLine( mDataArea != NULL )
       << "skv_local_kv_rdma_data_buffer_t::Init(): Failed to allocate data area of size: " << aDataAreaSize
       << EndLogLine;
+
+    mChunkSize = aDataChunkSize;
 
     it_mem_priv_t privs     = (it_mem_priv_t) ( IT_PRIV_LOCAL | IT_PRIV_REMOTE );
     it_lmr_flag_t lmr_flags = IT_LMR_FLAG_NON_SHAREABLE;
@@ -209,14 +247,30 @@ public:
     mLMR.InitAbs( lmr, mDataArea, aDataAreaSize );
     mRMR.Init( rmr, mDataArea, aDataAreaSize );
 
-    mFirstFree.Init( mDataArea, aDataAreaSize );
-    mLastBusy.Init( mDataArea, aDataAreaSize );
+    mFirstFree.Init( mDataArea, aDataAreaSize, mAlignment );
+    mLastBusy.Init( mDataArea, aDataAreaSize, mAlignment );
+
+    BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
+      << "skv_local_kv_rdma_data_buffer_t: FF[" << (uintptr_t)mFirstFree.GetPtr() << "]"
+      << " LB[" << (uintptr_t)mLastBusy.GetPtr() << "]"
+      << " mHeadSpace=" << mHeadSpace
+      << " mAlignment=" << mAlignment
+      << EndLogLine;
+
 
     return SKV_SUCCESS;
   }
   inline size_t GetSize()
   {
     return mLMR.GetLen()-mHeadSpace;
+  }
+  inline size_t GetAllocSize()
+  {
+    return mChunkSize;
+  }
+  inline it_lmr_handle_t GetLMR()
+  {
+    return mLMR.GetLMRHandle();
   }
   inline bool IsEmpty()
   {
@@ -271,7 +325,7 @@ public:
     }
 
     aLMR->InitAbs( mLMR.GetLMRHandle(), mFirstFree.GetPtr()+mHeadSpace, aSize );
-    memset( (void*)aLMR->GetAddr(), 0x5a, aSize );
+//    memset( (void*)aLMR->GetAddr(), 0x5a, aSize );
     lmrState->mSize = aSize;
     lmrState->mState = SKV_LMR_STATE_BUSY;
 
@@ -284,6 +338,7 @@ public:
       << " NF.ptr=" << (uintptr_t)newFirst.GetPtr()
       << " lmr.size=" << aLMR->GetLen()
       << " lmrstate@" << (uintptr_t)lmrState << "[" << lmrState->mSize << ":" << lmrState->mState << "]"
+      << " lmr: " << *aLMR
       << EndLogLine;
 
     mFirstFree = newFirst;
@@ -304,9 +359,16 @@ public:
     bool released;
     skv_lmr_wait_queue_t *lmrState = (skv_lmr_wait_queue_t*)(aLMR->GetAddr() - mHeadSpace);
 
-    StrongAssertLogLine( lmrState->mSize == aLMR->GetLen() )
+    BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
+      << "ReleaseDataArea: About to release: [" << aLMR->GetAddr()-mHeadSpace << ":" << aLMR->GetLen() << "]"
+      << " NIL[" << (uintptr_t)mLastBusy.GetPtr() << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
+      << EndLogLine;
+
+    StrongAssertLogLine( ((lmrState->mSize == aLMR->GetLen()) || (lmrState->mState == SKV_LMR_STATE_BUSY)) )
       << "skv_local_kv_rdma_data_buffer_t::ReleaseDataArea():  Protocol mismatch. LMR.len (" << aLMR->GetLen()
       << ") doesn't match stored buffer len (" << lmrState->mSize << "). entry@" << (uintptr_t)lmrState
+      << " state: " << lmrState->mState << " != " << SKV_LMR_STATE_BUSY
+      << " NIL[" << (uintptr_t)mLastBusy.GetPtr() << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
       << EndLogLine;
 
     // if LMR matches the oldest data buffer entry, release it, otherwise push it to the wait queue
@@ -315,7 +377,7 @@ public:
     {
       BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
         << "ReleaseDataArea: deferring release of LMR[" << aLMR->GetAddr() << ":" << aLMR->GetLen() << "]"
-        << " NIL[" << (uintptr_t)mLastBusy.GetPtr()+mHeadSpace << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
+        << " NIL[" << (uintptr_t)mLastBusy.GetPtr() << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
         << EndLogLine;
     }
     lmrState->mState = SKV_LMR_STATE_TORELEASE;
@@ -328,16 +390,58 @@ public:
       if( released )
       {
         BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
-          << "ReleaseDataArea: oldEntry[" << (uintptr_t)lmrToRelease+mHeadSpace << ":" << lmrToRelease->mSize << "]"
-          << " NIL[" << (uintptr_t)mLastBusy.GetPtr()+mHeadSpace << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
+          << "ReleaseDataArea: oldEntry[" << (uintptr_t)lmrToRelease << ":" << lmrToRelease->mSize << "]"
+          << " NIL[" << (uintptr_t)mLastBusy.GetPtr() << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
+          << " mod_align:" << (lmrToRelease->mSize + mHeadSpace)%mAlignment
           << EndLogLine;
         mLastBusy = mLastBusy + (lmrToRelease->mSize + mHeadSpace);
+        BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
+          << "ReleaseDataArea: inc:" << (lmrToRelease->mSize + mHeadSpace) << "; newLast[" << (uintptr_t)mLastBusy.GetPtr()+mHeadSpace << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
+          << EndLogLine;
         lmrToRelease->mState = SKV_LMR_STATE_FREE;
         lmrToRelease->mSize = 6666;
       }
+//      else
+//        BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
+//          << "ReleaseDataArea: LB.state:" << lmrToRelease->mState
+//          << " oldEntry[" << (uintptr_t)lmrToRelease+mHeadSpace << ":" << lmrToRelease->mSize << "]"
+//          << " NIL[" << (uintptr_t)mLastBusy.GetPtr() << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
+//          << " mod_align:" << (lmrToRelease->mSize + mHeadSpace)%mAlignment
+//          << EndLogLine;
+
     }
 
     return SKV_SUCCESS;
+  }
+  skv_status_t AcquireDataAreaPtr( size_t aSize, char** aPointer )
+  {
+    skv_lmr_triplet_t lmr;
+    skv_status_t status = AcquireDataArea( aSize, &lmr );
+    StrongAssertLogLine( status == SKV_SUCCESS )
+      << "skv_local_kv_rdma_data_buffer_t: error while allocating data buffer. status: " << skv_status_to_string( status )
+      << EndLogLine;
+
+    *aPointer = (char*)lmr.GetAddr();
+
+    StrongAssertLogLine( ((uintptr_t)*aPointer >= mLMR.GetAddr()) && ((uintptr_t)*aPointer< mLMR.GetAddr()+mLMR.GetLen()-mHeadSpace) )
+      << "skv_local_kv_rdma_data_buffer_t: BUG in AcquireDataArea! Acquired buffer out of range "
+      << (uintptr_t)*aPointer << " < " << mLMR.GetAddr()
+      << EndLogLine;
+
+    return status;
+  }
+  skv_status_t ReleaseDataAreaPtr( size_t aSize, char* aPointer )
+  {
+    skv_lmr_triplet_t lmr;
+
+    skv_lmr_wait_queue_t *entry = (skv_lmr_wait_queue_t*)(aPointer - mHeadSpace);
+    StrongAssertLogLine( ((uintptr_t)entry >= mLMR.GetAddr()) && ((uintptr_t)entry < mLMR.GetAddr()+mLMR.GetLen()-mHeadSpace) )
+      << "skv_local_kv_rdma_data_buffer_t: Release attempt out of range "
+      << (uintptr_t)entry << " < " << mLMR.GetAddr()
+      << EndLogLine;
+
+    lmr.InitAbs( mLMR.GetLMRHandle(), aPointer, aSize );
+    return ReleaseDataArea( &lmr );
   }
 
 #ifdef SKV_UNIT_TEST

@@ -1,3 +1,13 @@
+2014-09-05-11-23
+  * mixed endian support
+  * sockets based IT_API implementation (for external or CNK clients)
+  * bulk-insert function for rocksdb backend
+
+2014-06-27-16-30 
+  * rocksdb backend uses preallocated/registered memory for data retrieval
+  * client API documentation and config/runtime doc added to tex files
+  * fixed host-network byte ordering issue for port numbers
+
 20140515 -> 2014-06-27-16-30
   * handling InfiniBand private data length issues
   * client lib forwards more errors instead of asserting and die

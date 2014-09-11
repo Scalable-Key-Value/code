@@ -27,6 +27,14 @@
 //#include <server/skv_server_cursor_manager_if.hpp>
 #include <client/skv_client_conn_manager_if.hpp>
 
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
+#endif
+
+#ifndef SKV_SERVER_ENDIAN_LOG
+#define SKV_SERVER_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
+#endif
+
 /***************************************************
  * Structures for the CLIENT to SERVER communication
  ***************************************************/
@@ -53,6 +61,16 @@ struct skv_cmd_open_req_t
   skv_cmd_open_flags_t                  mFlags;
   char                                  mPDSName[ SKV_MAX_PDS_NAME_SIZE];
 
+  void
+  EndianConvert(void)
+  {
+    mPrivs=(skv_pds_priv_t)ntohl(mPrivs) ;
+    mFlags=(skv_cmd_open_flags_t)ntohl(mFlags) ;
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "mPrivs=" << mPrivs
+      << " mFlags=" << mFlags
+      << EndLogLine ;
+  }
   void
   Init( skv_command_type_t aCmdType,
         skv_server_event_type_t aEventType,
@@ -85,7 +103,6 @@ struct skv_cmd_pdscntl_req_t
 
   skv_pdscntl_cmd_t                  mCntlCmd;
   skv_pds_attr_t                     mPDSAttr;
-  // char                                mPDSName[ SKV_MAX_PDS_NAME_SIZE ];
 
   void
   Init( skv_command_type_t aCmdType,
@@ -99,36 +116,48 @@ struct skv_cmd_pdscntl_req_t
     mCntlCmd = aCntlCmd;
     mPDSAttr = *aPDSAttr;
 
-    // AssertLogLine( aPDSNameSize > 0 && 
-    //                aPDSNameSize <= SKV_MAX_PDS_NAME_SIZE )
-    //   << "skv_cmd_open_req_t::Init():: ERROR:: Length of PDS name is too long. "
-    //   << " NameLen: " << aPDSNameSize
-    //   << " SKV_MAX_PDS_NAME_SIZE: " << SKV_MAX_PDS_NAME_SIZE
-    //   << EndLogLine;
-    // memcpy( mPDSName, aPDSName, aPDSNameSize );
-
     mHdr.SetCmdLength( sizeof(skv_cmd_pdscntl_req_t) );
+  }
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "Endian conversion mCntlCmd=" << mCntlCmd
+      << EndLogLine ;
+    mCntlCmd=(skv_pdscntl_cmd_t)htonl(mCntlCmd) ;
   }
 };
 
-
-// struct skv_key_in_ctrl_msg_t
-// {
-//   int                           mKeySize;
-//   char                          mKeyData[ 0 ];  
-// };
 
 struct skv_key_value_in_ctrl_msg_t
 {
   int                           mKeySize;
   int                           mValueSize;
-  char                          mData[ 0 ];  
+  char                          mData[ 0 ];
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "mKeySize=" << mKeySize
+      << " mValueSize=" << mValueSize
+      << EndLogLine ;
+    mKeySize=ntohl(mKeySize) ;
+    mValueSize=ntohl(mValueSize) ;
+  }
 };
 
 struct skv_value_in_ctrl_msg_t
 {
   int                           mValueSize;
-  char                          mData[ 0 ];  
+  char                          mData[ 0 ];
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "mValueSize=" << mValueSize
+      << EndLogLine ;
+    mValueSize=ntohl(mValueSize) ;
+  }
 };
 
 
@@ -278,6 +307,20 @@ struct skv_cmd_RIU_req_t
 
     mHdr.SetCmdLength( sizeof(skv_cmd_RIU_req_t) + inlineDataSize );
   }
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "Endian conversion from mKeySize=" << mKeyValue.mKeySize
+      << " mValueSize=" << mKeyValue.mValueSize
+      << " mOffset=" << mOffset
+      << " mFlags=" << mFlags
+      << EndLogLine ;
+    mKeyValue.mKeySize=htonl(mKeyValue.mKeySize) ;
+    mKeyValue.mValueSize=htonl(mKeyValue.mValueSize) ;
+    mOffset=htonl(mOffset) ;
+    mFlags=(skv_cmd_RIU_flags_t)htonl(mFlags) ;
+  }
 };
 
 struct skv_cmd_remove_req_t
@@ -293,6 +336,15 @@ struct skv_cmd_remove_req_t
   // message buffer  
   skv_key_value_in_ctrl_msg_t          mKeyValue;
 
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "mFlags=" << mFlags
+      << EndLogLine ;
+    mFlags=(skv_cmd_remove_flags_t)htonl(mFlags) ;
+    mKeyValue.EndianConvert() ;
+  }
   void
   Init( int aNodeId,
         skv_client_conn_manager_if_t* aConnMgr,
@@ -395,6 +447,14 @@ struct skv_cmd_bulk_insert_req_t
 
     mHdr.SetCmdLength( sizeof(skv_cmd_bulk_insert_req_t) );
   }
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "Endian convert mBufferSize=" << mBufferSize
+      << EndLogLine ;
+    mBufferSize=htonl(mBufferSize) ;
+  }
 };
 
 struct skv_cmd_retrieve_n_keys_req_t
@@ -488,6 +548,21 @@ struct skv_cmd_retrieve_n_keys_req_t
     mHdr.SetCmdLength( sizeof(skv_cmd_retrieve_n_keys_req_t) + mStartingKeySize );
     return;
   }  
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "Endian convert mFlags=" << mFlags
+      << " mKeysDataListMaxCount=" << mKeysDataListMaxCount
+      << " mStartingKeySize=" << mStartingKeySize
+      << " mKeysDataList=" << (void *) mKeysDataList
+      << " mKeysDataCacheRMR=" << (void *) mKeyDataCacheMemReg.mKeysDataCacheRMR
+      << EndLogLine ;
+    mFlags=(skv_cursor_flags_t)htonl(mFlags) ;
+    mKeysDataListMaxCount=htonl(mKeysDataListMaxCount) ;
+    mStartingKeySize=htonl(mStartingKeySize) ;
+    mKeysDataList=htobe64(mKeysDataList) ;
+    mKeyDataCacheMemReg.mKeysDataCacheRMR=htobe64(mKeyDataCacheMemReg.mKeysDataCacheRMR) ;
+  }
 };
 
 struct skv_cmd_active_bcast_req_t
@@ -575,6 +650,14 @@ struct skv_cmd_open_resp_t
   skv_status_t                       mStatus;
 
   skv_pds_id_t                       mPDSId;
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << EndLogLine ;
+    mStatus=(skv_status_t)htonl(mStatus) ;
+    mHdr.EndianConvert() ;
+  }
 };
 
 template<class streamclass>
@@ -601,6 +684,15 @@ struct skv_cmd_pdscntl_resp_t
 
   skv_pds_attr_t                     mPDSAttr;
 
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << EndLogLine ;
+    mStatus=(skv_status_t)htonl(mStatus) ;
+    mHdr.EndianConvert() ;
+    mPDSAttr.EndianConvert() ;
+  }
 };
 /**************************************************************************/
 
@@ -613,6 +705,15 @@ struct skv_cmd_retrieve_dist_resp_t
   skv_status_t                       mStatus;
 
   skv_distribution_t                 mDist;
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << EndLogLine ;
+    mStatus=(skv_status_t)htonl(mStatus) ;
+    mHdr.EndianConvert() ;
+    mDist.EndianConvert() ;
+  }
 };
 
 template<class streamclass>
@@ -649,6 +750,14 @@ struct skv_cmd_insert_cmpl_t
   skv_server_to_client_cmd_hdr_t     mHdr;  
 
   skv_status_t                       mStatus;
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << EndLogLine ;
+    mStatus=(skv_status_t) ntohl(mStatus) ;
+    mHdr.EndianConvert() ;
+  }
 };
 
 
@@ -660,6 +769,14 @@ struct skv_cmd_remove_cmpl_t
   skv_server_to_client_cmd_hdr_t     mHdr;  
 
   skv_status_t                       mStatus;
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << EndLogLine ;
+    mStatus=(skv_status_t) ntohl(mStatus) ;
+    mHdr.EndianConvert() ;
+  }
 };
 
 /******************
@@ -676,6 +793,16 @@ struct skv_cmd_retrieve_value_rdma_write_ack_t
   // NEED: Check that the key is not larger then the
   // message buffer  
   skv_value_in_ctrl_msg_t            mValue;
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << EndLogLine ;
+    mStatus=(skv_status_t) ntohl(mStatus) ;
+    mValue.EndianConvert() ;
+    mHdr.EndianConvert() ;
+  }
 };
 /******************/
 
@@ -688,6 +815,16 @@ struct skv_cmd_retrieve_n_keys_rdma_write_ack_t
   skv_status_t                       mStatus;  
 
   int                                mCachedKeysCount;
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << " mCachedKeysCount=" << mCachedKeysCount
+      << EndLogLine ;
+    mStatus=(skv_status_t) ntohl(mStatus) ;
+    mCachedKeysCount=ntohl(mCachedKeysCount) ;
+    mHdr.EndianConvert() ;
+  }
 };
 /************/
 

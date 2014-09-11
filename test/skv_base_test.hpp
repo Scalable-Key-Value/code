@@ -15,6 +15,10 @@
 #ifndef SKV_BASE_TEST_HPP_
 #define SKV_BASE_TEST_HPP_
 
+#ifndef SKV_TEST_LOG
+#define SKV_TEST_LOG ( 0 )
+#endif
+
 static inline
 skv_status_t skv_base_test_open_pds( const char * aPDSName,
                                      const skv_pds_priv_t aPrivs,
@@ -22,6 +26,13 @@ skv_status_t skv_base_test_open_pds( const char * aPDSName,
 {
   skv_status_t status = SKV_SUCCESS;
   skv_pds_id_t PDSId;
+
+  BegLogLine( SKV_TEST_LOG )
+    << "skv_base_test_open_pds() calling open with: "
+    << "  PDSName: " << aPDSName
+    << "  privs: " << aPrivs
+    << "  flags: " << aFlags
+    << EndLogLine;
 
   status = gdata.Client.Open( (char*)aPDSName,
                               aPrivs,
@@ -31,6 +42,11 @@ skv_status_t skv_base_test_open_pds( const char * aPDSName,
   switch( status )
   {
     case SKV_SUCCESS:
+      BegLogLine( SKV_TEST_LOG )
+        << "skv_base_test_open_pds() calling close with: "
+        << " PdsId: " << PDSId
+        << EndLogLine;
+
       if( gdata.Client.Close( &PDSId ) != SKV_SUCCESS )
       {
         BegLogLine( 1 )
@@ -255,6 +271,13 @@ skv_status_t skv_base_test_retrieve( const char *aPDSName,
   if( (status == SKV_SUCCESS) && (!verify_data( value, aDataSize, aKey, aOffset)) )
     status = SKV_ERRNO_CHECKSUM_MISMATCH;
 
+  if(( retrieved != aDataSize )&&(status == SKV_SUCCESS))
+    BegLogLine( 1 )
+      << "retrieve: requested data size differs from returned size: " << retrieved << " != " << aDataSize
+      << EndLogLine;
+  if( !(aFlags & SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN) && ( retrieved != aDataSize ))
+    status == SKV_ERRNO_VALUE_TOO_LARGE;
+
   if( gdata.Client.Close( &PDSId ) != SKV_SUCCESS )
   {
     BegLogLine( 1 )
@@ -354,11 +377,22 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
                                   value,
                                   DataSize,
                                   SKV_BULK_INSERTER_FLAGS_NONE );
+    BegLogLine( status != SKV_SUCCESS )
+      << "BulkInsert:Insert() return status: " << skv_status_to_string( status )
+      << EndLogLine;
   }
   if( test_level >= 2 )
   {
     status = gdata.Client.Flush( BulkLoaderHandle );
+    BegLogLine( status != SKV_SUCCESS )
+      << "BulkInsert:FLush() return status: " << skv_status_to_string( status )
+      << EndLogLine;
+
     status = gdata.Client.CloseBulkInserter( BulkLoaderHandle );
+    BegLogLine( status != SKV_SUCCESS )
+      << "BulkInsert:Close() return status: " << skv_status_to_string( status )
+      << EndLogLine;
+
     test_level = 1;
   }
 

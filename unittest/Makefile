@@ -21,7 +21,8 @@ include ${SKV_TOP}/make.conf
 
 SRC_CPP=\
 	test_skv_ringbuffer_ptr.cpp  \
-	test_skv_rdma_data_buffer.cpp
+	test_skv_rdma_data_buffer.cpp \
+	test_skv_rdma_buffer_allocator.cpp
 
 
 OBJ=$(SRC_CPP:%.cpp=${SKV_BUILD_DIR}/%.o)
@@ -45,6 +46,7 @@ install: build
 	@echo "${CURDIR}: Starting install now..."
 	install -D -m 755 ${SKV_BUILD_DIR}/test_skv_ringbuffer_ptr ${SKV_INSTALL_DIR}/bin/test_skv_ringbuffer_ptr
 	install -D -m 755 ${SKV_BUILD_DIR}/test_skv_rdma_data_buffer ${SKV_INSTALL_DIR}/bin/test_skv_rdma_data_buffer
+	install -D -m 755 ${SKV_BUILD_DIR}/test_skv_rdma_buffer_allocator ${SKV_INSTALL_DIR}/bin/test_skv_rdma_buffer_allocator
 
 
 %: %.o

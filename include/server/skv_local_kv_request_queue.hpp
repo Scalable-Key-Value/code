@@ -66,26 +66,28 @@ public:
     mActiveRequests.push( aReq );
     mQueueSerializer.unlock();
   }
-
+  bool IsEmpty()
+  {
+    return mActiveRequests.empty();
+  }
   skv_local_kv_request_t* GetRequest()
   {
     skv_local_kv_request_t *Request = NULL;
 
+    mQueueSerializer.lock();
     if( ! mActiveRequests.empty() )
     {
-      mQueueSerializer.lock();
       Request = mActiveRequests.front();
       mActiveRequests.pop();
-      mQueueSerializer.unlock();
 
       BegLogLine( SKV_LOCAL_KV_QUEUES_LOG )
         << "skv_local_kv_request_queue_t::GetRequest() Request fetched"
         << " @" << (void*)Request
         << EndLogLine;
-
-      return Request;
     }
-    return NULL;
+    mQueueSerializer.unlock();
+
+    return Request;
   }
 
   skv_status_t AckRequest( skv_local_kv_request_t* aRequest )

@@ -10,38 +10,60 @@ INSTALL_ROOTFS_DIR=${ASF_ROOTFS_DIR}
 
 SKV_MPI_IMPL?=mvapich2
 
-# set version to C11 if you build for rocksdb backend (use something else like C0x otherwise)
-GCCVER=C0x
-
-# branch settings for newer gcc (c++11 support)
-ifeq (${GCCVER}, C11)
-  CC_DIR=/home/lschneid/opt/gcc47
-  export LD_LIBRARY_PATH=${CC_DIR}/../mpc/lib:${CC_DIR}/lib:${CC_DIR}/lib64
-  SKV_CCFLAGS=-mcpu=a2 -mtune=a2 -Wno-unused-but-set-variable -Wno-int-to-pointer-cast -O3 -std=c++11
-  MPI_DIR?=/bgusr/home2/lschneid/opt/${SKV_MPI_IMPL}
-else
-  MPI_DIR?=$(SKV_TOP)/../ramdisk/modules/${SKV_MPI_IMPL}/build/opt/${SKV_MPI_IMPL}
-  SKV_CCFLAGS=-O3 -std=c++0x -Wno-int-to-pointer-cast
-  CC_DIR=/usr
-endif
-
-export CC=${CC_DIR}/bin/gcc
-export CXX=${CC_DIR}/bin/g++
-export MPICH_CC=${CC}
-export MPICH_CXX=${CXX}
-
+SKV_TARGET?=linux
 
 #############################################
 # specify which parts of the code you want to build and install
 # available options are: (note that the ordering is important!!)
+#  - it_api (communication lib, has to go first)
 #  - lib  (C library for PIMD clients)
 #  - src  (actual skv code, libs, server)
 #  - test   (test routines)
 #  - system/bgq (system files for BGQ Linux environment)
+#  - include (just for install)
+#  - unittest (only if you have a proper C++11 compiler)
 SKV_DEST=it_api src lib test system/bgq include
 
-ifeq (${SKV_FOR_NONBGQ}, yes)
-  SKV_GLOBAL_LDFLAGS_EXTENSION=-lrdmacm -libverbs
+
+# set version to C11 if you build for rocksdb backend (use something else like C0x otherwise)
+GCCVER=C0x
+
+ifeq (${SKV_TARGET}, linux)
+  # branch settings for newer gcc (c++11 support)
+  ifeq (${GCCVER}, C11)
+    CC_DIR=/home/lschneid/opt/gcc47
+    export LD_LIBRARY_PATH=${CC_DIR}/../mpc/lib:${CC_DIR}/lib:${CC_DIR}/lib64
+    SKV_CCFLAGS=-mcpu=a2 -mtune=a2 -Wno-unused-but-set-variable -Wno-int-to-pointer-cast -O3 -std=c++11 -funsigned-char
+    MPI_DIR?=/bgusr/home2/lschneid/opt/${SKV_MPI_IMPL}
+    SKV_DEST+= unittest
+  else
+    MPI_DIR?=$(SKV_TOP)/../ramdisk/modules/${SKV_MPI_IMPL}/build/opt/${SKV_MPI_IMPL}
+    SKV_CCFLAGS=-O3 -std=c++0x -Wno-int-to-pointer-cast -funsigned-char
+    CC_DIR=/usr
+  endif
+
+  export CC=${CC_DIR}/bin/gcc
+  export CXX=${CC_DIR}/bin/g++
 else
-  SKV_GLOBAL_LDFLAGS_EXTENSION=-Wl,-rpath,${CC_DIR}/lib -lrdmacm -libverbs -libumad -ldl -L${CC_DIR}/lib -lrt -lstdc++ -lpthread -L${MPI_DIR}/lib
+  # Target the build for compute nodes
+  MPI_DIR?=$(SKV_TOP)/../ramdisk/modules/${SKV_MPI_IMPL}/build/opt/${SKV_MPI_IMPL}
+  SKV_CCFLAGS=-std=c++0x -Wno-int-to-pointer-cast -I /bgsys/drivers/ppcfloor -DPK_CNK -funsigned-char
+  CC_DIR=/bgsys/drivers/ppcfloor/gnu-linux
+  PREFIX=powerpc64-bgq-linux-
+  export CC=${CC_DIR}/bin/${PREFIX}gcc
+  export CXX=${CC_DIR}/bin/${PREFIX}g++
+endif
+
+export MPICH_CC=${CC}
+export MPICH_CXX=${CXX}
+
+
+ifeq (${SKV_TARGET}, linux)
+  ifeq (${SKV_FOR_NONBGQ}, yes)
+   SKV_GLOBAL_LDFLAGS_EXTENSION=-lrdmacm -libverbs
+  else
+    SKV_GLOBAL_LDFLAGS_EXTENSION=-Wl,-rpath,${CC_DIR}/lib -lrdmacm -libverbs -libumad -ldl -L${CC_DIR}/lib -lrt -lstdc++ -lpthread -L${MPI_DIR}/lib
+  endif
+else
+  SKV_GLOBAL_LDFLAGS_EXTENSION=-lpthread -dynamic
 endif

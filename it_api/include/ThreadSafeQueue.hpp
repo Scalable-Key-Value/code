@@ -21,6 +21,14 @@
 #define THREAD_SAFE_QUEUE_FXLOG ( 0 )
 #endif
 
+#ifndef THREAD_SAFE_QUEUE_ENQDEQ_FXLOG
+#define THREAD_SAFE_QUEUE_ENQDEQ_FXLOG ( 0 )
+#endif
+
+#ifndef THREAD_SAFE_QUEUE_INIT_FXLOG
+#define THREAD_SAFE_QUEUE_INIT_FXLOG ( 0 )
+#endif
+
 #ifndef VRNIC_CNK // need a better name
 #define _bgp_msync(void) do { asm volatile ("msync" : : : "memory"); } while( 0 )
 #define _bgp_mbar(void) do { asm volatile ("mbar" : : : "memory"); } while( 0 )
@@ -88,6 +96,7 @@ struct ThreadSafeQueue_t
       pthread_mutex_destroy( & mutex );
       pthread_cond_destroy( & empty_cond );
       pthread_cond_destroy( & full_cond );
+      free(mItemArray) ;
     }
 
     void
@@ -116,12 +125,12 @@ struct ThreadSafeQueue_t
         << " realDepth: " << realDepth
         << EndLogLine;
 
-      BegLogLine( THREAD_SAFE_QUEUE_FXLOG )
+      BegLogLine( THREAD_SAFE_QUEUE_INIT_FXLOG )
         << "ThreadSafeQueue_t::Init(): "
         << "Q@ " << (void*)this
         << " Init with max " << aMax
         << " mMax: " << mMax
-        << " mDepthMask: " << (void *) mDepthMask
+        << " mDepthMask: " << (void *)(uintptr_t)mDepthMask
         << " realDepth: " << realDepth
         << " QueueSize: " << QueueSize
         << EndLogLine;
@@ -144,7 +153,7 @@ struct ThreadSafeQueue_t
       if( ! tLockless )
         pthread_mutex_lock( &mutex );
 
-      BegLogLine( THREAD_SAFE_QUEUE_FXLOG )
+      BegLogLine( (THREAD_SAFE_QUEUE_FXLOG | THREAD_SAFE_QUEUE_ENQDEQ_FXLOG) )
         << "ThreadSafeQueue_t::Enqueue():"
         << " Q@ " << (void*) this
         << " mPutCount " << mPutCount
@@ -174,12 +183,14 @@ struct ThreadSafeQueue_t
       int ItemIndex = OldCount & mDepthMask;
       mItemArray[ ItemIndex ] = aNextIn;
 #if !defined(PK_X86)
+#if defined(__powerpc__)
       _bgp_msync();
+#endif
       //_bgp_mbar();
 #endif
       mPutCount = OldCount + 1;
 
-      BegLogLine( THREAD_SAFE_QUEUE_FXLOG )
+      BegLogLine( (THREAD_SAFE_QUEUE_FXLOG | THREAD_SAFE_QUEUE_ENQDEQ_FXLOG) )
         << "ThreadSafeQueue_t::Enqueue():"
         << " Q@ " << (void*) this
         << " after insert to slot " << ItemIndex
@@ -222,12 +233,14 @@ struct ThreadSafeQueue_t
       int ItemIndex = OldCount & mDepthMask;
       *aNextOut = mItemArray[ ItemIndex ];
 #if !defined(PK_X86)
+#if defined(__powerpc__)
       _bgp_msync();
+#endif
       //_bgp_mbar();
 #endif
       mGotCount = OldCount + 1;
 
-      BegLogLine( THREAD_SAFE_QUEUE_FXLOG )
+      BegLogLine( (THREAD_SAFE_QUEUE_FXLOG | THREAD_SAFE_QUEUE_ENQDEQ_FXLOG) )
         << "ThreadSafeQueue_t::DequeueAssumedLockedNonEmpty(): "
         << " Q@ " << (void*) this
         << " after extract from slot " << ItemIndex
@@ -312,6 +325,10 @@ struct ThreadSafeQueue_t
     Dequeue( Item *aNextOut )
     {
       int rc;
+
+      BegLogLine(THREAD_SAFE_QUEUE_FXLOG)
+        << "Q@" << this
+        << EndLogLine ;
 
       if( ! tLockless )
         pthread_mutex_lock( &mutex );

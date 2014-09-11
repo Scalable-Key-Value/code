@@ -44,6 +44,10 @@
 #define SKV_CLIENT_REMOVE_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
 #ifndef SKV_CLIENT_iINSERT_TRACE
 #define SKV_CLIENT_iINSERT_TRACE ( 0 )
 #endif
@@ -346,6 +350,10 @@ iOpen( char*                  aPDSName,
              aFlags,
              aPDSName,
              PDSNameSize );
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian converting the Req"
+    << EndLogLine ;
+  Req->EndianConvert() ;
   /*****************************************************/
 
   /******************************************************
@@ -480,7 +488,9 @@ iRetrieve( skv_pds_id_t*          aPDSId,
              & KeyLMR,
              & ValueLMR );
   /*****************************************************/
+  Req->EndianConvert() ;
 
+  Req->mRMRTriplet.EndianConvert() ; // todo tjcw check if this is right
   /******************************************************
    * Set the local client state used on response
    *****************************************************/  
@@ -753,6 +763,7 @@ iInsert( skv_pds_id_t*          aPDSId,
              mPZ_Hdl,
              & KeyLMR,
              & ValueLMR );
+  Req->EndianConvert() ;
   /*****************************************************/
 
   /******************************************************
@@ -837,6 +848,7 @@ iClose( skv_pds_id_t*         aPDSId,
              CmdCtrlBlk,
              SKV_PDSCNTL_CMD_CLOSE,
              &PDSAttr );
+  Req->EndianConvert() ;
   /*****************************************************/
 
   /******************************************************
@@ -911,6 +923,7 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
              CmdCtrlBlk,
              aCmd,
              aPDSAttr );
+  Req->EndianConvert() ;
   /*****************************************************/
 
   /******************************************************
@@ -1301,6 +1314,11 @@ RetrieveDistribution( skv_distribution_t* aDist )
 
   status = Wait( CmdCtrlBlk );
 
+  /*
+   * Endian-convert the distribution function
+   */
+  mDistribution.EndianConvert() ;
+
   BegLogLine( SKV_CLIENT_RETRIEVE_DIST_LOG )
     << "skv_client_internal_t::RetrieveDistribution():: Leaving"
     << " mDistribution : " << mDistribution
@@ -1556,6 +1574,7 @@ iRemove( skv_pds_id_t*          aPDSId,
              aKeyBufferSize,
              aKeyBuffer);
   /*****************************************************/
+  Req->EndianConvert() ;
 
   /******************************************************
    * Set the local client state used on response

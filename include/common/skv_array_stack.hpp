@@ -25,8 +25,8 @@
 template<class T, size_t SKV_ARRAY_STACK_SIZE>
 class skv_array_stack_t
 {
-  int len;
-  T *Memory;
+  volatile int len;
+  volatile T *Memory;
 
 public:
   skv_array_stack_t()

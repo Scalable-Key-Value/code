@@ -18,10 +18,6 @@
 #include <client/skv_client.hpp>
 #include <math.h>
 
-#ifndef FXLOG_SKV_TEST_SINGLE_STEPS
-#define FXLOG_SKV_TEST_SINGLE_STEPS ( 0 )
-#endif
-
 #define SKV_TEST_USING_MPI
 
 

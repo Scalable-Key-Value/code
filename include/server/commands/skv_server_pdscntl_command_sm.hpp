@@ -61,6 +61,7 @@ private:
       strncpy(aResp->mPDSAttr.mPDSName, aPDSAttr->mPDSName, SKV_MAX_PDS_NAME_SIZE);
     }
     aResp->mStatus = aRC;
+    aResp->EndianConvert() ;
 
     BegLogLine( SKV_SERVER_PDSCNTL_COMMAND_SM_LOG )
       << "skv_server_pdscntl_command_sm::init_response():: "
@@ -126,9 +127,9 @@ public:
             // we have copied all Req data into response buffer already at cmd init
             skv_cmd_pdscntl_req_t* StatReq = (skv_cmd_pdscntl_req_t *) Command->GetSendBuff();
 
+            StatReq->EndianConvert() ;
             skv_pdscntl_cmd_t cntl_cmd = StatReq->mCntlCmd;
-            skv_pds_attr_t *PDSAttr    = &(StatReq->mPDSAttr);
-
+            skv_pds_attr_t *PDSAttr = &(StatReq->mPDSAttr);
             skv_pds_id_t PDSId = PDSAttr->mPDSId;
 
             BegLogLine( SKV_SERVER_PDSCNTL_COMMAND_SM_LOG )

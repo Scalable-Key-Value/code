@@ -104,6 +104,8 @@ public:
 
     aCmpl->mStatus = aRC;
 
+    aCmpl->EndianConvert() ;
+
     skv_status_t status = aEPState->Dispatch( aCommand,
                                               aSeqNo,
                                               aCommandOrdinal );
@@ -209,6 +211,8 @@ public:
 
             skv_cmd_bulk_insert_req_t* Req = (skv_cmd_bulk_insert_req_t *) Command->GetSendBuff();
 
+            Req->EndianConvert() ;
+
             AssertLogLine( ( ((void *) Req->mBuffer) != NULL ) &&
                            ( Req->mBufferSize >= 0 && Req->mBufferSize < SKV_BULK_INSERT_LIMIT ) )
               << "skv_server_bulk_insert_command_sm:: Execute():: ERROR: "
@@ -220,6 +224,9 @@ public:
             skv_lmr_triplet_t NewRecordAllocRep;
             skv_status_t status = aLocalKV->Allocate( Req->mBufferSize,
                                                       & NewRecordAllocRep );
+            BegLogLine(SKV_SERVER_BULK_INSERT_LOG)
+              << "Allocated the temporary buffer"
+              << EndLogLine ;
 
             if( status != SKV_SUCCESS )
             {
@@ -288,7 +295,13 @@ public:
               default:
               case SKV_SUCCESS:
                 // Return the temporary buffer to the store
+                BegLogLine(SKV_SERVER_BULK_INSERT_LOG)
+                    << "Returning the temporary buffer"
+                    << EndLogLine ;
                 aLocalKV->Deallocate( & Command->mCommandState.mCommandBulkInsert.mLocalBuffer );
+                BegLogLine(SKV_SERVER_BULK_INSERT_LOG)
+                  << "Returned the temporary buffer"
+                  << EndLogLine ;
 
                 command_completion( status,
                                     aEPState,
@@ -320,7 +333,13 @@ public:
           case SKV_SERVER_EVENT_TYPE_LOCAL_KV_CMPL:
           {
             // Return the temporary buffer to the store
+            BegLogLine(SKV_SERVER_BULK_INSERT_LOG)
+                << "Returning the temporary buffer"
+                << EndLogLine ;
             aLocalKV->Deallocate( & Command->mCommandState.mCommandBulkInsert.mLocalBuffer );
+            BegLogLine(SKV_SERVER_BULK_INSERT_LOG)
+              << "Returned the temporary buffer"
+              << EndLogLine ;
 
             command_completion( Command->mLocalKVrc,
                                 aEPState,

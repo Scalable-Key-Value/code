@@ -68,7 +68,7 @@ public:
             default:
               {
                 StrongAssertLogLine( 0 )
-                  << "skv_client_retrieve_dist_command_sm:: ERROR:: Invalid State: "
+                  << "skv_client_retrieve_dist_command_sm:: ERROR:: Invalid Event: "
                   << " State: " << State
                   << " Event: " << Event
                   << EndLogLine;

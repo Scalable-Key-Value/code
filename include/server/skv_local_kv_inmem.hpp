@@ -72,7 +72,7 @@ public:
                        int aValueSize,
                        skv_local_kv_cookie_t *aCookie );
 
-  skv_status_t InsertPostProcess( skv_local_kv_req_ctx_t *aReqCtx,
+  skv_status_t InsertPostProcess( skv_local_kv_req_ctx_t aReqCtx,
                                   skv_lmr_triplet_t *aValueRDMADest,
                                   skv_local_kv_cookie_t *aCookie ) { return SKV_SUCCESS; }
 
@@ -89,7 +89,7 @@ public:
                          skv_lmr_triplet_t* aStoredValueRep,
                          int *aTotalSize,
                          skv_local_kv_cookie_t *aCookie );
-  skv_status_t RetrievePostProcess(   skv_local_kv_req_ctx_t *aReqCtx ) { return SKV_SUCCESS; }
+  skv_status_t RetrievePostProcess( skv_local_kv_req_ctx_t aReqCtx ) { return SKV_SUCCESS; }
 
   skv_status_t RetrieveNKeys( skv_pds_id_t aPDSId,
                               char * aStartingKeyData,

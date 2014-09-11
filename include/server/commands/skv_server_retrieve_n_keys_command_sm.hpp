@@ -59,9 +59,15 @@ class skv_server_retrieve_n_keys_command_sm
                                  skv_lmr_triplet_t *aRetrievedKeysSizesSegs,
                                  int *aRetrievedKeysSizesSegsCount )
   {
+      aReq->EndianConvert() ;
     // Check if the key is in the buffer
     if( ! aReq->mIsKeyInCtrlMsg )
-      return SKV_ERRNO_KEY_TOO_LARGE;
+      {
+        BegLogLine(SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG)
+            << "Key is not in control message -- returning SKV_ERRNO_KEY_TOO_LARGE"
+            << EndLogLine ;
+        return SKV_ERRNO_KEY_TOO_LARGE;
+      }
 
     AssertLogLine( SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE == aReq->mKeysDataListMaxCount )
       << "skv_server_retrieve_n_keys_command_sm:: ERROR: "
@@ -166,10 +172,12 @@ class skv_server_retrieve_n_keys_command_sm
     }
     aCmpl->mStatus          = aRC;
 
+    aCmpl->EndianConvert() ;
+
     BegLogLine( SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG )
       << "skv_server_retrieve_n_keys_command_sm:: "
-      << " About to Dispatch(): "
-      << " status: " << skv_status_to_string( aCmpl->mStatus )
+      << " About to Dispatch(): aRC=" << aRC
+      << " status: " << skv_status_to_string( aRC )
       << " mCachedKeysCount: " << aCmpl->mCachedKeysCount
       << EndLogLine;
 
@@ -230,6 +238,9 @@ public:
                                        RetrievedKeysSizesSegs,
                                        & RetrievedKeysSizesSegsCount );
 
+            BegLogLine(SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG)
+              << "Freestore RetrievedKeysSizesSegsCount=" << RetrievedKeysSizesSegsCount
+              << EndLogLine ;
             switch( status )
             {
               case SKV_ERRNO_END_OF_RECORDS:

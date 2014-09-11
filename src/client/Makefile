@@ -31,7 +31,7 @@ SRC_CPP=skv_client.cpp \
 
 UNI_TARGET=libskv_client.a
 MPI_TARGET=libskv_client_mpi.a
-SKV_CXXFLAGS=-O2 -g ${ASF_GLOBAL_CXXFLAGS} -I${SKV_INCLUDE_DIR} ${SKV_GLOBAL_CXXFLAGS}
+SKV_CXXFLAGS=-g -I${SKV_INCLUDE_DIR} ${SKV_GLOBAL_CXXFLAGS}
 
 
 UNI_OBJ=$(SRC_CPP:%.cpp=${SKV_BUILD_DIR}/%.o)
@@ -84,7 +84,7 @@ ${SKV_BUILD_DIR}/mpi/%.o: %.cpp
 
 ${SKV_BUILD_DIR}/%.o: %.cpp
 	@echo "compiling $<"
-	${VV}$(MPICXX) -c $(SKV_CXXFLAGS) -DSKV_CLIENT_UNI $< -o ${SKV_BUILD_DIR}/$*.o
+	${VV}$(CXX) -c $(SKV_CXXFLAGS) -DSKV_CLIENT_UNI $< -o ${SKV_BUILD_DIR}/$*.o
 
 
 

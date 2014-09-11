@@ -53,6 +53,10 @@
 #define SKV_CLIENT_PROCESS_SEND_RECV_RACE_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
+#endif
+
 #ifdef SKV_DEBUG_MSG_MARKER  // defined in client_server_protocol.hpp (or via compile flag)
 #define SKV_CLIENT_TRACK_MESSGES_LOG ( 1 )
 #else
@@ -571,7 +575,7 @@ ConnectToServer( int                        aServerRank,
 
     BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
       << "skv_client_conn_manager_if_t::ConnectToServer():: using loopback to connect to local server"
-      << " addr: " << (void*)(path.u.iwarp.laddr.ipv4.s_addr)
+      << " addr: " << (void*)((uintptr_t)path.u.iwarp.laddr.ipv4.s_addr)
       << EndLogLine;
       aServerConn->mServerIsLocal = true;
   }
@@ -623,7 +627,7 @@ ConnectToServer( int                        aServerRank,
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::ConnectToServer()::  "
     << " assigned path.s_addr of " << remote_host->h_name
-    << " (void*)s_addr : " << (void*)path.u.iwarp.raddr.ipv4.s_addr
+    << " (void*)s_addr : " << (void*)(uintptr_t)path.u.iwarp.raddr.ipv4.s_addr
     << EndLogLine;
 
   conn_qual.type = IT_IANA_LR_PORT;
@@ -678,7 +682,7 @@ ConnectToServer( int                        aServerRank,
                                       &aServerConn->GetResponseRMRContext()
                                       );
 
-    if( status != IT_SUCCESS )
+    if( ( status != IT_SUCCESS )&&( status != IT_ERR_QUEUE_EMPTY ) )
     {
       BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
         << "skv_client_conn_manager_if_t::ConnectToServer():: "
@@ -862,7 +866,7 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
   {
     it_event_t event_cmm;
 
-    BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+    BegLogLine( 0 )
       << "skv_client_conn_manager_if_t::DisconnectFromServer():: going it_evd_dequeue"
       << EndLogLine;
 
@@ -903,7 +907,7 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
     }
     else
     {
-      BegLogLine( 1 )
+      BegLogLine( 0 )
         << "skv_client_conn_manager_if_t::DisconnectFromServer()::ERROR:: "
         << "it_evd_dequeue failed with " << istatus
         << EndLogLine;
@@ -1036,6 +1040,12 @@ Dispatch( skv_client_server_conn_t*    aConn,
 
   skv_client_to_server_cmd_hdr_t* Hdr = (skv_client_to_server_cmd_hdr_t *) aCCB->GetSendBuff();
   Hdr->SetCmdOrd( CmdOrd );
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian-converting the header mEventType=" << Hdr->mEventType
+    << " mCmdType=" << Hdr->mCmdType
+    << EndLogLine ;
+  Hdr->mEventType=(skv_server_event_type_t)htonl(Hdr->mEventType) ;
+  Hdr->mCmdType=(skv_command_type_t)htonl(Hdr->mCmdType) ;
 
 #ifdef SKV_DEBUG_MSG_MARKER
   Hdr->mMarker = mCookieSeq.mSeq;
@@ -1225,6 +1235,11 @@ ProcessCCB( skv_client_server_conn_t*    aConn,
   skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
 
   skv_server_to_client_cmd_hdr_t* Hdr = (skv_server_to_client_cmd_hdr_t *) aCCB->GetRecvBuff();
+
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+   << "Endian converting the header"
+   << EndLogLine ;
+  Hdr->EndianConvert() ;
 
   skv_command_type_t CommandType = aCCB->mCommand.mType;
 

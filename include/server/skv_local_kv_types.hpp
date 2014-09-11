@@ -59,6 +59,12 @@ public:
   {
     return mEPState;
   }
+  skv_local_kv_cookie_t& operator=( const skv_local_kv_cookie_t &in )
+  {
+    mOrd = in.mOrd;
+    mEPState = in.mEPState;
+    return *this;
+  }
 };
 
 template<class streamclass>

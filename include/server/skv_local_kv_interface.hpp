@@ -54,7 +54,11 @@
 // Include the list of defined local kv back ends
 #include <server/skv_local_kv_inmem.hpp>
 #include <server/skv_local_kv_asyncmem.hpp>
+
+// include rocksdb parts only if rocksdb is requested to avoid dependency from C++11 compiler and rocksdb source
+#if (SKV_LOCAL_KV == 2)
 #include <server/skv_local_kv_rocksdb.hpp>
+#endif
 
 template<class skv_local_kv_manager>
 class skv_local_kv_interface
@@ -223,7 +227,7 @@ public:
    *
    * \return status of operation
    */
-  skv_status_t InsertPostProcess( skv_local_kv_req_ctx_t *aReqCtx,
+  skv_status_t InsertPostProcess( skv_local_kv_req_ctx_t aReqCtx,
                                   skv_lmr_triplet_t *aValueRDMADest,
                                   skv_local_kv_cookie_t *aCookie )
   {
@@ -273,7 +277,7 @@ public:
                                      aCookie );
   }
 
-  skv_status_t RetrievePostProcess( skv_local_kv_req_ctx_t *aReqCtx )
+  skv_status_t RetrievePostProcess( skv_local_kv_req_ctx_t aReqCtx )
   {
     return mLocalKVManager.RetrievePostProcess( aReqCtx );
   }

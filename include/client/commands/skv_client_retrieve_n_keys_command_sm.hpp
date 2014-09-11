@@ -64,6 +64,8 @@ public:
                 skv_cmd_retrieve_n_keys_rdma_write_ack_t* Ack = 
                   (skv_cmd_retrieve_n_keys_rdma_write_ack_t *) RecvBuff;
 
+                Ack->EndianConvert() ;
+
                 // Set the sizes of the retrieved keys
                 int RetrievedCachedKeysCount  = Ack->mCachedKeysCount;
 

@@ -33,6 +33,14 @@ extern "C"
 #define SKV_LOGGING_ALL ( 0 )
 #endif
 
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL)
+#endif
+
+#ifndef SKV_SERVER_ENDIAN_LOG
+#define SKV_SERVER_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL)
+#endif
+
 /*****************
  * Running the skv client/server 
  * locally on the host
@@ -122,13 +130,22 @@ struct skv_server_addr_t
  ***/
 struct skv_store_t
 {
-  int   mSize;
+  int   mSizeBE;
   char* mData;  
 
+  int mSize(void) const
+  {
+    int rc=ntohl(mSizeBE);
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "Endian-converting " << (void *) (intptr_t)mSizeBE
+      << " to " << rc
+      << EndLogLine ;
+    return rc ;
+  }
   int
   GetSize()
   {
-    return mSize;
+    return mSize();
   }
 
   char*
@@ -147,20 +164,24 @@ struct skv_store_t
       << EndLogLine;
 
     mData = aData;
-    mSize = aSize;      
+    mSizeBE = htonl(aSize);
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "Endian-converting " << aSize
+      << " to " << (void *) (intptr_t)mSizeBE
+      << EndLogLine ;
   }
 
   void
   Finalize()
   {
     mData = NULL;
-    mSize = -1;
+    mSizeBE = -1;
   }
 
   skv_store_t&
   operator=( const skv_store_t& aStore )
   {
-    mSize = aStore.mSize;
+    mSizeBE = aStore.mSizeBE;
     mData = aStore.mData;
 
     return (*this);
@@ -185,9 +206,9 @@ struct skv_store_t
       << " aStore.mData != NULL " 
       << EndLogLine;
 
-    if( mSize == aStore.mSize )
+    if( mSizeBE == aStore.mSizeBE )
     {
-      return (memcmp( mData, aStore.mData, mSize ) == 0);
+      return (memcmp( mData, aStore.mData, mSize() ) == 0);
     }
     else
       return 0;
@@ -202,7 +223,7 @@ struct skv_store_t
       << "skv_store_t::operator<():: Entering "
       << EndLogLine;
 
-    int MinDataSize = min( mSize, aStore.mSize );
+    int MinDataSize = min( mSize(), aStore.mSize() );
 
     AssertLogLine( mData != NULL )
       << "skv_store_t::operator<():: ERROR: "
@@ -219,8 +240,8 @@ struct skv_store_t
     BegLogLine( SKV_STORE_T_LOG )
       << "skv_store_t::operator<():: "
       << " MinDataSize: " << MinDataSize
-      << " mSize: " << mSize
-      << " aStore.mSize: " << aStore.mSize
+      << " mSize: " << mSize()
+      << " aStore.mSize: " << aStore.mSize()
       << " rc: " << rc
       << EndLogLine;
 
@@ -236,7 +257,7 @@ static streamclass& operator<<( streamclass& os, const skv_store_t& aArg )
   int Len = 0;
   if( aArg.mData != NULL )
   {
-    Len = min( (STR_BUFF_SIZE - 1), aArg.mSize );
+    Len = min( (STR_BUFF_SIZE - 1), aArg.mSize() );
     memcpy( buff, aArg.mData, Len );
 
     buff[Len] = 0;
@@ -247,7 +268,7 @@ static streamclass& operator<<( streamclass& os, const skv_store_t& aArg )
     buff[0] = 0;
   }
 
-  os << "skv_store_t: [ mSize: " << aArg.mSize;
+  os << "skv_store_t: [ mSize: " << aArg.mSize();
   os << " mData: ";
 
 #if 1
@@ -278,20 +299,20 @@ typedef skv_store_t skv_value_t;
 
 typedef enum
 {
-  SKV_COMMAND_NONE = 1,
-  SKV_COMMAND_INSERT,
-  SKV_COMMAND_BULK_INSERT,
-  SKV_COMMAND_RETRIEVE,
-  SKV_COMMAND_RETRIEVE_N_KEYS,   // = 5
-  SKV_COMMAND_RETRIEVE_DIST,
-  SKV_COMMAND_UPDATE,
-  SKV_COMMAND_REMOVE,
-  SKV_COMMAND_CLOSE,
-  SKV_COMMAND_OPEN,         // = 10
-  SKV_COMMAND_CONN_EST,
-  SKV_COMMAND_ACTIVE_BCAST,
-  SKV_COMMAND_CURSOR_PREFETCH,
-  SKV_COMMAND_PDSCNTL        // = 15
+  SKV_COMMAND_NONE            = 0x00000001 ,// = 1,
+  SKV_COMMAND_INSERT          = 0x00000002 ,
+  SKV_COMMAND_BULK_INSERT     = 0x00000003 ,
+  SKV_COMMAND_RETRIEVE        = 0x00000004 ,
+  SKV_COMMAND_RETRIEVE_N_KEYS = 0x00000005 ,   // = 5
+  SKV_COMMAND_RETRIEVE_DIST   = 0x00000006 ,
+  SKV_COMMAND_UPDATE          = 0x00000007 ,
+  SKV_COMMAND_REMOVE          = 0x00000008 ,
+  SKV_COMMAND_CLOSE           = 0x00000009 ,
+  SKV_COMMAND_OPEN            = 0x0000000a ,  // = 10
+  SKV_COMMAND_CONN_EST        = 0x0000000b ,
+  SKV_COMMAND_ACTIVE_BCAST    = 0x0000000c ,
+  SKV_COMMAND_CURSOR_PREFETCH = 0x0000000d ,
+  SKV_COMMAND_PDSCNTL         = 0x0000000e // = 14
 } skv_command_type_t;
 
 static
@@ -358,6 +379,13 @@ struct skv_lmr_triplet_t
     mLMRTriplet.addr.abs = aAddr;
   }
 
+  void
+  Init( const skv_lmr_triplet_t &aLMR )
+  {
+    mLMRTriplet.lmr = aLMR.mLMRTriplet.lmr;
+    mLMRTriplet.length = aLMR.mLMRTriplet.length;
+    mLMRTriplet.addr.abs = aLMR.mLMRTriplet.addr.abs;
+  }
   it_length_t
   GetLen()
   {
@@ -413,6 +441,17 @@ struct skv_rmr_triplet_t
   uint64_t                 mRMR_Addr;
   it_length_t              mRMR_Len;
 
+  void
+  EndianConvert(void)
+  {
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "mRMR_Context=" << mRMR_Context
+      << " mRMR_Addr=" << mRMR_Addr
+      << " mRMR_Len=" << mRMR_Len
+      << EndLogLine ;
+    mRMR_Context=htobe64(mRMR_Context) ;
+    mRMR_Addr=htobe64(mRMR_Addr) ;
+  }
   void
   Init( it_rmr_context_t aRmr, char* aAddr, int aLen )
   {
@@ -532,7 +571,22 @@ skv_bulk_insert_get_key_value_refs( char *aRow, char **Key, int &KeyLength, char
   char * Cursor = aRow;
 
   int *klen = (int *) Cursor;
-  KeyLength = *klen;
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << " &KeyLength= " << (void *) &KeyLength
+    << " " << (long) &KeyLength
+    << " klen= " << (void *) klen
+    << " " << (long) klen
+    << " " << EndLogLine ;
+  int Starklen = *klen ;
+  int LocalKeyLength = ntohl(Starklen) ;
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian-converted from " << (void *) (intptr_t)Starklen
+    << " to " << LocalKeyLength
+    << EndLogLine ;
+  KeyLength = LocalKeyLength;
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian-converting KeyLength from " << (void *) (intptr_t)(*klen)
+    << EndLogLine ;
 
   Cursor += Sint;
   *Key = Cursor;
@@ -540,10 +594,19 @@ skv_bulk_insert_get_key_value_refs( char *aRow, char **Key, int &KeyLength, char
   Cursor += KeyLength;
 
   int *vlen = (int *) Cursor;
-  ValueLength = *vlen;
+  ValueLength = ntohl(*vlen);
+
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian-converting ValueLength from " << (void *) (intptr_t)(*vlen)
+    << EndLogLine ;
 
   Cursor += Sint;
   *Value = Cursor;
+
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "KeyLength=" << KeyLength
+    << " ValueLength=" << ValueLength
+    << EndLogLine ;
 
   return KeyLength + ValueLength + 2 * Sint;
 }
@@ -573,7 +636,10 @@ skv_bulk_insert_pack( char *aRow, char *Key, int KeyLength, char *Value, int Val
   int TotalSize = 0;
 
   int* KeyPtr = (int *) &aRow[TotalSize];
-  *KeyPtr = KeyLength;
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian-converting KeyLength from " << (void *) (intptr_t)KeyLength
+    << EndLogLine ;
+  *KeyPtr = htonl(KeyLength);
   TotalSize += sizeof(int);
 
   memcpy( &aRow[TotalSize],
@@ -583,7 +649,10 @@ skv_bulk_insert_pack( char *aRow, char *Key, int KeyLength, char *Value, int Val
   TotalSize += KeyLength;
 
   int* ValuePtr = (int *) &aRow[TotalSize];
-  *ValuePtr = ValueLength;
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian-converting ValueLength from " << (void *) (intptr_t)ValueLength
+    << EndLogLine ;
+  *ValuePtr = htonl(ValueLength);
   TotalSize += sizeof(int);
 
   memcpy( &aRow[TotalSize],
