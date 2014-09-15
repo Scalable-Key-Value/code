@@ -12,7 +12,7 @@ add_definitions(
 # enable logging in general
  -DPKFXLOG
 # all logging enabled
- -DSKV_LOGGING_ALL=1
+# -DSKV_LOGGING_ALL=1
 
 # general detailed logging
 # -DSKV_DISTRIBUTION_MANAGER_LOG=1
@@ -30,7 +30,7 @@ add_definitions(
 # -DSKV_SERVER_ACTIVE_BCAST_COMMAND_SM_LOG=1
 # -DSKV_SERVER_BUFFER_AND_COMMAND_LOG=1
 # -DSKV_SERVER_CLEANUP_LOG=1
- -DSKV_SERVER_CLIENT_CONN_EST_LOG=1
+# -DSKV_SERVER_CLIENT_CONN_EST_LOG=1
 # -DSKV_SERVER_COMMAND_DISPATCH_LOG=1
 # -DSKV_SERVER_COMMAND_POLLING_LOG=1
 # -DSKV_SERVER_COMMAND_TRANSIT_LOG=1
@@ -92,6 +92,10 @@ add_definitions(
 # logging in tests
 # activate inner-loop logging for test programm
 # -DSKV_TEST_LOG=1
+
+
+
+
 )
 
 ############################################################
