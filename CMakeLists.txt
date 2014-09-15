@@ -14,7 +14,7 @@ include(Common)
 # pick up any site specific configuration that might differ from default
 set(SKV_SITE "default" CACHE STRING
   "Select the main target platform {default, CSCS, ykt}")
-set_property(CACHE SKV_SITE PROPERTY STRINGS "default" "CSCS" "ykt")
+set_property(CACHE SKV_SITE PROPERTY STRINGS "default" "CSCS" "ykt" "pers_example")
 include(Site/${SKV_SITE})
 
 # do default magic
@@ -168,7 +168,7 @@ foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   target_compile_definitions(${TEST_NAME} PUBLIC
-    "-DSKV_CLIENT_UNI;-DSKV_NON_MPI")
+    "SKV_CLIENT_UNI;SKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
     ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()

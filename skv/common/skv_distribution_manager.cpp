@@ -80,7 +80,7 @@ GetNode( skv_key_t* aKey ) const
   char* Data = aKey->GetData();
   int   DataSize = aKey->GetSize();
 
-  return GetNode( & Data, & DataSize, 1 );
+  return GetNode( (const char**)(& Data), & DataSize, 1 );
 }
 
 /***
@@ -89,12 +89,12 @@ GetNode( skv_key_t* aKey ) const
  ***/
 int
 skv_distribution_hash_t::
-GetNode( char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount ) const
+GetNode( const char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount ) const
 {
   AssertLogLine( aListElementCount >= 1 )
     << EndLogLine;
 
-  HashKeyT hashValue = mHashFunc.GetHash( aListOfDataElem[ 0 ], aListOfSizesOfData[ 0 ] );
+  HashKeyT hashValue = mHashFunc.GetHash( (const char*)aListOfDataElem[ 0 ], aListOfSizesOfData[ 0 ] );
 
   for( int i = 1; i < aListElementCount; i++ )
   {

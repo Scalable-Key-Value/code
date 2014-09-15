@@ -116,14 +116,6 @@ struct skv_cmd_pdscntl_req_t
     mCntlCmd = aCntlCmd;
     mPDSAttr = *aPDSAttr;
 
-    AssertLogLine( aPDSNameSize > 0 &&
-                   aPDSNameSize <= SKV_MAX_PDS_NAME_SIZE )
-      << "skv_cmd_open_req_t::Init():: ERROR:: Length of PDS name is too long. "
-      << " NameLen: " << aPDSNameSize
-      << " SKV_MAX_PDS_NAME_SIZE: " << SKV_MAX_PDS_NAME_SIZE
-      << EndLogLine;
-    memcpy( mPDSName, aPDSName, aPDSNameSize );
-
     mHdr.SetCmdLength( sizeof(skv_cmd_pdscntl_req_t) );
   }
   void

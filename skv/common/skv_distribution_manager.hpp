@@ -73,7 +73,7 @@ struct skv_hash_func_t
   }
 
   HashKeyT
-  GetHashSimple( const char* aData, int aLen )
+  GetHashSimple( const char* aData, int aLen ) const
   {      
     AssertLogLine( aData != NULL )
       << "skv_hash_func_t::GetHash() "
@@ -121,7 +121,7 @@ struct skv_hash_func_t
   }
 
   HashKeyT 
-  GetHash( const char* aData, int aLen )
+  GetHash( const char* aData, int aLen ) const
   {
     AssertLogLine( aData != NULL )
       << "skv_hash_func_t::GetHash() "
@@ -133,11 +133,7 @@ struct skv_hash_func_t
       << " aLen: " << aLen
       << EndLogLine;
 
-#ifdef USE_BOB_JENKINS_HASH_FUNCTION
-    HashKeyT hashValue = hashbig( aData, aLen, 0 );
-#else
     HashKeyT hashValue = GetHashSimple( aData, aLen );
-#endif
 
     return hashValue;
   }
@@ -145,13 +141,8 @@ struct skv_hash_func_t
   void
   GetRange( unsigned int &aLow, unsigned int &aHigh ) const
   {
-#ifdef USE_BOB_JENKINS_HASH_FUNCTION
-    aLow  = 0;
-    aHigh = UINT_MAX;
-#else
     aLow = 0;
     aHigh = mP - 1;
-#endif
   }
 
 };
@@ -188,7 +179,7 @@ struct skv_distribution_hash_t
 
   // Input is a list of points to data
   // with a parallel list of data lengths
-  int GetNode( char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount ) const;
+  int GetNode( const char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount ) const;
 };
 
 template<class streamclass>
