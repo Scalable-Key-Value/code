@@ -21,7 +21,7 @@
 #include <errno.h>
 #include <FxLogger.hpp>
 #include <Trace.hpp>
-#include <client/skv_client.hpp>
+#include <skv/client/skv_client.hpp>
 #include <math.h>
 #include <iostream>
 #include <string>

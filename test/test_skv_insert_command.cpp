@@ -20,7 +20,7 @@
 //#include <mpi.h>
 #include <FxLogger.hpp>
 #include <Trace.hpp>
-#include <client/skv_client.hpp>
+#include <skv/client/skv_client.hpp>
 #include <math.h>
 
 #define DEFAULT_DATA_SIZE 256
@@ -30,9 +30,9 @@ skv_client_t Client;
 #include "test_skv_utils.hpp"
 
 
-int 
-main(int argc, char **argv) 
-{  
+int
+main(int argc, char **argv)
+{
   printf( "skv_client::entering main \n" ); fflush( stdout );
 
   FxLogger_Init( argv[ 0 ] );
@@ -45,7 +45,7 @@ main(int argc, char **argv)
 
   /*****************************************************************************
    * Init the SKV Client
-   ****************************************************************************/ 
+   ****************************************************************************/
   skv_status_t status = Client.Init( 0,
 #ifndef SKV_CLIENT_UNI
                                       MPI_COMM_WORLD,
@@ -64,14 +64,14 @@ main(int argc, char **argv)
         << "test_skv_insert_command::main():: SKV Client Init FAILED "
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
-    }  
-  /****************************************************************************/ 
+    }
+  /****************************************************************************/
 
 
 
   /*****************************************************************************
    * Connect to the SKV Server
-   ****************************************************************************/ 
+   ****************************************************************************/
   BegLogLine( 1 )
     << "test_skv_insert_command::main():: About to connect "
     << EndLogLine;
@@ -91,7 +91,7 @@ main(int argc, char **argv)
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
     }
-  /****************************************************************************/ 
+  /****************************************************************************/
 
 
 
@@ -154,11 +154,11 @@ main(int argc, char **argv)
                                   DEFAULT_DATA_SIZE );
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
   /****************************************************************************/
   // test default insert flag (FLAGS_UPDATE)
 
@@ -169,11 +169,11 @@ main(int argc, char **argv)
                                    DEFAULT_DATA_SIZE );
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
   /****************************************************************************/
   // test default insert flag (FLAGS_UPDATE with smaller size)
 
@@ -185,12 +185,12 @@ main(int argc, char **argv)
                                    -1 );
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
-  
+
+
   /****************************************************************************/
   // test default insert flag (FLAGS_UPDATE with larger size)
 
@@ -202,12 +202,12 @@ main(int argc, char **argv)
                                    5);
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
-  
+
+
   /****************************************************************************/
   // test default insert flag (FLAGS_APPEND with larger size)
 
@@ -219,11 +219,11 @@ main(int argc, char **argv)
                                    0);
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
   /****************************************************************************/
   // test default insert flag (FLAGS_APPEND with larger size)
 
@@ -235,11 +235,11 @@ main(int argc, char **argv)
                                    0);
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
   /****************************************************************************/
   // test default insert flag (FLAGS_APPEND with larger size)
 
@@ -251,11 +251,11 @@ main(int argc, char **argv)
                                    0);
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
 
   /****************************************************************************/
   // test default insert flag (FLAGS_EXPAND with larger size)
@@ -274,11 +274,11 @@ main(int argc, char **argv)
                                   DEFAULT_DATA_SIZE );
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
   // expand this record
   testFlag = (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE | SKV_COMMAND_RIU_INSERT_OVERLAPPING);
   ins_ret =  DoInsertRetrieveTest( &MyPDSId,
@@ -288,11 +288,11 @@ main(int argc, char **argv)
                                    10);
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
 
   /****************************************************************************/
   // test default insert flag (FLAGS_OVERWRITE_ON_DUP with larger size)
@@ -305,11 +305,11 @@ main(int argc, char **argv)
                                    0);
 
   BegLogLine( 1 )
-    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag ) 
+    << "test_skv_insert_command::main():: Check with " << skv_RIU_flags_to_string ( testFlag )
     << ". Insert status: " << skv_status_to_string( ins_ret.insert )
     << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
     << EndLogLine;
-  
+
 
 
   /*****************************************************************/
@@ -347,6 +347,6 @@ main(int argc, char **argv)
     << "test_skv_insert_command::main():: Disconnected with status: " << status
     << EndLogLine;
 
-  
+
   return 0;
 }
