@@ -146,7 +146,6 @@ add_definitions(
   -DDO_CHECK
 
 # seems to be necessary for the tests to link
-  -DSKV_CLIENT_UNI
   ${GLOBAL_DEFS}
   ${IT_API_DEFS}
 )
@@ -168,6 +167,8 @@ add_subdirectory(skv)
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
+  target_compile_definitions(${TEST_NAME} PUBLIC
+    "-DSKV_CLIENT_UNI;-DSKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
     ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
 endforeach()
