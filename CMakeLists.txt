@@ -171,6 +171,7 @@ foreach(_test ${TEST_SOURCES})
     "SKV_CLIENT_UNI;SKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
     ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+  install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
 
 include(skvCPack)
