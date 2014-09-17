@@ -44,7 +44,7 @@ set_property(CACHE SKV_MPI
   PROPERTY STRINGS "AUTO" "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
 
 include(Platform/${SKV_ENV})
-message(STATUS "Environment ${SKV_ENV}; MPI ${SKV_MPI}")
+message(STATUS "Environment ${SKV_ENV}; MPI ${SKV_MPI} (mpicc: ${MPI_C_COMPILER})")
 
 if(SKV_MPI MATCHES "AUTO")
   find_package(MPI REQUIRED)
