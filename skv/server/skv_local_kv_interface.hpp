@@ -56,7 +56,8 @@
 #include <skv/server/skv_local_kv_asyncmem.hpp>
 
 // include rocksdb parts only if rocksdb is requested to avoid dependency from C++11 compiler and rocksdb source
-#if (SKV_LOCAL_KV == 2)
+// \todo: this should be done via a kind of backend-config.h to avoid this extra compile flag
+#ifdef WITH_ROCKSDB
 #include <skv/server/skv_local_kv_rocksdb.hpp>
 #endif
 

@@ -33,8 +33,8 @@
 #include <thread>
 #include <rocksdb/db.h>
 
-#include <server/skv_rdma_buffer_allocator.hpp>
-#include <server/skv_local_kv_rocksdb_access.hpp>
+#include <skv/server/skv_rdma_buffer_allocator.hpp>
+#include <skv/server/skv_local_kv_rocksdb_access.hpp>
 
 static inline skv_status_t rocksdb_status_to_skv( rocksdb::Status &aRS )
 {
