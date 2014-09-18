@@ -71,6 +71,12 @@ set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING
 set_property(CACHE SKV_LOCAL_KV_BACKEND
   PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
 
+
+if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
+  find_package(rocksdb REQUIRED)
+endif()
+
+
 include(logtrace)
 set(GLOBAL_DEFS
   ${PLATFORM_GLOBAL_DEFS}
