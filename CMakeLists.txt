@@ -73,6 +73,7 @@ set_property(CACHE SKV_LOCAL_KV_BACKEND
 
 
 if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
+  find_package(ZLIB REQUIRED)
   find_package(rocksdb REQUIRED)
 endif()
 
