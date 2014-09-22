@@ -1,0 +1,179 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Copyright (c) IBM Corp. 2014
+% All rights reserved. This program and the accompanying materials
+% are made available under the terms of the Eclipse Public License v1.0
+% which accompanies this distribution, and is available at
+% http://www.eclipse.org/legal/epl-v10.html
+%
+% Contributors:
+%    lschneid
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Command Paths}\label{sec:skv:commands}
+
+\subsection{Init}
+\code{Init()} is the first routine to call when creating a SKV
+client.
+\begin{enumerate} \parskip-0.5ex
+\item \code{skv\_client\_t::Init()}
+\item \code{skv\_client\_internal\_t::Init()}
+  \begin{enumerate} \parskip-0.5ex
+  \item creates IT\_API device
+  \item creates IT\_API protection zone
+  \item initialize Command Control Block Manager Interface
+  \item initialize Connection Manager Interface
+  \item initialize Command Manager Interface
+  \item initialize Relational Cursor Manager Interface
+  \end{enumerate}
+\end{enumerate}
+
+
+\subsection{Connect}
+Connect to a SKV server.
+\begin{enumerate} \parskip-0.5ex
+\item \code{skv\_client\_t::Connect()}
+\item \code{skv\_client\_internal\_t::Connect()}
+  \begin{enumerate} \parskip-0.5ex
+  \item \code{skv\_client\_conn\_manager\_if\_t::Connect()}
+    \begin{enumerate} \parskip-0.5ex
+    \item gets client hostname via \code{gethostname} to find out
+      where it is running (determine method to get server IP)
+    \item Get \code{ComputeFileNamePath} with server IPs
+    \item Number of SKV servers determined by number of lines in\\ \code{ComputeFileNamePath}
+    \item Fetches server addresses/names from file
+    \item Chose a random server to connect first, then connect
+      subsequent servers (\code{ConnectToServer()})
+      \begin{enumerate}
+      \item creates RC endpoint
+      \item gets IPv4 address via \code{gethostbyname()}
+      \item does \code{it\_ep\_connect()}
+      \item polls the event dispatchers for connection manager msgs
+        (and affiliated events and unaffiliated events for errors)
+      \end{enumerate}
+    \item Retrieves the distribution function
+      \begin{enumerate}
+      \item Creates a command
+
+        calls \code{skv\_client\_command\_manager\_if\_t::Reserve()}
+        which removes an element from queue of free Command Control
+        Blocks (CCB). The queue is implemented as a double linked
+        list and implements a stack semantic (LIFO).
+      \item initializes a \code{skv\_cmd\_retrieve\_dist\_req\_t}
+      \item dispatch the command to a random server
+      \item wait for the command to complete
+      \end{enumerate}
+    \end{enumerate}
+  \end{enumerate}
+\end{enumerate}
+
+
+\subsection{Open}
+Create or open a partitioned data set (PDS).  Open uses \code{iOpen} and \code{wait}.
+\begin{itemize}
+\item Use the PDS-name as a key and decide the server number of the owner
+\end{itemize}
+
+
+
+
+\section{The SKV Server State Machine}\label{sec:skv:srv_sm}
+
+Questions to answer in this section:
+\begin{itemize}
+\item Which server states are defined
+\item Event types that cause which transition
+\item Which events are triggered when transitioning
+\end{itemize}
+
+
+\section{Implementation}\label{sec:skv:impl}
+
+\subsection{Endpoint State}
+An Endpoing State (EPState) holds connection-relevant information and
+keeps track of QP resources.
+
+\emph{Architecturally this might be questionable. A QP status is
+  required to maintain. However, since the main server state machine
+  multiplexes all events through a single aggregated event queue, it
+  requires another demultiplexing step to get into the EPStates and
+  hold their information... Maybe this is the best solution already. }
+
+
+
+\subsection{Command Control Block}
+A command control block (CCB) is assigned to each command/request that is
+\emph{currently processed} or \emph{pending}. It contains the required
+information about the command and its status.
+An essential attribute is the \emph{command ordinal}.
+
+There's a stack of available CCBs for each EPState.  The following
+steps describe the CCB handling:
+\begin{enumerate}
+\item A free CCB is assigned to an event at the time of
+  recv-completion for a new request.  This happens before the
+  initialization of the event (routine \code{GetITEvent()}).
+\item The command ordinal of the new CCB is assigned to the event to
+  be able to find the correct CCB later.
+\item Processing of the command
+\item The CCB is returned to the pile of free slots after successfull
+  dispatching of the response to the client.  Note: since the involved
+  send and recv buffers are detached from the CCB, this return already
+  happens after send and recv operations are posted regardless of
+  their completion status.  For send and recv buffers see below.
+\end{enumerate}
+
+
+\subsection{Command Send Buffers}
+These buffers hold the data that is sent back to the client.  They
+have to be preserved until the send completion event is processed and
+therefore are detached from the handling of the CCB.
+
+An available send buffer is always attached to a single CCB.  The send
+buffer is replaced by a spare after the response to the client is
+posted and before the CCB is returned to the free command slots list.
+Replacing the send buffer means to get an unposted buffer from a stack
+of buffers.
+
+A posted buffer is returned to the stack if the corresponding send
+operation is completed (send completion event).
+
+
+
+\subsection{Command Recv Buffers}
+Recv buffers provide space to receive requests from a client.  They
+have been detached from the CCB because of a potential race
+condition.
+
+As a new request arrives (in a receive buffer), this buffer gets
+assigned/attached to a free CCB.  This assignment is kept until the
+command is processed and the response is dispatched.  Right before
+posting a new recv for future commands, the old recv buffer is
+detached from the CCB and 
+
+
+\subsection{Client-Server Protocol}
+
+Header data consists of the command type (Insert, Retrieve, Remove,
+...), a command ordinal, and the address of a command control block.
+The command ordinal and the CCB information is primarily required by
+the client to pick the right client CCB after receiving the response
+from the server.
+
+
+At the server, the header data is generally kept in the receive buffer
+that is attached to the CCB.  An exception is if the command requires
+2 phases, \abrIE RDMA-read in case of the insert command.  The
+header information is copied from the receive buffer to the
+CommandState member of the CCB for later use.
+
+
+
+
+\endinput
+
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: "skvdoc"
+%%% End: 

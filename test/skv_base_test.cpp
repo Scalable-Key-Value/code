@@ -21,7 +21,7 @@
 #include <errno.h>
 #include <FxLogger.hpp>
 #include <Trace.hpp>
-#include <client/skv_client.hpp>
+#include <skv/client/skv_client.hpp>
 #include <math.h>
 #include <iostream>
 #include <string>
@@ -42,6 +42,8 @@ typedef struct
   std::string CONF_FILE;
   short TEST_MODE;
   uint16_t KEYSIZE;
+  int RECORD_COUNT;
+  int SLEEP_AT_END ;
 } skv_test_config_t;
 
 typedef struct
@@ -52,7 +54,9 @@ typedef struct
 static skv_test_config_t config = {
     "skv_server.conf",
     SKV_BASE_TEST_ALL,
-    4
+    4,
+    1000,
+    0
 };
 
 static skv_global_state_t gdata;
@@ -104,7 +108,7 @@ int Init_test( int argc, char **argv )
 {
   int status = 0;
   int op;
-  while( (op = getopt( argc, argv, "ha:k:m:" )) != -1 )
+  while( (op = getopt( argc, argv, "ha:k:m:r:z:" )) != -1 )
   {
     char *endp;
     switch( op )
@@ -121,6 +125,8 @@ int Init_test( int argc, char **argv )
         std::cout << "  -m <test_mode>     : Testmode: [a]|[bcdipr]\n";
         std::cout << "                     :     a-all; b-bulkinsert, c-cursor, d-remove\n";
         std::cout << "                     :     i-insert, p-PDS, r-retrieve\n";
+        std::cout << "  -r <record_count>  : number of records for bulkinsert and cursor\n";
+        std::cout << "  -z <seconds>       : number of seconds to sleep at end for synchronisation\n";
         std::cout << "  " << std::endl;
         return 1;
       }
@@ -162,6 +168,12 @@ int Init_test( int argc, char **argv )
           }
         }
         break;
+      case 'r':
+        config.RECORD_COUNT = atoi( optarg ) ;
+        break ;
+      case 'z':
+        config.SLEEP_AT_END = atoi( optarg ) ;
+        break ;
     }
   }
   return status;
@@ -339,7 +351,7 @@ int Test_Retrieve( int aDataSize, const char *aText )
   std::string mtext="RETRIEVE:";
   mtext.append( aText );
 
-  int Key = aDataSize;
+  int Key = aDataSize + 0xeeef;
   skv_cmd_RIU_flags_t testFlag = SKV_COMMAND_RIU_FLAGS_NONE;
 
   // first thing for retrieve test: make sure there's data to read ;-)
@@ -347,7 +359,7 @@ int Test_Retrieve( int aDataSize, const char *aText )
                                               Key,
                                               65536,
                                               0,
-                                              (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE|SKV_COMMAND_RIU_INSERT_OVERLAPPING) ),
+                                              (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_UPDATE) ),
                         SKV_SUCCESS,
                         mtext.c_str(), "INIT_INSERT" );
 
@@ -366,6 +378,22 @@ int Test_Retrieve( int aDataSize, const char *aText )
                                                  testFlag ),
                          SKV_SUCCESS,
                          mtext.c_str(), "OFFSET" );
+
+  status += TEST_RESULT( skv_base_test_retrieve( "SKV_BASE_TEST_PDS",
+                                                 Key,
+                                                 aDataSize >> 2,
+                                                 aDataSize,
+                                                 testFlag ),
+                         SKV_SUCCESS,
+                         mtext.c_str(), "PARTIAL" );
+
+  status += TEST_RESULT( skv_base_test_retrieve( "SKV_BASE_TEST_PDS",
+                                                 Key,
+                                                 aDataSize >> 2,
+                                                 aDataSize,
+                                                 testFlag ),
+                         SKV_SUCCESS,
+                         mtext.c_str(), "VALUESIZE" );
 
   Key++;
   status += TEST_RESULT( skv_base_test_retrieve( "SKV_BASE_TEST_PDS",
@@ -459,6 +487,13 @@ int
 main(int argc, char **argv)
 {
   FxLogger_Init( argv[ 0 ] );
+  BegLogLine(1)
+    << "Starting"
+    << EndLogLine ;
+  char hostname[256] ;
+  gethostname(hostname,256) ;
+  fprintf(stdout, "Hostname is %s\n",hostname) ;
+  fflush(stdout) ;
   int rc = 0;  // failed tests counter
 
   // Parse args and initialize configuration
@@ -500,12 +535,12 @@ main(int argc, char **argv)
 
   if( config.TEST_MODE & (SKV_BASE_TEST_BULKINSERT) )
   {
-    rc += Test_BulkInsert( 246, config.KEYSIZE, 8192, 1000 );
+    rc += Test_BulkInsert( 246, config.KEYSIZE, 8192, config.RECORD_COUNT );
   }
 
   if( config.TEST_MODE & (SKV_BASE_TEST_CURSOR) )
   {
-    rc += Test_Cursor( 246, config.KEYSIZE, 8192, 1000 );
+    rc += Test_Cursor( 246, config.KEYSIZE, 8192, config.RECORD_COUNT );
   }
 
   // cleanup, disconnect, shutdown
@@ -516,5 +551,9 @@ main(int argc, char **argv)
 
   std::cout << "Test result: = " << test_count-rc << "/" << test_count << " passed" << std::endl;
 
+  if ( config.SLEEP_AT_END > 0 )
+    {
+      sleep(config.SLEEP_AT_END) ;
+    }
   return (rc == 0 ? 0 : 1);
 }

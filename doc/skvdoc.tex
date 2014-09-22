@@ -1,0 +1,120 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Copyright (c) IBM Corp. 2014
+% All rights reserved. This program and the accompanying materials
+% are made available under the terms of the Eclipse Public License v1.0
+% which accompanies this distribution, and is available at
+% http://www.eclipse.org/legal/epl-v10.html
+%
+% Contributors:
+%    lschneid
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[a4paper, 10pt]{article}
+
+\includeonly{client_api, back_end_api, runtime}
+
+\usepackage[a4paper]{geometry}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{color}
+\usepackage{url}
+\usepackage{todonotes}
+\usepackage{skv_macros}
+\usepackage{listings}
+
+\title{SKV -- Scalable Key/Value Store}
+\author{contact: Lars Schneidenbach \\
+  schneidenbach@us.ibm.com
+}
+
+
+\lstset{language=C++,
+  frame=single, 
+  basicstyle=\small, 
+  keywordstyle=\color{black},
+  commentstyle=\color{green},
+  stringstyle=\color{brown},
+  breaklines=true,
+  morekeywords={ibv_open_device,ibv_alloc_pd,ibv_create_cq,ibv_create_qp,ibv_modify_qp,ibv_post_send,ibv_post_recv,ibv_poll_cq,ibv_reg_mr,
+    uint64_t,uint32_t,uint16_t,uint8_t,ibv_free_device_list,ibv_get_device_list,ibv_get_device_name,ibv_dereg_mr,ibv_destroy_qp,ibv_destroy_cq,
+    ibv_destroy_cq,ibv_dealloc_pd,ibv_close_device},
+}
+
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{SKV Overview}\label{sec:overview}
+The design of the Scalable Key/Value Store (SKV) is influenced by
+Berkeley DB (BDB) key-value interface and the Remote Direct Memory
+Access (RDMA) communication paradigm.  
+
+SKV is a parallel client, parallel server, key-value database system
+with basic function similar to BDB. SKV storage can be drawn from main
+memory of the node of the parallel machine or from a single-node
+key/value store that serves as a storage back-end for the distributed
+SKV.  Currently, there's a rocksdb back-end available that allows the
+storage to be in the file system.
+
+Each node contributing storage (memory) runs a parallel SKV server and
+collectively are known as an SKV Server Group. The SKV client library
+runs in an MPI parallel environment (a non-MPI library is available
+too).  It provides an API and manages the client end of the message
+protocol between the client program and the SKV server port.  SKV
+clients and SKV servers operate on a request - response model.  Any
+valid SKV command can be sent to any SKV server.  The SKV server group
+expects to run on a homogeneous parallel machine.  The clients using
+the SKV library accessing a SKV server group may run in the server
+partition or externally.  There is exactly 1 server running on each
+node of a machine allocation.  The SKV library provides a standard
+C/C++ API similar to BDB.  Rather than store data to a file, the SKV
+library uses a messaging interface to exchange data with the SKV
+server group.  The SKV client-server protocol involves short control
+messages handled in an RPC style exchange and bulk transfers handled
+via an RDMA type exchange.  Client connection to the SKV server group
+is managed so that a single connection point provides RDMA access to
+all servers across the machine.
+
+
+\subsection{The Partitioned Data Set}\label{sec:overview:pds}
+SKV uses Partitioned Data Set (PDS) to store tables.
+
+The PDS is the primary structure used to organize SKV data in the
+storage of a SKV server group.  A PDS is a distributed container of
+key-value records.  When a PDS is opened a data structure is returned
+which may be shared with other processes via message passing,
+broadcast for example, to enable a parallel process to rapidly gain
+global access.
+
+The SKV Server that creates a PDS is the PDS root node.  Each SKV
+Server uses a unique ID to name the created PDS.  The unique id is
+formed in such a way that the SKV Server address is an accessible
+component of the Id.  It is up to the creator of the PDS to keep track
+of the pds id including any mapping from a name space map.
+
+A PDS is read and written on a record basis.  To access a record, a
+key must be provided.  Parts of records may be read or written.
+Records may be compressed.  Currently, records are distributed to
+nodes based on a hash of the key, then stored in a red-black tree in
+memory or handed to the rocksdb back-end.  Every key hashes to exactly
+1 node.  A PDS corresponds to a database table and a record
+corresponds to a database row.
+
+PIMD client has the ability to request the server group to take a
+current snapshot of the data image and save it to persistent storage
+on disk at a specified location.  The server group could then be
+restarted with the data from a snapshot image.
+
+
+\include{client_api}
+\include{runtime}
+\include{back_end_api}
+\include{internals}
+\end{document}
+
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% End: 

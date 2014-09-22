@@ -103,7 +103,9 @@ char   gITAPI_RECV_AT_WAIT_Name[ CONTEXT_NAME_SIZE ];
 
 int gTraceRank = 0;
 
+#ifndef IT_API_USE_SIW_HACK
 static unsigned short local_port = 17500;
+#endif
 
 // #include <it_api_o_verbs_types.h>
 #include <it_api_o_verbs_thread.h>
@@ -310,7 +312,7 @@ it_api_o_verbs_get_device_address( struct sockaddr_in *addr,
       BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT )
         << " ifa_name: " << ifAddrStruct->ifa_name
         << " ifa_family: " << ((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_family
-        << " ifa_addr: " << (void *) ((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_addr.s_addr
+        << " ifa_addr: " << (void *) (intptr_t)(((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_addr.s_addr)
         << " ifa_port: " << ((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_port
         << EndLogLine;
 
@@ -321,7 +323,7 @@ it_api_o_verbs_get_device_address( struct sockaddr_in *addr,
           addr->sin_addr.s_addr = ((struct sockaddr_in *)ifAddrStruct->ifa_addr)->sin_addr.s_addr;
 
           BegLogLine( 0 )
-            << "addr.sin_addr.s_addr: " << (void *) addr->sin_addr.s_addr
+            << "addr.sin_addr.s_addr: " << (void *) (intptr_t)(addr->sin_addr.s_addr)
             << EndLogLine;
 
           addrFound = 1;
@@ -605,10 +607,10 @@ int
 it_api_o_verbs_map_flags_to_ofed( IN const it_dto_flags_t dto_flags )
 {
   int ret_flag = 0;
-  if( dto_flags & (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG ) )
+  if( (int)dto_flags & (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG ) )
     ret_flag |= IBV_SEND_SIGNALED;
 
-  if( dto_flags & IT_SOLICITED_WAIT_FLAG )
+  if( (int)dto_flags & IT_SOLICITED_WAIT_FLAG )
     ret_flag |= IBV_SEND_SOLICITED;
 
   return ret_flag;
@@ -738,9 +740,9 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
             << "it_lmr_create(): "
             << " lmr: " << (void *)mrMgr
             << " dev" << device_ord
-            << " lmr.lkey: " << (void *)mrMgr->MRs[ device_ord ].mr->lkey
+            << " lmr.lkey: " << (void *)(intptr_t)(mrMgr->MRs[ device_ord ].mr->lkey)
             << " dev" << device_ord
-            << " lmr.rkey: " << (void *)mrMgr->MRs[ device_ord ].mr->rkey
+            << " lmr.rkey: " << (void *)(intptr_t)(mrMgr->MRs[ device_ord ].mr->rkey)
             << " size: " << mrMgr->length
             << " addr: " << mrMgr->addr
             << EndLogLine;
@@ -832,12 +834,12 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
   else if( post_op == POST_SEND )
     {
       struct ibv_send_wr           rdmaw_wr, *bad_tx_wr;
-      int                          ibv_send_flags = it_api_o_verbs_map_flags_to_ofed( dto_flags );
+      enum ibv_send_flags          send_flags = (enum ibv_send_flags)it_api_o_verbs_map_flags_to_ofed( dto_flags );
 
       bzero( (void *) & rdmaw_wr, sizeof( ibv_send_wr ) );
 
       rdmaw_wr.opcode              = opcode;
-      rdmaw_wr.send_flags          = ibv_send_flags;
+      rdmaw_wr.send_flags          = send_flags;
       rdmaw_wr.sg_list             = & ( local_sge[ 0 ] );
       rdmaw_wr.num_sge             = num_segments;
 
@@ -862,7 +864,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
         bzero( (void *) rdmaw_seg_wr, sizeof( ibv_send_wr ) * num_segments );
 
         rdmaw_wr.next = &( rdmaw_seg_wr[ 0 ] );
-        rdmaw_wr.send_flags = ibv_send_flags & (~IBV_SEND_SIGNALED);
+        rdmaw_wr.send_flags = send_flags & (~IBV_SEND_SIGNALED);
         for ( int sge=0; sge<remaining_segs; sge++ )
         {
           rdmaw_seg_wr[ sge ].wr_id = (uint64_t) (elem+((sge+1)*0x10000));
@@ -875,12 +877,12 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
           if( sge < remaining_segs-1 )
           {
             rdmaw_seg_wr[ sge ].next = & rdmaw_seg_wr[ sge+1 ];
-            rdmaw_seg_wr[ sge ].send_flags = ibv_send_flags & (~IBV_SEND_SIGNALED);
+            rdmaw_seg_wr[ sge ].send_flags = send_flags & (~IBV_SEND_SIGNALED);
           }
           else
           {
             rdmaw_seg_wr[ sge ].next = NULL;
-            rdmaw_seg_wr[ sge ].send_flags = ibv_send_flags;
+            rdmaw_seg_wr[ sge ].send_flags = send_flags;
           }
           BegLogLine( FXLOG_IT_API_O_VERBS )
             << "IT_API: assembled next SGE: " << sge+1
@@ -2079,7 +2081,7 @@ it_status_t it_listen_create (
         << " failed to bind server address"
         << " ret: " << ret
         << " errno: " << errno
-        << " addr: " << (void*)(s_addr.sin_addr.s_addr)
+        << " addr: " << (void*)(intptr_t)(s_addr.sin_addr.s_addr)
         << " port: " << s_addr.sin_port
         << EndLogLine;
 
@@ -2091,7 +2093,7 @@ it_status_t it_listen_create (
     << "it_listen_create(): "
     << " ret: " << ret
     << " errno: " << errno
-    << " addr: " << (void*)(s_addr.sin_addr.s_addr)
+    << " addr: " << (void*)(intptr_t)(s_addr.sin_addr.s_addr)
     << " port: " << s_addr.sin_port
     << EndLogLine;
 
@@ -2127,11 +2129,11 @@ it_status_t it_ep_disconnect (
   pthread_mutex_lock( & gITAPIFunctionMutex );
 
   // BegLogLine(FXLOG_IT_API_O_VERBS) << "it_ep_disconnect()" << EndLogLine;
-  BegLogLine( FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT ) << "it_ep_disconnect() Entering... " << EndLogLine;
+  BegLogLine( (FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT) ) << "it_ep_disconnect() Entering... " << EndLogLine;
 
-  BegLogLine( FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT ) << "IN        it_ep_handle_t        ep_handle,                 " <<  (void *) ep_handle           << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT ) << "IN  const unsigned char         private_data@              " <<  (void*)private_data        << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT ) << "IN        size_t                private_data_length        " <<   private_data_length << EndLogLine;
+  BegLogLine( (FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT) ) << "IN        it_ep_handle_t        ep_handle,                 " <<  (void *) ep_handle           << EndLogLine;
+  BegLogLine( (FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT) ) << "IN  const unsigned char         private_data@              " <<  (void*)private_data        << EndLogLine;
+  BegLogLine( (FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT) ) << "IN        size_t                private_data_length        " <<   private_data_length << EndLogLine;
 
   it_api_o_verbs_qp_mgr_t* qpMgr = (it_api_o_verbs_qp_mgr_t*) ep_handle;
 
@@ -2148,7 +2150,7 @@ it_status_t it_ep_disconnect (
       return IT_ERR_ABORT;
     }
 
-  BegLogLine( FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT ) << "it_ep_disconnect() Leaving... " << EndLogLine;
+  BegLogLine( (FXLOG_IT_API_O_VERBS | FXLOG_IT_API_O_VERBS_CONNECT) ) << "it_ep_disconnect() Leaving... " << EndLogLine;
 
   pthread_mutex_unlock( & gITAPIFunctionMutex );
 
@@ -2501,10 +2503,10 @@ it_status_t it_ep_connect (
   BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT ) << "it_ep_connect() entering" << EndLogLine;
 
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN        it_ep_handle_t        ep_handle,                 " <<  (void *)ep_handle           << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_path_t             path..>raddr.ipv4.s_addr   " <<  (void*) path->u.iwarp.raddr.ipv4.s_addr        << EndLogLine;
+  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_path_t             path..>raddr.ipv4.s_addr   " <<  (void*)(uintptr_t)(path->u.iwarp.raddr.ipv4.s_addr)        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_attributes_t* conn_attr@                 " <<  (void*) conn_attr                              << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.local  " <<  (void*) connect_qual->conn_qual.lr_port.local  << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.remote " <<  (void*) connect_qual->conn_qual.lr_port.remote << EndLogLine;
+  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.local  " <<  (void*)(uintptr_t)(connect_qual->conn_qual.lr_port.local)  << EndLogLine;
+  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.remote " <<  (void*)(uintptr_t)(connect_qual->conn_qual.lr_port.remote) << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN        it_cn_est_flags_t     cn_est_flags,              " <<  (void*)  cn_est_flags        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const unsigned char         private_data@              " <<  (void*)private_data        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN        size_t                private_data_length        " <<   private_data_length << EndLogLine;
@@ -2791,9 +2793,9 @@ it_status_t it_lmr_create21 (
             << "it_lmr_create(): "
             << " lmr: " << (void *)mrMgr
             << " dev" << i
-            << " lmr.lkey: " << (void *)mrMgr->MRs[ i ].mr->lkey
+            << " lmr.lkey: " << (void *)(uintptr_t)(mrMgr->MRs[ i ].mr->lkey)
             << " dev" << i
-            << " lmr.rkey: " << (void *)mrMgr->MRs[ i ].mr->rkey
+            << " lmr.rkey: " << (void *)(uintptr_t)(mrMgr->MRs[ i ].mr->rkey)
             << EndLogLine;
 
         }
@@ -3060,7 +3062,7 @@ it_status_t itx_ep_accept_with_rmr (
 
 
   struct sockaddr_in *local_IPaddr = ( struct sockaddr_in* ) rdma_get_local_addr ( (struct rdma_cm_id*) &cn_est_id );
-  BegLogLine(FXLOG_IT_API_O_VERBS) << "IPaddr: " << (void*)(local_IPaddr->sin_addr.s_addr) << EndLogLine;
+  BegLogLine(FXLOG_IT_API_O_VERBS) << "IPaddr: " << (void*)(uintptr_t)(local_IPaddr->sin_addr.s_addr) << EndLogLine;
 
 
   it_rmr_triplet_t private_data;
@@ -3165,10 +3167,10 @@ it_status_t itx_ep_connect_with_rmr (
   BegLogLine( FXLOG_IT_API_O_VERBS_CONNECT ) << "it_ep_connect() entering" << EndLogLine;
 
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN        it_ep_handle_t        ep_handle,                 " <<  (void *)ep_handle           << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_path_t             path..>raddr.ipv4.s_addr   " <<  (void*) path->u.iwarp.raddr.ipv4.s_addr        << EndLogLine;
+  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_path_t             path..>raddr.ipv4.s_addr   " <<  (void*)(uintptr_t)(path->u.iwarp.raddr.ipv4.s_addr)        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_attributes_t* conn_attr@                 " <<  (void*) conn_attr                              << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.local  " <<  (void*) connect_qual->conn_qual.lr_port.local  << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.remote " <<  (void*) connect_qual->conn_qual.lr_port.remote << EndLogLine;
+  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.local  " <<  (void*)(uintptr_t)(connect_qual->conn_qual.lr_port.local)  << EndLogLine;
+  BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const it_conn_qual_t        connect_qual..>port.remote " <<  (void*)(uintptr_t)(connect_qual->conn_qual.lr_port.remote) << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN        it_cn_est_flags_t     cn_est_flags,              " <<  (void*)  cn_est_flags        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN  const unsigned char         private_data@              " <<  (void*)private_data        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_VERBS) << "IN        size_t                private_data_length        " <<   private_data_length << EndLogLine;
@@ -3467,6 +3469,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
       if( AEVD->mEventCounter == 0 )
         {
           *events_count = 0;
+          pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
           return IT_SUCCESS;
         }
     }

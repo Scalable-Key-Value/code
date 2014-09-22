@@ -15,12 +15,8 @@
 #include <mpi.h>
 #include <FxLogger.hpp>
 #include <Trace.hpp>
-#include <client/skv_client.hpp>
+#include <skv/client/skv_client.hpp>
 #include <math.h>
-
-#ifndef FXLOG_SKV_TEST_SINGLE_STEPS
-#define FXLOG_SKV_TEST_SINGLE_STEPS ( 0 )
-#endif
 
 #define SKV_TEST_USING_MPI
 
@@ -33,9 +29,9 @@ skv_client_t Client;
 #include "test_skv_utils.hpp"
 
 
-int 
-main(int argc, char **argv) 
-{  
+int
+main(int argc, char **argv)
+{
   printf( "skv_client::entering main \n" ); fflush( stdout );
 
   FxLogger_Init( argv[ 0 ] );
@@ -58,7 +54,7 @@ main(int argc, char **argv)
 
   /*****************************************************************************
    * Init the SKV Client
-   ****************************************************************************/ 
+   ****************************************************************************/
   skv_status_t status = Client.Init( 0,
 #ifdef SKV_TEST_USING_MPI
                                       MPI_COMM_WORLD,
@@ -77,14 +73,14 @@ main(int argc, char **argv)
         << "test_skv_remove_command::main():: SKV Client Init FAILED "
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
-    }  
-  /****************************************************************************/ 
+    }
+  /****************************************************************************/
 
 
 
   /*****************************************************************************
    * Connect to the SKV Server
-   ****************************************************************************/ 
+   ****************************************************************************/
   BegLogLine( 1 )
     << "test_skv_remove_command::main():: About to connect "
     << EndLogLine;
@@ -104,7 +100,7 @@ main(int argc, char **argv)
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
     }
-  /****************************************************************************/ 
+  /****************************************************************************/
 
 
   /*****************************************************************************
@@ -150,7 +146,7 @@ main(int argc, char **argv)
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
     }
-  
+
   int numServers = SKVTestGetServerCount();
 
   /****************************************************************************/
@@ -177,15 +173,15 @@ main(int argc, char **argv)
                                       DATA_SIZE );
 
       BegLogLine( 1 )
-        << "test_skv_remove_command::main():: Inserting test with " << skv_RIU_flags_to_string ( SKV_COMMAND_RIU_FLAGS_NONE ) 
+        << "test_skv_remove_command::main():: Inserting test with " << skv_RIU_flags_to_string ( SKV_COMMAND_RIU_FLAGS_NONE )
         << ". Insert status: " << skv_status_to_string( ins_ret.insert )
         << " Retrieve status: " << skv_status_to_string( ins_ret.retrieve )
         << EndLogLine;
-  
+
 
       /****************************************************************************/
       // test default remove flag (FLAGS_NONE)
- 
+
       testFlag = SKV_COMMAND_REMOVE_FLAGS_NONE;
       status = Client.Remove( &MyPDSId,
                               (char*) &Key,
@@ -198,7 +194,7 @@ main(int argc, char **argv)
         << EndLogLine;
 
     }
-  
+
 #ifdef SKV_TEST_USING_MPI
   MPI_Barrier( MPI_COMM_WORLD );
 #endif
@@ -222,11 +218,11 @@ main(int argc, char **argv)
     << "test_skv_remove_command::main():: Retrieving "
     << ". Status: " << skv_status_to_string( status )
     << EndLogLine;
-  
+
 
   /****************************************************************************/
   // test remove of non-existent key
- 
+
   Key += numServers;
 #ifdef SKV_TEST_USING_MPI
   Key += rank;
@@ -242,7 +238,7 @@ main(int argc, char **argv)
     << "test_skv_remove_command::main():: Removing "
     << ". Status: " << skv_status_to_string( status )
     << EndLogLine;
-  
+
 
 
   /*****************************************************************/
@@ -274,7 +270,6 @@ main(int argc, char **argv)
 #ifdef SKV_TEST_USING_MPI
   MPI_Finalize();
 #endif
-  
+
   return 0;
 }
-

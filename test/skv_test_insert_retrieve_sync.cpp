@@ -15,7 +15,7 @@
 #include <mpi.h>
 #include <FxLogger.hpp>
 #include <Trace.hpp>
-#include <client/skv_client.hpp>
+#include <skv/client/skv_client.hpp>
 #include <math.h>
 
 #ifndef SKV_TEST_TRACE
@@ -30,7 +30,7 @@ skv_client_t Client;
 #define DATA_SIZE        ( 4096 )
 
 #include "test_skv_utils.hpp"
-#include <server/skv_server_heap_manager.hpp>   // to get the server space per snode!
+#include <skv/server/skv_server_heap_manager.hpp>   // to get the server space per snode!
 
 
 static TraceClient SKVInsertStart;
@@ -99,9 +99,9 @@ calculateKey( int rank,
 }
 
 
-int 
-main(int argc, char **argv) 
-{  
+int
+main(int argc, char **argv)
+{
   printf( "skv_client::entering main \n" ); fflush( stdout );
 
   FxLogger_Init( argv[ 0 ] );
@@ -112,15 +112,15 @@ main(int argc, char **argv)
 
   /*****************************************************************************
    * Init MPI
-   ****************************************************************************/ 
+   ****************************************************************************/
   MPI_Init( &argc, &argv );
   MPI_Comm_rank( MPI_COMM_WORLD, &Rank );
   MPI_Comm_size( MPI_COMM_WORLD, &NodeCount );
-  /****************************************************************************/ 
+  /****************************************************************************/
 
   /*****************************************************************************
    * Init the SKV Client
-   ****************************************************************************/ 
+   ****************************************************************************/
   skv_status_t status = Client.Init( 0,
 #ifndef SKV_CLIENT_UNI
                                       MPI_COMM_WORLD,
@@ -139,14 +139,14 @@ main(int argc, char **argv)
         << "skv_test_n_inserts_retrieves::main():: SKV Client Init FAILED "
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
-    }  
-  /****************************************************************************/ 
+    }
+  /****************************************************************************/
 
 
 
   /*****************************************************************************
    * Connect to the SKV Server
-   ****************************************************************************/ 
+   ****************************************************************************/
   BegLogLine( 1 )
     << "skv_test_n_inserts_retrieves::main():: About to connect "
     << EndLogLine;
@@ -166,7 +166,7 @@ main(int argc, char **argv)
         << " status: " << skv_status_to_string( status )
         << EndLogLine;
     }
-  /****************************************************************************/ 
+  /****************************************************************************/
 
 
 
@@ -193,7 +193,7 @@ main(int argc, char **argv)
 
   MPI_Bcast( MyTestPdsName,
              SKV_MAX_PDS_NAME_SIZE,
-             MPI_CHAR, 
+             MPI_CHAR,
              0,
              MPI_COMM_WORLD );
 
@@ -271,13 +271,13 @@ main(int argc, char **argv)
       // Create Insert Key / Value
       int   MyDataInsertSize = testDataSize;
       char* MyDataInsert    = (char *) malloc( MyDataInsertSize );
-      StrongAssertLogLine( MyDataInsert != NULL )    
+      StrongAssertLogLine( MyDataInsert != NULL )
         << "skv_test_n_inserts_retrieves::main():: ERROR:: MyDataInsert != NULL"
         << EndLogLine;
 
       // Allocate Retrieve Data
       char* MyDataRetrieve    = (char *) malloc( MyDataInsertSize );
-      StrongAssertLogLine( MyDataRetrieve != NULL )    
+      StrongAssertLogLine( MyDataRetrieve != NULL )
         << "skv_test_n_inserts_retrieves::main():: ERROR:: MyDataRetrieve != NULL"
         << EndLogLine;
 
@@ -298,36 +298,36 @@ main(int argc, char **argv)
               char ch = i;
               MyDataInsert[ i ] = calculateValue( Rank, ch, t );
             }
-#endif      
+#endif
           // int Key = Rank * NUMBER_OF_TRIES + t;
           int Key = calculateKey( Rank, sizeIndex, t, NUMBER_OF_TRIES );
-          // int Key = ( Rank * DataSizeCount * NUMBER_OF_TRIES) 
-          //   + (sizeIndex * NUMBER_OF_TRIES ) 
+          // int Key = ( Rank * DataSizeCount * NUMBER_OF_TRIES)
+          //   + (sizeIndex * NUMBER_OF_TRIES )
           //   + t;
 
           BegLogLine( SKV_TEST_LOG )
             << "skv_test_n_inserts_retrieves::main():: About to Insert "
             << " into MyPDSId: " << MyPDSId
-            << EndLogLine;      
+            << EndLogLine;
 
           double InsertStartTime = MPI_Wtime();
 
-          SKVInsertStart.HitOE( SKV_TEST_TRACE, 
+          SKVInsertStart.HitOE( SKV_TEST_TRACE,
                                  "SKVInsert",
-                                 Rank, 
+                                 Rank,
                                  SKVInsertStart );
 
           status = Client.Insert( &MyPDSId,
                                   (char *) &Key,
                                   sizeof( int ),
-                                  MyDataInsert, 
+                                  MyDataInsert,
                                   MyDataInsertSize,
                                   0,
                                   SKV_COMMAND_RIU_FLAGS_NONE );
 
-          SKVInsertFinis.HitOE( SKV_TEST_TRACE, 
+          SKVInsertFinis.HitOE( SKV_TEST_TRACE,
                                  "SKVInsert",
-                                 Rank, 
+                                 Rank,
                                  SKVInsertFinis );
 
           double InsertFinishTime = MPI_Wtime();
@@ -348,7 +348,7 @@ main(int argc, char **argv)
                 << " into MyPDSId: " << MyPDSId
                 << " status: " << skv_status_to_string( status )
                 << EndLogLine;
-            }  
+            }
           /****************************************************************************/
 
 
@@ -366,23 +366,23 @@ main(int argc, char **argv)
 
           double RetrieveStartTime = MPI_Wtime();
 
-          SKVRetrieveStart.HitOE( SKV_TEST_TRACE, 
+          SKVRetrieveStart.HitOE( SKV_TEST_TRACE,
                                    "SKVRetrieve",
-                                   Rank, 
+                                   Rank,
                                    SKVRetrieveStart );
 
           status = Client.Retrieve( &MyPDSId,
                                     (char *) &Key,
                                     (int) sizeof( int ),
-                                    MyDataRetrieve, 
+                                    MyDataRetrieve,
                                     MyDataInsertSize,
                                     & RetrieveSize,
                                     0,
                                     SKV_COMMAND_RIU_FLAGS_NONE );
 
-          SKVRetrieveFinis.HitOE( SKV_TEST_TRACE, 
+          SKVRetrieveFinis.HitOE( SKV_TEST_TRACE,
                                    "SKVRetrieve",
-                                   Rank, 
+                                   Rank,
                                    SKVRetrieveFinis );
 
           double RetrieveFinishTime = MPI_Wtime();
@@ -403,7 +403,7 @@ main(int argc, char **argv)
                 << " MyPDSId: " << MyPDSId
                 << " status: " << skv_status_to_string( status )
                 << EndLogLine;
-            }  
+            }
           /****************************************************************************/
 
 
@@ -421,14 +421,14 @@ main(int argc, char **argv)
                   BegLogLine( 1 )
                     << "skv_test_n_inserts_retrieves::main():: Retrieve Result does NOT match: { "
                     << MyDataRetrieve[ i ] << " , "
-                    << calculateValue( Rank, ch, t ) << " }" 
+                    << calculateValue( Rank, ch, t ) << " }"
                     << EndLogLine;
 
                   Match = 0;
                 }
             }
 
-          if( !Match )	
+          if( !Match )
             {
               TestFailed = 1;
               break;
@@ -447,8 +447,8 @@ main(int argc, char **argv)
           int RetrieveSize = -1;
           // int Key = Rank * NUMBER_OF_TRIES + t;
           int Key = calculateKey( Rank, sizeIndex, t, NUMBER_OF_TRIES );
-          // int Key = ( Rank * DataSizeCount * NUMBER_OF_TRIES) 
-          //   + (sizeIndex * NUMBER_OF_TRIES ) 
+          // int Key = ( Rank * DataSizeCount * NUMBER_OF_TRIES)
+          //   + (sizeIndex * NUMBER_OF_TRIES )
           //   + t;
 
           int RetrivedSize = 0;
@@ -460,7 +460,7 @@ main(int argc, char **argv)
 
           StrongAssertLogLine( status == SKV_SUCCESS )
             << "ERROR: removing data"
-            << EndLogLine;	  
+            << EndLogLine;
         }
 
 
@@ -487,7 +487,7 @@ main(int argc, char **argv)
       double RetrieveBandwidth = ( testDataSize / ( GlobalRetrieveAvgTime * 1024.0 * 1024.0 ) );
 
       BegLogLine( 1 )
-        << "skv_test_n_inserts_retrieves::main():: TIMING: " 
+        << "skv_test_n_inserts_retrieves::main():: TIMING: "
         << " log2(ValueSize): " << log2( (double) testDataSize )
         << " ValueSize: " << testDataSize
         << " TryCount: " << NUMBER_OF_TRIES
@@ -495,7 +495,7 @@ main(int argc, char **argv)
         << " InsertAvgTime: " << GlobalInsertAvgTime
         << " InsertBandwidth: " << InsertBandwidth
         << " RetrieveAvgTime: " << GlobalRetrieveAvgTime
-        << " RetrieveBandwidth: " << RetrieveBandwidth	
+        << " RetrieveBandwidth: " << RetrieveBandwidth
         << EndLogLine;
 
 
@@ -510,7 +510,7 @@ main(int argc, char **argv)
           BegLogLine( 1 )
             << "skv_test_n_inserts_retrieves::main():: SKV Client Result Match SUCCESSFUL :-)"
             << EndLogLine;
-        }  
+        }
 
       free( MyDataInsert );
       MyDataInsert = NULL;

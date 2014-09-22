@@ -32,14 +32,14 @@
 
 using namespace std;
 
-int single_function_tests( int aLoops )
+int single_function_tests( int aLoops, int aGran )
 {
   int rc = 0;
-  size_t size = 10000;
+  size_t size = 100000 * aGran;
   char *buffer = new char[ size ];
 
   // initialization test
-  skv_ringbuffer_ptr a(buffer, size);
+  skv_ringbuffer_ptr a(buffer, size, aGran );
 
   if( a.GetPtr() != buffer ) rc++;
   if( a.GetOffset() != 0 ) rc++;
@@ -49,19 +49,19 @@ int single_function_tests( int aLoops )
 
   for( int i=0; i<aLoops; i++ )
   {
-    size_t offset = random()%(size * 2);
+    size_t aligned = ( random()*(size_t)aGran ) % ( size * 2 );   // create an aligned size
+    size_t offset = aligned - ( random() % aGran );               // reduce the size to be potentially unaligned
     a = a + offset;
-    if( a.GetOffset() != (offset%size) ) rc++;
-    a.Reset();
-  }
+    if( a.GetOffset() != (aligned%size) ) rc++;
 
-  if( rc ) return rc;
+    size_t alignedM = ( random()*(size_t)aGran ) % ( size * 2 );   // create an aligned size
+    size_t offsetM = alignedM - ( random() % aGran );               // reduce the size to be potentially unaligned
+    a = a - (offsetM);
+    if( a.GetOffset() != ((aligned + 2*size -alignedM)%size) ) rc += aLoops*10;
 
-  for( int i=0; i<aLoops; i++ )
-  {
-    size_t offset = random()%(size);
-    a = a - (offset);
-    if(( a.GetSpace() != (offset%size) ) || ( !a.GetWrapState() )) rc += aLoops*10;
+//    cout << "rc=" << rc << "; a.off=" << a.GetOffset() << "/" << size << "; sub=" << offset << "-" << offsetM
+//        << "; aligned=" << aligned << "-" << alignedM << endl;
+
     a.Reset();
   }
 
@@ -120,8 +120,11 @@ int chasing_test()
 int main( int argc, char **argv )
 {
   int rc=0;
-  rc += single_function_tests(10000);
-  cout << "Single_Function_Test completed with rc=" << rc << " [" << (rc==0?"PASS":"FAIL") << "]" << endl;
+  for( int g=1; g<32; g = g << 1 )
+  {
+    rc += single_function_tests(10000, g);
+    cout << "Single_Function_Test with granularity " << g << " completed with rc=" << rc << " [" << (rc==0?"PASS":"FAIL") << "]" << endl;
+  }
 
   int testloops = 10000;
   for( int i=0; i<testloops; i++ )
