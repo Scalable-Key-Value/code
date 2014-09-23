@@ -185,7 +185,7 @@ add_subdirectory(skv)
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
-  target_compile_definitions(${TEST_NAME} PUBLIC
+  set_target_properties(${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS
     "SKV_CLIENT_UNI;SKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
     ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
