@@ -52,9 +52,8 @@ else()
   include(MPI/${SKV_MPI})
 endif()
 
-find_package(OFED REQUIRED)
-
 include_directories(${MPI_INCLUDE_PATH})
+
 
 #------------------------------------------------------------------------------
 # Options
@@ -71,10 +70,19 @@ set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING
 set_property(CACHE SKV_LOCAL_KV_BACKEND
   PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
 
-
 if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
   find_package(ZLIB REQUIRED)
   find_package(rocksdb REQUIRED)
+endif()
+
+
+set(SKV_COMM_API_TYPE "verbs" CACHE STRING
+  "Select a database backend {verbs, sockets}")
+set_property(CACHE SKV_LOCAL_KV_BACKEND
+  PROPERTY STRINGS "verbs" "sockets")
+
+if(SKV_COMM_API_TYPE MATCHES "verbs")
+  find_package(OFED REQUIRED)
 endif()
 
 
@@ -110,8 +118,8 @@ set(FXLOGGER_SOURCES
 )
 
 set(IT_API_SOURCES
-  it_api/src/it_api_o_verbs.cpp
-  it_api/src/it_api_o_verbs_thread.cpp
+  it_api/src/it_api_o_${SKV_COMM_API_TYPE}.cpp
+  it_api/src/it_api_o_${SKV_COMM_API_TYPE}_thread.cpp
 )
 set(IT_API_LINK_LIBRARIES ${OFED_LIBRARIES})
 
@@ -169,6 +177,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 common_library(fxlogger)
 common_library(it_api)
+set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS
+  "${SKV_IT_API_LOGGING}")
+
 add_subdirectory(skv)
 
 foreach(_test ${TEST_SOURCES})

@@ -118,3 +118,29 @@ add_definitions(
 # -DSKV_CLIENT_INSERT_TRACE=1
 # -DSKV_CLIENT_PROCESS_CONN_TRACE=1
 )
+
+set(SKV_IT_API_LOGGING
+# enable extensive logging
+#IT_API_CONFIG+=-DFXLOG_IT_API_O_VERBS=1
+#IT_API_CONFIG+=-DFXLOG_IT_API_O_SOCKETS=1
+
+# enable evd thread logging
+#IT_API_CONFIG+=-DIT_API_O_VERBS_THREAD_LOG=1
+
+# enable connection-related logging only (incomplete coverage)
+#IT_API_CONFIG+=-DFXLOG_IT_API_O_VERBS_CONNECT=1
+#IT_API_CONFIG+=-DFXLOG_IT_API_O_SOCKETS_CONNECT=1
+
+# enable logging for memory registration (incomplete coverage)
+#IT_API_CONFIG+=-DFXLOG_IT_API_O_VERBS_MEMREG=1
+
+# enable logging for rdma write ops (incomplete coverage)
+#IT_API_CONFIG+=-DFXLOG_IT_API_O_VERBS_WRITE=1
+
+# enable logging for types
+#IT_API_CONFIG+=-DIT_API_O_VERBS_TYPES_LOG=1
+
+#IT_API_CONFIG+=-DFXLOG_IT_API_O_VERBS_QUEUE_LENGTHS_LOG=1
+#IT_API_CONFIG+=-DTHREAD_SAFE_QUEUE_FXLOG=1
+#IT_API_CONFIG+=-DTHREAD_SAFE_QUEUE_INIT_FXLOG=1
+)
