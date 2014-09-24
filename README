@@ -1,38 +1,93 @@
 0. CONTENT
 
-  1. installation
-  2. runtime env
+  1. configuration
+  2. compile
+  3. install
+  4. runtime env
+
+
+================
+
+1. CONFIGURATION
+
+SKV uses cmake to build libraries and executables. We require cmake
+version 2.8.
+
+After downloading the skv source (lets say to $HOME/skv), you create a
+build directory (e.g. $HOME/skv_build).
+
+Go into the build directory and start configuring the build:
+
+$> cmake ../skv [OPTIONS]
+
+We've prepared a few site-specific cmake files in CMake/Site/. These
+files set essential paths and config options for a particular site.  A
+site could also be just your computer.  You might want to look into
+CMake/Site/pers_example.cmake.  This file sets the path to the MPI
+compilers.  If you need different settings, you can either modify the
+file directly or create your own and then run:
+
+$> cmake ../skv -DSKV_SITE:STRING=<sitename>
+
+Predefined sitenames are ykt, cscs, pers_example (the name of the file
+in CMake/Site/ without the .cmake extension)
 
 
 
-1. INSTALLATION
+Alternatively, you can run:
 
-Command Overview:
-to install the most relevant files and example configuration for SKV:
+$> ccmake ../skv
 
-  export SKV_CONF=<dev|rpm|...}>
-  export MPI_DIR=<path to mpi installation>
-  ./skv_install.sh -i <SKV_INSTALL_DIR>
-
-
-Details:
-
-  * either use one of the prepared make.conf_NNN files or make a copy
-    of one of them to adjust to your needs. Then set SVK_CONF to NNN
-
-  * then export the path to your MPI installation into MPI_DIR env
-    variable
-
-  * then run the skv_install.sh script and provide the installation
-    directory where you want SKV installed
+to start a gui-like cmake configuration tool that allows you to
+set/adjust individual variables.  You can set the SKV_SITE there and
+configure.
 
 
 
+Note on multi-configuration requirements, in case your environment
+requires different build configurations (for example if you run
+clients and servers on different architectures):
+
+The cmake philosophy separates the build from the source. Therefore,
+if you need multiple build configurations, you'd just create a new
+build directory and configure the next/separate build in there.
 
 
-2. RUNTIME ENVIRONMENT
 
-2.1 prerequisites and dependencies
+================
+2. COMPILE
+
+If configuration was successful, stay in the build directory and run
+
+$> gmake
+
+to build SKV.
+
+
+
+================
+3. INSTALL
+
+
+To install, run:
+
+$> gmake install
+
+
+
+You can also build packages for your Linux distribution by using
+cpack. For example:
+
+$> cpack -G RPM
+
+will create an RPM that can be used to install SKV.
+
+
+
+================
+4. RUNTIME ENVIRONMENT
+
+4.1 prerequisites and dependencies
 
  Installation and setup of the following is not covered here:
 
@@ -46,7 +101,7 @@ Details:
   * an OFED-RDMA capable network and setup (alternative siw)
 
 
-2.2 SKV runtime
+4.2 SKV runtime
 
  * skv_server.conf: this file contains important configuration
    information for server AND client.  The search for the config file
