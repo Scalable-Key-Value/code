@@ -91,13 +91,18 @@ TraceClient                                      gSKVClientConnProcessRecv[ SKV_
  ***/
 skv_status_t
 skv_client_conn_manager_if_t::
-Init( skv_client_group_id_t        aClientGroupId,
+Init( skv_client_group_id_t         aClientGroupId,
       int                           aMyRank,
       it_ia_handle_t*               aIA_Hdl,
       it_pz_handle_t*               aPZ_Hdl,
       int                           aFlags,
-      skv_client_ccb_manager_if_t* aCCBMgrIF )
+      skv_client_ccb_manager_if_t*  aCCBMgrIF )
 {
+  BegLogLine(SKV_CLIENT_PROCESS_CONN_LOG)
+    << "aClientGroupId" << aClientGroupId
+    << " aMyRank=" << aMyRank
+    << EndLogLine ;
+
   mServerConnCount = 0;
   mServerConns = NULL;
 
@@ -448,12 +453,20 @@ skv_status_t
 skv_client_conn_manager_if_t::
 Disconnect()
 {
+    BegLogLine(SKV_CLIENT_PROCESS_CONN_LOG)
+        << "mMyRankInGroup=" << mMyRankInGroup
+        << EndLogLine ;
   int conn = mMyRankInGroup;
+  if( conn >= mServerConnCount )
+    conn = 0;
 
   int Counter = 0;
 
   while( 1 )
   {
+      BegLogLine(SKV_CLIENT_PROCESS_CONN_LOG)
+          << "Disconnecting from server " << conn
+          << EndLogLine ;
     skv_status_t status = DisconnectFromServer( &mServerConns[conn] );
 
     StrongAssertLogLine( status == SKV_SUCCESS )
@@ -497,8 +510,10 @@ ConnectToServer( int                        aServerRank,
 {
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::ConnectToServer():: Entering "
-    << "aServerAddr.mName: " << aServerAddr.mName
-    << "aServerAddr.mPort: " << aServerAddr.mPort
+    << "aServerRank: " << aServerRank
+    << " aServerAddr.mName: " << aServerAddr.mName
+    << " aServerAddr.mPort: " << aServerAddr.mPort
+    << " aServerConn: " << aServerConn
     << EndLogLine;
 
   it_ep_rc_creation_flags_t      ep_flags = (it_ep_rc_creation_flags_t) 0;
