@@ -3462,6 +3462,16 @@ it_status_t it_evd_create (
       *evd_handle = (it_evd_handle_t) CQ;
 
     }
+  else if ( event_number == IT_CM_MSG_EVENT_STREAM)
+    {
+      it_api_o_sockets_aevd_mgr_t* CQ =(it_api_o_sockets_aevd_mgr_t*) aevd_handle ;
+      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        << "aevd handle=" << CQ
+          << " CMM handle " << EVQObj
+          << EndLogLine ;
+      if(CQ != NULL) CQ->mCMMEVQObj = EVQObj ;
+    }
+
 //  else
 //    {
 //      it_api_o_sockets_cq_mgr_t* CQ = (it_api_o_sockets_cq_mgr_t *) malloc( sizeof( it_api_o_sockets_cq_mgr_t ) );
@@ -5078,7 +5088,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 	       IN  uint64_t        timeout,
 	       IN  size_t          max_event_count,
 	       OUT it_event_t     *events,
-	       OUT size_t         *events_count )
+	       OUT size_t         *events_count)
 {
     it_api_o_sockets_aevd_mgr_t* AEVD = (it_api_o_sockets_aevd_mgr_t *) evd_handle;
     gAEVD = AEVD ;
@@ -5206,6 +5216,73 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 //    /***********************************************************************************/
 //    static unsigned long loopCount ;
 //    loopCount += 1 ;
+    /*
+     * Dequeue CMM events
+     */
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
+      << "AEVD->mCMQueue=" << AEVD->mCMMEVQObj
+      << EndLogLine ;
+//    iWARPEM_Object_EventQueue_t* CMMEVQObj = (iWARPEM_Object_EventQueue_t *) evd_cmm_handle;
+    iWARPEM_Object_EventQueue_t* CMMEVQObj = AEVD->mCMMEVQObj;
+
+    iWARPEM_Object_Event_t *EventPtr;
+
+//    int rc = EVQObj->Dequeue( &EventPtr );
+//
+//    if( rc == 0 )
+//      {
+//        AssertLogLine( EventPtr != NULL )
+//          << "it_evd_dequeue(): ERROR: EventPtr is NULL"
+//          << " EVQObj: " << (void *) EVQObj
+//          << " EVQObj->Queue: " << (void *) &(EVQObj->mQueue)
+//          << EndLogLine;
+//
+//      *event = EventPtr->mEvent;
+//
+//      BegLogLine( FXLOG_IT_API_O_SOCKETS )
+//        << "About to call free( " << (void *) EventPtr << " )"
+//        << EndLogLine;
+//
+//      free( EventPtr );
+        int rc = CMMEVQObj->Dequeue( & EventPtr );
+        int eventCountInCMMQueue = ( rc == 0 ) ? 1 : 0 ;
+        if ( eventCountInCMMQueue != 0 )
+          {
+            BegLogLine(FXLOG_IT_API_O_SOCKETS )
+              << "AEVD->mCMMEVQObj=" << AEVD->mCMMEVQObj
+              << EndLogLine ;
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+          << " eventCountInCMMQueue=" << eventCountInCMMQueue
+          << EndLogLine ;
+          }
+        if( eventCountInCMMQueue > 0 )
+          {
+            int eventCount = min( availableEventSlotsCount, eventCountInCMMQueue );
+
+//            for( int i = 0; i < eventCount; i++ )
+//              {
+//                CMMEVQObj->Dequeue( & EventPtr );
+                events[ gatheredEventCount ] = EventPtr->mEvent;
+                BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+                  << "events[" << gatheredEventCount
+                  << "].event_number=" << events[gatheredEventCount].event_number
+                  << EndLogLine ;
+                BegLogLine( FXLOG_IT_API_O_SOCKETS )
+                  << "About to call free( " << (void *) EventPtr << " )"
+                  << EndLogLine;
+                free( EventPtr );
+
+                gatheredEventCount++;
+                availableEventSlotsCount--;
+//              }
+                pthread_mutex_lock( & ( AEVD->mEventCounterMutex ) );
+                AEVD->mEventCounter += eventCountInCMMQueue;
+                pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
+          }
+
+    /*
+     * Dequeue CM events
+     */
       BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
         << "CMQueue=" << CMQueue
         << EndLogLine ;

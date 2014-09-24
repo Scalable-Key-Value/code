@@ -75,6 +75,7 @@ struct it_api_o_sockets_mr_mgr_t
 
 //  enum  ibv_access_flags access;
 };
+struct iWARPEM_Object_EventQueue_t ;
 
 struct it_api_o_sockets_aevd_mgr_t
 {
@@ -105,6 +106,8 @@ struct it_api_o_sockets_aevd_mgr_t
   pthread_mutex_t     mEventCounterMutex;
   volatile int        mEventCounter;
 
+  iWARPEM_Object_EventQueue_t *mCMMEVQObj ;
+
   void
   Init( it_api_o_sockets_device_mgr_t*  aDevice )
   {
@@ -112,6 +115,7 @@ struct it_api_o_sockets_aevd_mgr_t
       BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
           << "this=" << this
           << EndLogLine ;
+      mCMMEVQObj = NULL ;
     pthread_cond_init( & mMainCond, NULL );
     pthread_mutex_init( & mEventCounterMutex, NULL );
     mEventCounter = 0;
