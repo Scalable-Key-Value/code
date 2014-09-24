@@ -78,7 +78,7 @@ endif()
 
 set(SKV_COMM_API_TYPE "verbs" CACHE STRING
   "Select a database backend {verbs, sockets}")
-set_property(CACHE SKV_LOCAL_KV_BACKEND
+set_property(CACHE SKV_COMM_API_TYPE
   PROPERTY STRINGS "verbs" "sockets")
 
 if(SKV_COMM_API_TYPE MATCHES "verbs")
