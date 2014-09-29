@@ -736,34 +736,58 @@ ProcessEvent( skv_server_state_t  aState,
             << " ord: " << aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetCmdOrd()
             << EndLogLine;
 
-          if( aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetIsLast() )
+          if( Func == NULL )  // without a function attached, this is a completion from a command-triggered write
           {
-            if( Func == EPSTATE_RetrieveWriteComplete )
+            skv_server_ep_state_t* EPStatePtr =
+                (skv_server_ep_state_t*) (aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetContext());
+            int CmdOrd = aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetCmdOrd();
+
+            skv_server_ccb_t* Command = EPStatePtr->GetCommandForOrdinal( CmdOrd );
+            switch( Command->GetType() )
             {
-              skv_server_ep_state_t* EPStatePtr =
-                  (skv_server_ep_state_t*) (aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetContext());
-              int CmdOrd = aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetCmdOrd();
+              case SKV_COMMAND_RETRIEVE:
+                BegLogLine( SKV_PROCESS_IT_EVENT_WRITE_LOG )
+                  << "skv_server_t::ProcessEvent(): calling execute in for receive "
+                  << EndLogLine;
 
-              BegLogLine( SKV_PROCESS_IT_EVENT_WRITE_LOG )
-                << "skv_server_t::ProcessEvent(): calling execute in for receive "
-                << EndLogLine;
+                status = skv_server_retrieve_command_sm::Execute( &mLocalKV,
+                                                                  EPStatePtr,
+                                                                  CmdOrd,
+                                                                  aEvent,
+                                                                  &mSeqNo,
+                                                                  mNetworkEventManager.GetPZ(),
+                                                                  mMyRank );
 
-              status = skv_server_retrieve_command_sm::Execute( &mLocalKV,
-                                                                EPStatePtr,
-                                                                CmdOrd,
-                                                                aEvent,
-                                                                &mSeqNo,
-                                                                mNetworkEventManager.GetPZ(),
-                                                                mMyRank );
+                break;
+              case SKV_COMMAND_RETRIEVE_N_KEYS:
+                BegLogLine( SKV_PROCESS_IT_EVENT_WRITE_LOG )
+                  << "skv_server_t::ProcessEvent(): calling execute in for receive_n_keys "
+                  << EndLogLine;
 
-              AssertLogLine( status == SKV_SUCCESS )
-                << "skv_server_t::ProcessEvent::ERROR:: "
-                << " Event: " << skv_server_event_type_to_string( aEvent->mEventType )
-                << " status: " << skv_status_to_string( status )
-                << EndLogLine;
-
+                status = skv_server_retrieve_n_keys_command_sm::Execute( &mLocalKV,
+                                                                         EPStatePtr,
+                                                                         CmdOrd,
+                                                                         aEvent,
+                                                                         &mSeqNo,
+                                                                         mNetworkEventManager.GetPZ() );
+                break;
+              default:
+                StrongAssertLogLine( 1 )
+                  << "ProcessEvents(): Unexpected command type in write completion event."
+                  << " Type:" << skv_command_type_to_string( Command->GetType() )
+                  << EndLogLine;
+                break;
             }
-            else if( Func != NULL )
+            AssertLogLine( status == SKV_SUCCESS )
+              << "skv_server_t::ProcessEvent::ERROR:: "
+              << " Event: " << skv_server_event_type_to_string( aEvent->mEventType )
+              << " status: " << skv_status_to_string( status )
+              << EndLogLine;
+
+          }
+          else   // i.e. if( Func != NULL )
+          {
+            if( aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetIsLast() )
             {
               void* Arg = &(aEvent->mEventMetadata.mRdmaWriteCmplCookie);
 
