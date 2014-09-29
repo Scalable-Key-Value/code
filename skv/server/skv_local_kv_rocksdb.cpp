@@ -131,6 +131,9 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
         case SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_CLEANUP:
           status = aWorker->PerformAsyncRetrieveCleanup( nextRequest );
           break;
+        case SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_NKEYS_CLEANUP:
+          status = aWorker->PerformAsyncRetrieveNKeysCleanup( nextRequest );
+          break;
         case SKV_LOCAL_KV_REQUEST_TYPE_UNKNOWN:
         default:
           StrongAssertLogLine( 1 )
@@ -706,7 +709,8 @@ skv_local_kv_rocksdb::InsertPostProcess( skv_local_kv_req_ctx_t aReqCtx,
   *lmr = *aValueRDMADest;
   ReqCtx->mUserData = (void*)lmr;
 
-  skv_status_t status = DestWorker->QueueDedicatedRequest( (skv_local_kv_req_ctx_t)ReqCtx, true );
+  skv_status_t status = DestWorker->QueueDedicatedRequest( (skv_local_kv_req_ctx_t)ReqCtx,
+                                                           SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_INSERT_CLEANUP );
 
   return status;
 }
@@ -970,7 +974,8 @@ skv_local_kv_rocksdb::RetrievePostProcess( skv_local_kv_req_ctx_t aReqCtx )
    */
   skv_local_kv_rocksdb_reqctx_t *ReqCtx = (skv_local_kv_rocksdb_reqctx_t*)aReqCtx;
   skv_local_kv_rocksdb_worker_t *DestWorker = ReqCtx->mWorker;
-  skv_status_t status = DestWorker->QueueDedicatedRequest( aReqCtx, false );
+  skv_status_t status = DestWorker->QueueDedicatedRequest( aReqCtx,
+                                                           SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_CLEANUP );
 
   return status;
 }
@@ -1070,11 +1075,15 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
   if( iter->Valid() && !( RNReq->mFlags & SKV_CURSOR_RETRIEVE_FIRST_ELEMENT_FLAG) )
     iter->Next();
 
+  skv_lmr_triplet_t *keySizeLMR;
+  int keySizeSpace = RNReq->mListOfKeysMaxCount * (sizeof(int) + SKV_KEY_LIMIT );
+  status = mDataBuffer->AcquireDataArea( keySizeSpace, keySizeLMR );
+
   int IterCount = 0;
-  while( iter->Valid() &&
+  while( (status == SKV_SUCCESS) &&
+        iter->Valid() &&
         ( IterCount < RNReq->mListOfKeysMaxCount) )
   {
-    skv_lmr_triplet_t keySizeLMR;
     int Index = 2 * IterCount;
     rocksdb::Slice key = iter->key();
     int pureKeySize = key.size() - sizeof( skv_pds_id_t );
@@ -1095,16 +1104,15 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
       continue;
     }
 
-    status = mDataBuffer->AcquireDataArea( sizeof(int) + pureKeySize, &keySizeLMR );
 
-    char *keySizePtr = (char*)keySizeLMR.GetAddr();
-    char *keyDataPtr = (char*)keySizeLMR.GetAddr() + sizeof( int );
+    char *keySizePtr = (char*)keySizeLMR->GetAddr();
+    char *keyDataPtr = (char*)keySizeLMR->GetAddr() + sizeof( int );
 
-    RNReq->mRetrievedKeysSizesSegs[Index].InitAbs( keySizeLMR.GetLMRHandle(),
+    RNReq->mRetrievedKeysSizesSegs[Index].InitAbs( keySizeLMR->GetLMRHandle(),
                                                    keySizePtr,
                                                    sizeof( int ) );
 
-    RNReq->mRetrievedKeysSizesSegs[Index + 1].InitAbs( keySizeLMR.GetLMRHandle(),
+    RNReq->mRetrievedKeysSizesSegs[Index + 1].InitAbs( keySizeLMR->GetLMRHandle(),
                                                        keyDataPtr,
                                                        pureKeySize );
     *(int*)keySizePtr = pureKeySize;
@@ -1120,8 +1128,9 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
     IterCount++;
     iter->Next();
 
-    // todo: take this one out... after there's a post-processing path for retreiveNkeys
-    mDataBuffer->ReleaseDataArea( &keySizeLMR );
+    skv_local_kv_rocksdb_reqctx_t *reqCtx = new skv_local_kv_rocksdb_reqctx_t;
+    reqCtx->mWorker= this;
+    reqCtx->mUserData = keySizeLMR;
   }
   RetrievedKeysCount = IterCount;
   RetrievedKeysSizesSegsCount = 2 * IterCount;
@@ -1144,6 +1153,25 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
   delete iter;
   return status;
 }
+skv_status_t
+skv_local_kv_rocksdb::RetrieveNKeysPostProcess( skv_local_kv_req_ctx_t aReqCtx )
+{
+  BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
+    << "skv_local_kv_rocksdb: completing retrieve:"
+    << " reqCtx: " << (skv_lmr_triplet_t*)aReqCtx
+    << EndLogLine;
+
+  /* create an async request, make sure it goes to the worker thread
+   * that created the data area to avoid locks on the databuffer
+   */
+  skv_local_kv_rocksdb_reqctx_t *ReqCtx = (skv_local_kv_rocksdb_reqctx_t*)aReqCtx;
+  skv_local_kv_rocksdb_worker_t *DestWorker = ReqCtx->mWorker;
+  skv_status_t status = DestWorker->QueueDedicatedRequest( aReqCtx,
+                                                           SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_NKEYS_CLEANUP );
+
+  return status;
+}
+
 
 skv_status_t
 skv_local_kv_rocksdb::Remove( skv_pds_id_t aPDSId,
@@ -1277,6 +1305,17 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformAsyncRetrieveCleanup( skv_loc
   skv_rdma_string *str = (skv_rdma_string*)rctx->mUserData;
 
   delete str;
+  delete rctx;
+  return SKV_SUCCESS;
+}
+
+skv_status_t skv_local_kv_rocksdb_worker_t::PerformAsyncRetrieveNKeysCleanup( skv_local_kv_request_t *aReq )
+{
+  skv_local_kv_rocksdb_reqctx_t* rctx = (skv_local_kv_rocksdb_reqctx_t*)(aReq->mReqCtx);
+  skv_lmr_triplet_t *keysLMR = (skv_lmr_triplet_t*)rctx->mUserData;
+
+  mDataBuffer->ReleaseDataArea( keysLMR );
+
   delete rctx;
   return SKV_SUCCESS;
 }
