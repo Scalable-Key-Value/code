@@ -118,8 +118,8 @@ class skv_server_retrieve_n_keys_command_sm
                  NULL,
                  aCommandOrdinal );
 
-    //        it_dto_flags_t dto_flags = (it_dto_flags_t) ( IT_COMPLETION_FLAG | IT_NOTIFY_FLAG );
-    it_dto_flags_t dto_flags = (it_dto_flags_t) ( 0 );
+    it_dto_flags_t dto_flags = (it_dto_flags_t) ( IT_COMPLETION_FLAG | IT_NOTIFY_FLAG );
+//    it_dto_flags_t dto_flags = (it_dto_flags_t) ( 0 );
 
     BegLogLine( SKV_SERVER_RETRIEVE_N_KEYS_DATA_LOG )
       << "skv_server_retrieve_n_keys_command_sm::post_rdma_write(): " << aRetrievedKeysSizesSegsCount << " LMRs: "
