@@ -1175,17 +1175,11 @@ skv_local_kv_rocksdb::RetrieveNKeysPostProcess( skv_local_kv_req_ctx_t aReqCtx )
    * that created the data area to avoid locks on the databuffer
    */
   skv_local_kv_rocksdb_reqctx_t *ReqCtx = (skv_local_kv_rocksdb_reqctx_t*)aReqCtx;
-
-  // need to create a copy of the lmr because the main server insert command will destroy lmr (part of the ccb) immediately after return
-  skv_lmr_triplet_t *lmr = new skv_lmr_triplet_t;
-  *lmr = *(skv_lmr_triplet_t*)ReqCtx->mUserData;
-
-  ReqCtx->mUserData = (void*)lmr;
   skv_local_kv_rocksdb_worker_t *DestWorker = ReqCtx->mWorker;
   skv_status_t status = DestWorker->QueueDedicatedRequest( (skv_local_kv_req_ctx_t)ReqCtx,
                                                            SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_NKEYS_CLEANUP );
 
-  return status;
+  return SKV_SUCCESS;
 }
 
 
