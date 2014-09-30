@@ -1075,7 +1075,7 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
   if( iter->Valid() && !( RNReq->mFlags & SKV_CURSOR_RETRIEVE_FIRST_ELEMENT_FLAG) )
     iter->Next();
 
-  skv_lmr_triplet_t *keySizeLMR;
+  skv_lmr_triplet_t *keySizeLMR = new skv_lmr_triplet_t;
   int keySizeSpace = RNReq->mListOfKeysMaxCount * (sizeof(int) + SKV_KEY_LIMIT );
   status = mDataBuffer->AcquireDataArea( keySizeSpace, keySizeLMR );
 
@@ -1103,7 +1103,6 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
       iter->Next();
       continue;
     }
-
 
     char *keySizePtr = (char*)keySizeLMR->GetAddr();
     char *keyDataPtr = (char*)keySizeLMR->GetAddr() + sizeof( int );
@@ -1316,6 +1315,7 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformAsyncRetrieveNKeysCleanup( sk
 
   mDataBuffer->ReleaseDataArea( keysLMR );
 
+  delete keysLMR;
   delete rctx;
   return SKV_SUCCESS;
 }
