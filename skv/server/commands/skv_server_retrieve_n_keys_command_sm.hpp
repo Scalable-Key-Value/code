@@ -378,7 +378,7 @@ public:
         {
           case SKV_SERVER_EVENT_TYPE_IT_DTO_RDMA_WRITE_CMPL:
           {
-            status = aLocalKV->RetrieveNKeysPostProcess( Command->mLocalKVData.mRDMA.mReqCtx );
+            status = aLocalKV->RetrieveNKeysPostProcess( Command->mLocalKVData.mRetrieveNKeys.mReqCtx );
             status = command_completion( status,
                                          aEPState,
                                          Command,
