@@ -261,13 +261,12 @@ public:
                   break;
               case SKV_SUCCESS:
               {
-                create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
-                post_rdma_write( aEPState,
-                                 RetrievedKeysSizesSegs,
-                                 RetrievedKeysSizesSegsCount,
-                                 aCommandOrdinal,
-                                 (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff()
-                                 );
+                status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                status = post_rdma_write( aEPState,
+                                          RetrievedKeysSizesSegs,
+                                          RetrievedKeysSizesSegsCount,
+                                          aCommandOrdinal,
+                                          (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
               }
@@ -320,11 +319,11 @@ public:
                   break;
                 // no break on purpose: EOR might be signaled even if there were a few keys available
               case SKV_SUCCESS:
-                post_rdma_write( aEPState,
-                                 Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs,
-                                 Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount,
-                                 aCommandOrdinal,
-                                 (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
+                status = post_rdma_write( aEPState,
+                                          Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs,
+                                          Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount,
+                                          aCommandOrdinal,
+                                          (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
 
