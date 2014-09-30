@@ -218,6 +218,11 @@ public:
     skv_server_command_state_t State = Command->mState;
     skv_server_event_type_t EventType = aEvent->mCmdEventType;
 
+    BegLogLine( SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG )
+      << "skv_server_retrieve_n_keys_command_sm: Entering state" << skv_server_command_state_to_string( State )
+      << " EventType: " << skv_server_event_type_to_string( EventType )
+      << EndLogLine;
+
     switch( State )
     {
       case SKV_SERVER_COMMAND_STATE_INIT:
@@ -266,10 +271,12 @@ public:
                 Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
               }
+
               case SKV_ERRNO_LOCAL_KV_EVENT:
                 create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_DATA_OP );
                 return SKV_SUCCESS;
+
               default:
                 status = command_completion( status,
                                              aEPState,
@@ -318,7 +325,9 @@ public:
                                  Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount,
                                  aCommandOrdinal,
                                  (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
+
               default:
                 status = command_completion( status,
                                              aEPState,
@@ -331,7 +340,6 @@ public:
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
             }
-            Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
             break;
           }
           default:
@@ -345,8 +353,7 @@ public:
         {
           case SKV_SERVER_EVENT_TYPE_IT_DTO_RDMA_WRITE_CMPL:
           {
-            // todo: needs to be a new retrieve_n_postprocess() function
-            //status = aLocalKV->RetrievePostProcess( Command->mLocalKVData.mRDMA.mReqCtx );
+            status = aLocalKV->RetrieveNKeysPostProcess( Command->mLocalKVData.mRDMA.mReqCtx );
             status = command_completion( status,
                                          aEPState,
                                          Command,
