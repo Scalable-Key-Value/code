@@ -358,6 +358,7 @@ struct skv_server_local_kv_twophase_rdma_data_t
 struct skv_server_local_kv_retrieve_n_keys_data_t
 {
   skv_lmr_triplet_t *mKeysSizesSegs;
+  skv_local_kv_req_ctx_t mReqCtx;
   int mKeysCount;
   int mKeysSizesSegsCount;
 };

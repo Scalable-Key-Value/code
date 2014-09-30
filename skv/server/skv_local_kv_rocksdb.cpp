@@ -1126,11 +1126,12 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
 
     IterCount++;
     iter->Next();
-
-    skv_local_kv_rocksdb_reqctx_t *reqCtx = new skv_local_kv_rocksdb_reqctx_t;
-    reqCtx->mWorker= this;
-    reqCtx->mUserData = keySizeLMR;
   }
+
+  skv_local_kv_rocksdb_reqctx_t *reqCtx = new skv_local_kv_rocksdb_reqctx_t;
+  reqCtx->mWorker= this;
+  reqCtx->mUserData = keySizeLMR;
+
   RetrievedKeysCount = IterCount;
   RetrievedKeysSizesSegsCount = 2 * IterCount;
 
@@ -1145,6 +1146,7 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
     << EndLogLine;
 
   status = InitKVEvent( aReq->mCookie,
+                        (skv_local_kv_req_ctx_t)reqCtx,
                         RNReq->mRetrievedKeysSizesSegs,
                         RetrievedKeysCount,
                         RetrievedKeysSizesSegsCount,
@@ -1156,14 +1158,20 @@ skv_status_t
 skv_local_kv_rocksdb::RetrieveNKeysPostProcess( skv_local_kv_req_ctx_t aReqCtx )
 {
   BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
-    << "skv_local_kv_rocksdb: completing retrieve:"
-    << " reqCtx: " << (skv_lmr_triplet_t*)aReqCtx
+    << "skv_local_kv_rocksdb: completing retrieveN:"
+    << " reqCtx: " << (void*)aReqCtx
     << EndLogLine;
 
   /* create an async request, make sure it goes to the worker thread
    * that created the data area to avoid locks on the databuffer
    */
   skv_local_kv_rocksdb_reqctx_t *ReqCtx = (skv_local_kv_rocksdb_reqctx_t*)aReqCtx;
+
+  // need to create a copy of the lmr because the main server insert command will destroy lmr (part of the ccb) immediately after return
+  skv_lmr_triplet_t *lmr = new skv_lmr_triplet_t;
+  *lmr = *(skv_lmr_triplet_t*)ReqCtx->mUserData;
+
+  ReqCtx->mUserData = (void*)lmr;
   skv_local_kv_rocksdb_worker_t *DestWorker = ReqCtx->mWorker;
   skv_status_t status = DestWorker->QueueDedicatedRequest( aReqCtx,
                                                            SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_NKEYS_CLEANUP );

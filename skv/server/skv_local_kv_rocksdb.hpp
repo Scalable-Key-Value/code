@@ -161,6 +161,7 @@ private:
     return mEventQueue->QueueEvent( aCookie );
   }
   inline skv_status_t InitKVEvent( skv_local_kv_cookie_t *aCookie,
+                                   skv_local_kv_req_ctx_t aReqCtx,
                                    skv_lmr_triplet_t *aKeysSizesSegs,
                                    int aKeysCount,
                                    int aKeysSizesSegsCount,
@@ -170,6 +171,7 @@ private:
     ccb->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs= aKeysSizesSegs;
     ccb->mLocalKVData.mRetrieveNKeys.mKeysCount = aKeysCount;
     ccb->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount = aKeysSizesSegsCount;
+    ccb->mLocalKVData.mRetrieveNKeys.mReqCtx = aReqCtx;
     ccb->mLocalKVrc = aRC;
 
     return mEventQueue->QueueEvent( aCookie );
