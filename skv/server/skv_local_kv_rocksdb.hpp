@@ -103,6 +103,14 @@ public:
   skv_status_t QueueDedicatedRequest( skv_local_kv_req_ctx_t aReqCtx, skv_local_kv_request_type_t aType )
   {
     skv_local_kv_request_t *DedicatedRequest = mDedicatedQueue.AcquireRequestEntry();
+    if( DedicatedRequest == NULL )
+    {
+      BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
+        << "FATAL ERROR: ran out of request entries for dedicate queue."
+        << EndLogLine;
+      return SKV_ERRNO_OUT_OF_MEMORY;
+    }
+
     DedicatedRequest->InitCommon( aType, NULL, aReqCtx );
 
     mDedicatedQueue.QueueRequest( DedicatedRequest );

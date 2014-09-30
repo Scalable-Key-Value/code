@@ -1173,7 +1173,7 @@ skv_local_kv_rocksdb::RetrieveNKeysPostProcess( skv_local_kv_req_ctx_t aReqCtx )
 
   ReqCtx->mUserData = (void*)lmr;
   skv_local_kv_rocksdb_worker_t *DestWorker = ReqCtx->mWorker;
-  skv_status_t status = DestWorker->QueueDedicatedRequest( aReqCtx,
+  skv_status_t status = DestWorker->QueueDedicatedRequest( (skv_local_kv_req_ctx_t)ReqCtx,
                                                            SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_NKEYS_CLEANUP );
 
   return status;
