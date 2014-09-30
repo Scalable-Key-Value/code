@@ -111,6 +111,9 @@ class skv_server_retrieve_n_keys_command_sm
                                 int aCommandOrdinal,
                                 skv_cmd_retrieve_n_keys_req_t* aReq )
   {
+    if( aRetrievedKeysSizesSegsCount == 0 )
+      return SKV_SUCCESS;
+
     it_status_t itstatus = IT_SUCCESS;
 
     skv_server_rdma_write_cmpl_cookie_t Cookie;
@@ -256,17 +259,29 @@ public:
             switch( status )
             {
               case SKV_ERRNO_END_OF_RECORDS:
-                // skip the rdma_write only if there was no key retrieved, otherwise rdma the remaining keys
+                // skip the rdma_write and complete the cmd only if there was no key retrieved, otherwise rdma the remaining keys
                 if( RetrievedKeysSizesSegsCount == 0 )
+                {
+                  status = command_completion( status,
+                                               aEPState,
+                                               Command,
+                                               0,
+                                               0,
+                                               (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
+                                               aCommandOrdinal,
+                                               aSeqNo );
+                  Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                   break;
+                }
+                // no break on purpose: EOR might be signaled even if there were a few keys available
               case SKV_SUCCESS:
               {
-                status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
-                status = post_rdma_write( aEPState,
-                                          RetrievedKeysSizesSegs,
-                                          RetrievedKeysSizesSegsCount,
-                                          aCommandOrdinal,
-                                          (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
+                create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                post_rdma_write( aEPState,
+                                 RetrievedKeysSizesSegs,
+                                 RetrievedKeysSizesSegsCount,
+                                 aCommandOrdinal,
+                                 (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
               }
@@ -315,8 +330,19 @@ public:
             {
               case SKV_ERRNO_END_OF_RECORDS:
                 // skip the rdma_write only if there was no key retrieved
-                if( Command->mLocalKVData.mRetrieveNKeys.mKeysCount == 0 )
+                if( Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount == 0 )
+                {
+                  status = command_completion( status,
+                                               aEPState,
+                                               Command,
+                                               0,
+                                               0,
+                                               (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
+                                               aCommandOrdinal,
+                                               aSeqNo );
+                  Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                   break;
+                }
                 // no break on purpose: EOR might be signaled even if there were a few keys available
               case SKV_SUCCESS:
                 status = post_rdma_write( aEPState,
