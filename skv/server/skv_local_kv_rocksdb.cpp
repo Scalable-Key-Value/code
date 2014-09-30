@@ -1145,6 +1145,15 @@ skv_local_kv_rocksdb_worker_t::PerformRetrieveNKeys( skv_local_kv_request_t *aRe
     << " status: " << skv_status_to_string( status )
     << EndLogLine;
 
+  // cleanup resources if there was no key
+  // state machine will not go into postprocess if no key retrieved
+  if( RetrievedKeysCount == 0 )
+  {
+    mDataBuffer->ReleaseDataArea( keySizeLMR );
+    delete reqCtx;
+    reqCtx = NULL;
+  }
+
   status = InitKVEvent( aReq->mCookie,
                         (skv_local_kv_req_ctx_t)reqCtx,
                         RNReq->mRetrievedKeysSizesSegs,
