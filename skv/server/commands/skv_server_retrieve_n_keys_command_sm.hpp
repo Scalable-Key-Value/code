@@ -276,6 +276,11 @@ public:
                 // no break on purpose: EOR might be signaled even if there were a few keys available
               case SKV_SUCCESS:
               {
+                // store return status/data with the command in case of immediate completion
+                Command->mLocalKVrc = status;
+                Command->mLocalKVData.mRetrieveNKeys.mKeysCount = RetrievedKeysCount;
+                Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs = RetrievedKeysSizesSegs;
+
                 create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
                 post_rdma_write( aEPState,
                                  RetrievedKeysSizesSegs,
