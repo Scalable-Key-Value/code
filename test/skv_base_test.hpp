@@ -432,6 +432,7 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
                                    bool local=true )
 {
   skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
+  skv_status_t ctrl_status = SKV_SUCCESS;
   skv_pds_id_t PDSId;
   int test_level = 0;
   int KeyCount = 0;
@@ -491,17 +492,19 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
                                                aMaxDataSize,
                                                SKV_CURSOR_NONE_FLAG );
 
-      if( status == SKV_SUCCESS )
-        KeyCount++;
-
-      if( (status == SKV_SUCCESS) && (!verify_data( value, valueSize, Key, 0)) )
-        status = SKV_ERRNO_CHECKSUM_MISMATCH;
-
-      if( status != SKV_SUCCESS )
+      switch( status )
       {
-        BegLogLine( 1 )
-          << "skv_base_test: Error after GetFirstElement: " << skv_status_to_string( status )
-          << EndLogLine;
+        case SKV_SUCCESS:
+          KeyCount++;
+          if (!verify_data( value, valueSize, Key, 0))
+            status = SKV_ERRNO_CHECKSUM_MISMATCH;
+          break;
+        case SKV_ERRNO_END_OF_RECORDS:
+          break;
+        default:
+          BegLogLine( 1 )
+            << "skv_base_test: Error after GetFirstElement: " << skv_status_to_string( status )
+            << EndLogLine;
       }
 
       while( status == SKV_SUCCESS )
@@ -539,9 +542,9 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
       }
 
       if( local )
-        status = gdata.Client.CloseLocalCursor( CursorHdl );
+        ctrl_status = gdata.Client.CloseLocalCursor( CursorHdl );
       else
-        status = gdata.Client.CloseCursor( CursorHdl );
+        ctrl_status = gdata.Client.CloseCursor( CursorHdl );
     }
   }
 
@@ -554,6 +557,8 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
 
     if( !local && (KeyCount != aKeyCount) )
       status = SKV_ERRNO_CURSOR_DONE;
+    if( local && (KeyCount > aKeyCount) )
+      status = SKV_ERRNO_RETRIEVE_BUFFER_MAX_SIZE_EXCEEDED;
     test_level = 1;
   }
 
@@ -563,6 +568,9 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
       << "cursor closing failed."
       << EndLogLine;
   }
+  // propagate ctrl-error status if the other operations where clean
+  if( (ctrl_status != SKV_SUCCESS) && (status == SKV_SUCCESS))
+    status = ctrl_status;
   return status;
 }
 #endif /* SKV_BASE_TEST_HPP_ */

@@ -454,6 +454,16 @@ int Test_Cursor( int aRND_SEED, int aKeySize, int aMaxSize, int aCount )
 {
   int status = 0;
 
+  status += TEST_RESULT( skv_base_test_cursor( "SKV_BULK_TEST_PDS",
+                                               0,
+                                               aKeySize,
+                                               aMaxSize,
+                                               aRND_SEED,
+                                               false ),
+                         SKV_ERRNO_END_OF_RECORDS,
+                         "CURSOR", "EMPTY" );
+
+
   status += TEST_RESULT( skv_base_test_bulkinsert( "SKV_BULK_TEST_PDS",
                                                    aCount,
                                                    aKeySize,
@@ -468,7 +478,7 @@ int Test_Cursor( int aRND_SEED, int aKeySize, int aMaxSize, int aCount )
                                                aMaxSize,
                                                aRND_SEED,
                                                true ),
-                         SKV_SUCCESS,
+                         SKV_ERRNO_END_OF_RECORDS,
                          "CURSOR", "LOC" );
 
   status += TEST_RESULT( skv_base_test_cursor( "SKV_BULK_TEST_PDS",
@@ -477,7 +487,7 @@ int Test_Cursor( int aRND_SEED, int aKeySize, int aMaxSize, int aCount )
                                                aMaxSize,
                                                aRND_SEED,
                                                false ),
-                         SKV_SUCCESS,
+                         SKV_ERRNO_END_OF_RECORDS,
                          "CURSOR", "DIST" );
 
   return status;
