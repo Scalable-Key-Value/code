@@ -59,6 +59,10 @@ include_directories(${MPI_INCLUDE_PATH})
 # Options
 #------------------------------------------------------------------------------
 
+# eile: Disabled static linking. For some unfathomable reason fxlogger
+# then forces the link against gcc 4.4.7 libs which can't work
+set(COMMON_LIBRARY_TYPE STATIC SHARED)
+
 #############################################
 # Define the local KV backend to use
 # inmem    - in-memory version of local kv
@@ -84,6 +88,10 @@ set_property(CACHE SKV_COMM_API_TYPE
 
 if(SKV_COMM_API_TYPE MATCHES "verbs")
   find_package(OFED REQUIRED)
+  add_definitions(
+    # enable workaround for missing RoQ loopback functionality
+    -DSKV_ROQ_LOOPBACK_WORKAROUND
+  )
 endif()
 
 
@@ -150,6 +158,7 @@ set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS
 
 set(TEST_SOURCES
   test/skv_base_test.cpp
+  test/test_skv_insert_command.cpp
 )
 
 set(TEST_C_SOURCES
@@ -160,7 +169,6 @@ set(TEST_MPI_SOURCES
   test/skv_test_bulk.cpp
   test/skv_test_insert_retrieve_async.cpp
   test/skv_test_insert_retrieve_sync.cpp
-  test/test_skv_insert_command.cpp
   test/test_skv_remove_command.cpp
 )
 
@@ -178,12 +186,10 @@ add_definitions(
   -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
 # enable command header checksum
   -DSKV_HEADER_CHECKSUM
-# enable workaround for missing RoQ loopback functionality
-  -DSKV_ROQ_LOOPBACK_WORKAROUND
 # set the local kv backend for SKV
   -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
 # data checking in tests
-  -DDO_CHECK
+#  -DDO_CHECK
 
 # seems to be necessary for the tests to link
   ${GLOBAL_DEFS}
@@ -191,14 +197,10 @@ add_definitions(
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x")
 
 #------------------------------------------------------------------------------
 # libraries
-
-# eile: Disabled static linking. For some unfathomable reason fxlogger
-# then forces the link against gcc 4.4.7 libs which can't work
-#set(COMMON_LIBRARY_TYPE STATIC)
 
 add_subdirectory(skv)
 
@@ -208,6 +210,14 @@ foreach(_test ${TEST_SOURCES})
   set_target_properties(${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS
     "SKV_CLIENT_UNI;SKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
+    ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+  install(TARGETS ${TEST_NAME} DESTINATION bin)
+endforeach()
+
+foreach(_test ${TEST_MPI_SOURCES})
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common it_api fxlogger
     ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
