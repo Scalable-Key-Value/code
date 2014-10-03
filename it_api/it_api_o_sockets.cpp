@@ -252,7 +252,7 @@ public:
     double BandwidthAvgSinceStart = ((mTotalBytes * 1e9) / ( (FinishTime - mFirstStartTime) )) / (1024.0 * 1024.0);
     
 
-    BegLogLine( 1 )
+    BegLogLine( (IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL|IT_API_REPORT_BANDWIDTH_INCOMMING_TOTAL) )
       << "iWARPEM_Bandwidth_Stats::ReportBandwidth(): "
       << " Context: " << mContext
       << " BandwidthThisRound (MB): " << BandwidthThisRoundMB
