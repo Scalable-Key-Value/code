@@ -68,7 +68,7 @@ set(SKVSERVER_SOURCES
   server/skv_server_uber_pds.cpp
 )
 set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES}
-  ${MPI_LIBRARIES}  ${ZLIB_LIBRARIES} ${ROCKSDB_LIBRARIES}
+  ${MPI_LIBRARIES}  ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${ROCKSDB_LIBRARIES}
   skv_common it_api fxlogger)
 
 #------------------------------------------------------------------------------

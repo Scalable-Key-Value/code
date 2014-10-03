@@ -72,6 +72,7 @@ set_property(CACHE SKV_LOCAL_KV_BACKEND
 
 if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
   find_package(ZLIB REQUIRED)
+  find_package(BZip2 REQUIRED)
   find_package(rocksdb REQUIRED)
 endif()
 
@@ -95,6 +96,32 @@ set(GLOBAL_DEFS
   -DONLY_MSPACES
  )
 
+#------------------------------------------------------------------------------
+# include dirs
+#------------------------------------------------------------------------------
+include_directories(it_api FxLogger)
+
+#------------------------------------------------------------------------------
+# FxLogger library
+#------------------------------------------------------------------------------
+set(FXLOGGER_SOURCES
+  FxLogger/FxLogger.cpp
+  FxLogger/Trace.cpp
+  FxLogger/dlmalloc.c
+)
+
+set(FXLOGGER_PUBLIC_HEADERS
+  FxLogger/FxLogger.hpp
+  FxLogger/Time.hpp
+  FxLogger/Histogram.hpp
+  FxLogger/Trace.hpp
+)
+
+common_library(fxlogger)
+
+#------------------------------------------------------------------------------
+# IT_API library
+#------------------------------------------------------------------------------
 set(IT_API_DEFS
   # use event-based CQ reaping, if undefined it uses polling
   -DDIT_API_USE_EVENT_CQ
@@ -102,26 +129,24 @@ set(IT_API_DEFS
   -DIT_API_USE_SIW_HACK
 )
 
-#------------------------------------------------------------------------------
-# include dirs
-#------------------------------------------------------------------------------
-include_directories(it_api/include lib/include FxLogger)
-
-#------------------------------------------------------------------------------
-# Define source files
-#------------------------------------------------------------------------------
-
-set(FXLOGGER_SOURCES
-  FxLogger/FxLogger.cpp
-  FxLogger/Trace.cpp
-  FxLogger/dlmalloc.c
-)
-
 set(IT_API_SOURCES
-  it_api/src/it_api_o_${SKV_COMM_API_TYPE}.cpp
-  it_api/src/it_api_o_${SKV_COMM_API_TYPE}_thread.cpp
+  it_api/it_api_o_${SKV_COMM_API_TYPE}.cpp
+  it_api/it_api_o_${SKV_COMM_API_TYPE}_thread.cpp
 )
+set(IT_API_PUBLIC_HEADERS
+  it_api/it_api.h
+  it_api/it_api_os_specific.h
+)
+
 set(IT_API_LINK_LIBRARIES ${OFED_LIBRARIES})
+
+common_library(it_api)
+set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS
+  "${SKV_IT_API_LOGGING}")
+
+#------------------------------------------------------------------------------
+# Define test source files
+#------------------------------------------------------------------------------
 
 set(TEST_SOURCES
   test/skv_base_test.cpp
@@ -174,11 +199,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 # eile: Disabled static linking. For some unfathomable reason fxlogger
 # then forces the link against gcc 4.4.7 libs which can't work
 #set(COMMON_LIBRARY_TYPE STATIC)
-
-common_library(fxlogger)
-common_library(it_api)
-set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS
-  "${SKV_IT_API_LOGGING}")
 
 add_subdirectory(skv)
 
