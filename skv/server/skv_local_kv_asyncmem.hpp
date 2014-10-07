@@ -215,6 +215,7 @@ public:
                               int aListOfKeysMaxCount,
                               skv_cursor_flags_t aFlags,
                               skv_local_kv_cookie_t *aCookie );
+  skv_status_t RetrieveNKeysPostProcess( skv_local_kv_req_ctx_t aReqCtx ) { return SKV_SUCCESS; }
 
   skv_status_t Remove( skv_pds_id_t aPDSId,
                        char* aKeyData,

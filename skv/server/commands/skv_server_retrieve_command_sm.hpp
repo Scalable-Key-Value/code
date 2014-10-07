@@ -65,9 +65,8 @@ class skv_server_retrieve_command_sm
     RemoteMemRepValue->EndianConvert() ;
 
     Cookie.Init( aEPState,
-                 EPSTATE_RetrieveWriteComplete,
-                 aCommandOrdinal,
-                 1 );
+                 NULL,
+                 aCommandOrdinal );
 
     it_dto_flags_t dto_flags = (it_dto_flags_t) (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG);
     // it_dto_flags_t dto_flags = (it_dto_flags_t) ( 0 );

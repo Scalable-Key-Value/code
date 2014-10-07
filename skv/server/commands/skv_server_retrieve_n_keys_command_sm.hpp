@@ -14,6 +14,10 @@
 #ifndef __SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_HPP__
 #define __SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_HPP__
 
+#ifndef SKV_LOGGING_ALL
+#define SKV_LOGGING_ALL ( 0 )
+#endif
+
 #ifndef SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG 
 #define SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG  ( 0 | SKV_LOGGING_ALL )
 #endif
@@ -104,15 +108,21 @@ class skv_server_retrieve_n_keys_command_sm
   skv_status_t post_rdma_write( skv_server_ep_state_t *aEPState,
                                 skv_lmr_triplet_t *aRetrievedKeysSizesSegs,
                                 int aRetrievedKeysSizesSegsCount,
+                                int aCommandOrdinal,
                                 skv_cmd_retrieve_n_keys_req_t* aReq )
   {
+    if( aRetrievedKeysSizesSegsCount == 0 )
+      return SKV_SUCCESS;
+
     it_status_t itstatus = IT_SUCCESS;
 
     skv_server_rdma_write_cmpl_cookie_t Cookie;
-    Cookie.Init( NULL, NULL );
+    Cookie.Init( aEPState,
+                 NULL,
+                 aCommandOrdinal );
 
-    //        it_dto_flags_t dto_flags = (it_dto_flags_t) ( IT_COMPLETION_FLAG | IT_NOTIFY_FLAG );
-    it_dto_flags_t dto_flags = (it_dto_flags_t) ( 0 );
+    it_dto_flags_t dto_flags = (it_dto_flags_t) ( IT_COMPLETION_FLAG | IT_NOTIFY_FLAG );
+//    it_dto_flags_t dto_flags = (it_dto_flags_t) ( 0 );
 
     BegLogLine( SKV_SERVER_RETRIEVE_N_KEYS_DATA_LOG )
       << "skv_server_retrieve_n_keys_command_sm::post_rdma_write(): " << aRetrievedKeysSizesSegsCount << " LMRs: "
@@ -211,6 +221,11 @@ public:
     skv_server_command_state_t State = Command->mState;
     skv_server_event_type_t EventType = aEvent->mCmdEventType;
 
+    BegLogLine( SKV_SERVER_RETRIEVE_N_KEYS_COMMAND_SM_LOG )
+      << "skv_server_retrieve_n_keys_command_sm: Entering state" << skv_server_command_state_to_string( State )
+      << " EventType: " << skv_server_event_type_to_string( EventType )
+      << EndLogLine;
+
     switch( State )
     {
       case SKV_SERVER_COMMAND_STATE_INIT:
@@ -244,36 +259,56 @@ public:
             switch( status )
             {
               case SKV_ERRNO_END_OF_RECORDS:
-                // skip the rdma_write only if there was no key retrieved, otherwise rdma the remaining keys
+                // skip the rdma_write and complete the cmd only if there was no key retrieved, otherwise rdma the remaining keys
                 if( RetrievedKeysSizesSegsCount == 0 )
+                {
+                  status = command_completion( status,
+                                               aEPState,
+                                               Command,
+                                               0,
+                                               0,
+                                               (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
+                                               aCommandOrdinal,
+                                               aSeqNo );
+                  Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                   break;
+                }
+                // no break on purpose: EOR might be signaled even if there were a few keys available
               case SKV_SUCCESS:
               {
+                // store return status/data with the command in case of immediate completion
+                Command->mLocalKVrc = status;
+                Command->mLocalKVData.mRetrieveNKeys.mKeysCount = RetrievedKeysCount;
+                Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs = RetrievedKeysSizesSegs;
+
+                create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
                 post_rdma_write( aEPState,
                                  RetrievedKeysSizesSegs,
                                  RetrievedKeysSizesSegsCount,
-                                 (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff()
-                                 );
+                                 aCommandOrdinal,
+                                 (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
               }
+
               case SKV_ERRNO_LOCAL_KV_EVENT:
                 create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_DATA_OP );
                 return SKV_SUCCESS;
-              default:
 
+              default:
+                status = command_completion( status,
+                                             aEPState,
+                                             Command,
+                                             RetrievedKeysCount,
+                                             RetrievedKeysSizesSegs,
+                                             (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
+                                             aCommandOrdinal,
+                                             aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
             }
 
-            status = command_completion( status,
-                                         aEPState,
-                                         Command,
-                                         RetrievedKeysCount,
-                                         RetrievedKeysSizesSegs,
-                                         (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
-                                         aCommandOrdinal,
-                                         aSeqNo );
-            Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
             break;
           }
           default:
@@ -300,16 +335,55 @@ public:
             {
               case SKV_ERRNO_END_OF_RECORDS:
                 // skip the rdma_write only if there was no key retrieved
-                if( Command->mLocalKVData.mRetrieveNKeys.mKeysCount == 0 )
+                if( Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount == 0 )
+                {
+                  status = command_completion( status,
+                                               aEPState,
+                                               Command,
+                                               0,
+                                               0,
+                                               (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
+                                               aCommandOrdinal,
+                                               aSeqNo );
+                  Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                   break;
-                // no break on purpose: EOR might be signaled even if there were a few keys available?
+                }
+                // no break on purpose: EOR might be signaled even if there were a few keys available
               case SKV_SUCCESS:
-                post_rdma_write( aEPState,
-                                 Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs,
-                                 Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount,
-                                 (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
+                status = post_rdma_write( aEPState,
+                                          Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs,
+                                          Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount,
+                                          aCommandOrdinal,
+                                          (skv_cmd_retrieve_n_keys_req_t*) Command->GetSendBuff() );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
+                break;
+
+              default:
+                status = command_completion( status,
+                                             aEPState,
+                                             Command,
+                                             Command->mLocalKVData.mRetrieveNKeys.mKeysCount,
+                                             Command->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs,
+                                             (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
+                                             aCommandOrdinal,
+                                             aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
             }
+            break;
+          }
+          default:
+            status = SKV_ERRNO_STATE_MACHINE_ERROR;
+        }
+        break;
+      }
+      case SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL:
+      {
+        switch( EventType )
+        {
+          case SKV_SERVER_EVENT_TYPE_IT_DTO_RDMA_WRITE_CMPL:
+          {
+            status = aLocalKV->RetrieveNKeysPostProcess( Command->mLocalKVData.mRetrieveNKeys.mReqCtx );
             status = command_completion( status,
                                          aEPState,
                                          Command,
@@ -318,11 +392,17 @@ public:
                                          (skv_cmd_retrieve_n_keys_rdma_write_ack_t*)Command->GetSendBuff(),
                                          aCommandOrdinal,
                                          aSeqNo );
+
             Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
             break;
           }
           default:
-            status = SKV_ERRNO_STATE_MACHINE_ERROR;
+          {
+            StrongAssertLogLine( 0 )
+              << "skv_server_retrieve_command_sm:: ERROR:: EventType not recognized. "
+              << " EventType: " << EventType
+              << EndLogLine;
+          }
         }
         break;
       }

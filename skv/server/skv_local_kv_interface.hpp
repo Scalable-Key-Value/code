@@ -302,6 +302,11 @@ public:
                                           aCookie );
   }
 
+  skv_status_t RetrieveNKeysPostProcess( skv_local_kv_req_ctx_t aReqCtx )
+  {
+    return mLocalKVManager.RetrieveNKeysPostProcess( aReqCtx );
+  }
+
   /* Lookup a key/partial key
    * - flag to return RDMAable location of record for RDMA read and/or write access
    *   could also be staging buffer address for large records

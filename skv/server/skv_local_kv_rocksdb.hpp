@@ -82,6 +82,7 @@ public:
   skv_status_t PerformRetrieveNKeys( skv_local_kv_request_t *aReq );
   skv_status_t PerformAsyncInsertCleanup( skv_local_kv_request_t *aReq );
   skv_status_t PerformAsyncRetrieveCleanup( skv_local_kv_request_t *aReq );
+  skv_status_t PerformAsyncRetrieveNKeysCleanup( skv_local_kv_request_t *aReq );
 
   skv_local_kv_rocksdb* GetMaster()
   {
@@ -99,13 +100,18 @@ public:
   {
     return mDataBuffer;
   }
-  skv_status_t QueueDedicatedRequest( skv_local_kv_req_ctx_t aReqCtx, bool aInsert=false )
+  skv_status_t QueueDedicatedRequest( skv_local_kv_req_ctx_t aReqCtx, skv_local_kv_request_type_t aType )
   {
     skv_local_kv_request_t *DedicatedRequest = mDedicatedQueue.AcquireRequestEntry();
-    if( aInsert )
-      DedicatedRequest->InitCommon( SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_INSERT_CLEANUP, NULL, aReqCtx );
-    else
-      DedicatedRequest->InitCommon( SKV_LOCAL_KV_REQUEST_TYPE_ASYNC_RETRIEVE_CLEANUP, NULL, aReqCtx );
+    if( DedicatedRequest == NULL )
+    {
+      BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
+        << "FATAL ERROR: ran out of request entries for dedicate queue."
+        << EndLogLine;
+      return SKV_ERRNO_OUT_OF_MEMORY;
+    }
+
+    DedicatedRequest->InitCommon( aType, NULL, aReqCtx );
 
     mDedicatedQueue.QueueRequest( DedicatedRequest );
     return SKV_SUCCESS;
@@ -163,6 +169,7 @@ private:
     return mEventQueue->QueueEvent( aCookie );
   }
   inline skv_status_t InitKVEvent( skv_local_kv_cookie_t *aCookie,
+                                   skv_local_kv_req_ctx_t aReqCtx,
                                    skv_lmr_triplet_t *aKeysSizesSegs,
                                    int aKeysCount,
                                    int aKeysSizesSegsCount,
@@ -172,6 +179,7 @@ private:
     ccb->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs= aKeysSizesSegs;
     ccb->mLocalKVData.mRetrieveNKeys.mKeysCount = aKeysCount;
     ccb->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount = aKeysSizesSegsCount;
+    ccb->mLocalKVData.mRetrieveNKeys.mReqCtx = aReqCtx;
     ccb->mLocalKVrc = aRC;
 
     return mEventQueue->QueueEvent( aCookie );
@@ -322,6 +330,7 @@ public:
                               int aListOfKeysMaxCount,
                               skv_cursor_flags_t aFlags,
                               skv_local_kv_cookie_t *aCookie );
+  skv_status_t RetrieveNKeysPostProcess( skv_local_kv_req_ctx_t aReqCtx );
 
   skv_status_t Remove( skv_pds_id_t aPDSId,
                        char* aKeyData,
