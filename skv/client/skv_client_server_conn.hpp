@@ -14,6 +14,7 @@
 #ifndef __SKV_CLIENT_SERVER_CONN_HPP__
 #define __SKV_CLIENT_SERVER_CONN_HPP__
 
+#include <cstdlib>
 #include <queue>
 #include <skv/common/skv_array_stack.hpp>
 #include <skv/common/skv_client_server_headers.hpp>
@@ -33,6 +34,7 @@ typedef enum
   } skv_client_conn_state_t;
 
 #define SKV_MAX_UNRETIRED_CMDS ( SKV_MAX_COMMANDS_PER_EP )
+#define ALIGNMENT ( 256 )
 
 struct skv_client_server_conn_t
   {
@@ -239,7 +241,6 @@ struct skv_client_server_conn_t
       {
         return (skv_server_to_client_cmd_hdr_t*) (&mResponseSlotBuffer[mCurrentResponseSlot * SKV_CONTROL_MESSAGE_SIZE]);
       }
-
     void
     Init(it_pz_handle_t aPZ_Hdl)
       {
@@ -278,7 +279,10 @@ struct skv_client_server_conn_t
         mCurrentServerRecvSlot = -1;
 
         // Create contigous area to place responses
-        mResponseSlotBuffer = (char*) malloc( SKV_SERVER_COMMAND_SLOTS * SKV_CONTROL_MESSAGE_SIZE );
+        if( posix_memalign( (void**)(&mResponseSlotBuffer), ALIGNMENT, SKV_SERVER_COMMAND_SLOTS * SKV_CONTROL_MESSAGE_SIZE ) )
+          StrongAssertLogLine( 1 )
+            << "Unable to allocate aligned memory for response buffers"
+            << EndLogLine;
         memset( mResponseSlotBuffer, 0, SKV_SERVER_COMMAND_SLOTS * SKV_CONTROL_MESSAGE_SIZE );
 
         StrongAssertLogLine( mResponseSlotBuffer != NULL )

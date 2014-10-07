@@ -373,25 +373,6 @@ typedef enum {
 
 struct skv_server_ccb_t
 {
-  skv_server_command_state_t   mState;
-  skv_command_type_t           mType;
-
-  skv_lmr_triplet_t*           mCtrlMsgSendTriplet;
-  int                          mCtrlMsgSendBuffOrdinal;
-  skv_local_kv_cookie_t        mLocalKVCookie;
-
-  skv_server_command_class_t   mCommandClass;
-
-  // Currently holds the state for the rdma_read() commands
-  // Used on rdma_read() completion
-  union
-  {
-    skv_server_command_insert_t         mCommandInsert;
-    skv_server_command_bulk_insert_t    mCommandBulkInsert;
-    skv_server_command_remove_t         mCommandRemove;
-    skv_server_command_active_bcast_t   mCommandActiveBcast;
-  } mCommandState;
-
   // holds response data that's returned by the local kv backend
   union
   {
@@ -403,6 +384,25 @@ struct skv_server_ccb_t
     skv_server_local_kv_retrieve_n_keys_data_t mRetrieveNKeys;
   } mLocalKVData;
   skv_status_t mLocalKVrc;
+
+  // Currently holds the state for the rdma_read() commands
+  // Used on rdma_read() completion
+  union
+  {
+    skv_server_command_insert_t         mCommandInsert;
+    skv_server_command_bulk_insert_t    mCommandBulkInsert;
+    skv_server_command_remove_t         mCommandRemove;
+    skv_server_command_active_bcast_t   mCommandActiveBcast;
+  } mCommandState;
+
+  skv_local_kv_cookie_t        mLocalKVCookie;
+  skv_lmr_triplet_t*           mCtrlMsgSendTriplet;
+  int                          mCtrlMsgSendBuffOrdinal;
+
+  skv_server_command_state_t   mState;
+  skv_command_type_t           mType;
+
+  skv_server_command_class_t   mCommandClass;
 
   char*
   GetSendBuff()
@@ -580,17 +580,13 @@ struct skv_server_command_finder_t
 struct skv_server_conn_finder_t
 {
   it_cn_est_identifier_t  mConnEstId;
+  it_rmr_triplet_t        mResponseRMR;
   int                     mClientOrdInGroup;
   skv_client_group_id_t   mClientGroupId;
-  it_rmr_triplet_t        mResponseRMR;
 };
 
 struct skv_server_event_t
 {
-  skv_server_event_type_t   mCmdEventType;
-  skv_server_event_type_t   mEventType;
-
-
   typedef union
   {
     skv_server_ep_handle_t        mEP;
@@ -605,8 +601,10 @@ struct skv_server_event_t
   } skv_server_event_metadata_t ;
 
   skv_server_event_metadata_t mEventMetadata;
+  skv_server_event_type_t   mCmdEventType;
+  skv_server_event_type_t   mEventType;
 
-  void
+  inline void
   Init( skv_server_event_type_t  aEventType,
         skv_server_ep_state_t*   aEPState,
         unsigned                 aCommandOrd,
@@ -619,7 +617,7 @@ struct skv_server_event_t
     mEventMetadata.mCommandFinder.mCommandOrd = aCommandOrd;
   }
 
-  void
+  inline void
   Init( skv_server_event_type_t  aEventType,
         skv_server_cookie_t      aCookie )
   {
@@ -630,7 +628,7 @@ struct skv_server_event_t
     mEventMetadata.mCommandFinder.mCommandOrd = aCookie.GetOrd();
   }
 
-  void
+  inline void
   Init( skv_server_event_type_t                 aEventType,
         skv_server_rdma_write_cmpl_cookie_t     aCookie )
   {
@@ -639,7 +637,7 @@ struct skv_server_event_t
     mEventMetadata.mRdmaWriteCmplCookie  = aCookie;
   }
 
-  void
+  inline void
   Init( skv_server_event_type_t  aEventType,
         skv_server_ep_handle_t   aEP )
   {
@@ -647,7 +645,7 @@ struct skv_server_event_t
     mEventMetadata.mEP  = aEP;
   }
 
-  void
+  inline void
   Init( skv_server_event_type_t  aEventType,
         it_ep_handle_t            aEP )
   {
@@ -655,7 +653,7 @@ struct skv_server_event_t
     mEventMetadata.mEP.mIT_EP  = aEP;
   }
 
-  void
+  inline void
   Init( skv_server_event_type_t  aEventType,
         it_cn_est_identifier_t    aConnEstId,
         int                       aClientOrdInGroup,
@@ -707,16 +705,18 @@ typedef skv_array_queue_t< skv_server_event_t*, SKV_SERVER_PENDING_EVENTS_PER_EP
 //typedef skv_array_stack_t<int, SKV_RECV_BUFFERS_COUNT+1> skv_server_unposted_recv_buffers_list_t;
 //typedef skv_array_stack_t<int, SKV_SEND_BUFFERS_COUNT+1> skv_server_unposted_send_buffers_list_t;
 
+#define CACHE_ALIGNED __attribute__((aligned (128)))
+
 
 struct skv_server_ep_state_t
 {
-  skv_server_ccb_t             mCCBTable[ SKV_COMMAND_TABLE_LEN ];
+  skv_server_ccb_t             mCCBTable[ SKV_COMMAND_TABLE_LEN ] CACHE_ALIGNED;
   skv_lmr_triplet_t            mPrimaryCmdBuffers[ SKV_SERVER_COMMAND_SLOTS ]; // command slots for immediately completable commands (completing in order)
   skv_lmr_triplet_t            mSecondaryCmdBuffers[ SKV_COMMAND_TABLE_LEN ]; // command slots for multi-phase commands (completing out of order)
+  skv_rmr_triplet_t            mClientResponseRMR;
+  skv_rmr_triplet_t            mCommandBuffRMR;
 
   skv_server_event_t           mPendingEvents[ SKV_SERVER_PENDING_EVENTS_PER_EP ]; //! hold copies of events
-  int                          mLastPending; //! index to last pending event
-  int                          mWaitForSQ;
 
   it_ep_handle_t               mEPHdl;
   it_pz_handle_t               mPZHdl;
@@ -727,20 +727,22 @@ struct skv_server_ep_state_t
   skv_server_free_command_slot_list_t     *mFreeCommandSlotList;
   skv_server_state_pending_events_list_t  *mPendingEventsList;
 
+  skv_server_finalizable_associated_ep_state_list_t      *mAssociatedStateList;
+
+  it_lmr_handle_t              mCommandBuffLMR;
+
+  int                          mLastPending; //! index to last pending event
+  int                          mWaitForSQ;
+
   int                          mUsedCommandSlotIndex; // indicate the first used/occupied/uncompleted command buffer
   int                          mUnusedCommandSlotIndex;  // indicate the next free usable command buffers
   int                          mDispatchedCommandBufferIndex;  // indicate the latest command buffer that was dispatched
 
-  skv_server_finalizable_associated_ep_state_list_t      *mAssociatedStateList;
-
   // skv client group info
   int                                                     mClientGroupOrdinal;
   skv_client_group_id_t                                   mClientGroupId;
-  skv_rmr_triplet_t                                       mClientResponseRMR;
   int                                                     mClientCurrentResponseSlot;
 
-  it_lmr_handle_t              mCommandBuffLMR;
-  skv_rmr_triplet_t            mCommandBuffRMR;
   int                          mCurrentCommandSlot;
 
   void
