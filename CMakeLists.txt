@@ -104,6 +104,7 @@ set(GLOBAL_DEFS
   -DONLY_MSPACES
  )
 
+
 #------------------------------------------------------------------------------
 # include dirs
 #------------------------------------------------------------------------------
@@ -124,8 +125,6 @@ set(FXLOGGER_PUBLIC_HEADERS
   FxLogger/Histogram.hpp
   FxLogger/Trace.hpp
 )
-
-common_library(fxlogger)
 
 #------------------------------------------------------------------------------
 # IT_API library
@@ -148,9 +147,40 @@ set(IT_API_PUBLIC_HEADERS
 
 set(IT_API_LINK_LIBRARIES ${OFED_LIBRARIES})
 
+
+
+#------------------------------------------------------------------------------
+# Compile settings
+#------------------------------------------------------------------------------
+
+add_definitions(
+# default config file
+  -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
+# enable command header checksum
+  -DSKV_HEADER_CHECKSUM
+# set the local kv backend for SKV
+  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
+# data checking in tests
+#  -DDO_CHECK
+
+# seems to be necessary for the tests to link
+  ${GLOBAL_DEFS}
+  ${IT_API_DEFS}
+)
+
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99 -pg -g")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x -pg -g")
+
+
+#------------------------------------------------------------------------------
+# Create library targets
+#------------------------------------------------------------------------------
+
+common_library(fxlogger)
 common_library(it_api)
 set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS
   "${SKV_IT_API_LOGGING}")
+
 
 #------------------------------------------------------------------------------
 # Define test source files
@@ -178,29 +208,7 @@ set(UNITTEST_SOURCES
 )
 
 #------------------------------------------------------------------------------
-# Compile settings
-#------------------------------------------------------------------------------
-
-add_definitions(
-# default config file
-  -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
-# enable command header checksum
-  -DSKV_HEADER_CHECKSUM
-# set the local kv backend for SKV
-  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
-# data checking in tests
-#  -DDO_CHECK
-
-# seems to be necessary for the tests to link
-  ${GLOBAL_DEFS}
-  ${IT_API_DEFS}
-)
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x")
-
-#------------------------------------------------------------------------------
-# libraries
+# tests
 
 add_subdirectory(skv)
 
