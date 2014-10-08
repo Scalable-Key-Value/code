@@ -584,7 +584,7 @@ ConnectToServer( int                        aServerRank,
   path.u.iwarp.ip_vers = IT_IP_VERS_IPV4;
 
 
-  if( strncmp( aServerAddr.mName, "127.0.0.1", 9 ) == 0 )
+  if( strncmp( aServerAddr.mName, "127.0.0.1", SKV_MAX_SERVER_ADDR_NAME_LENGTH ) == 0 )
   {
     path.u.iwarp.laddr.ipv4.s_addr = INADDR_LOOPBACK;
 
