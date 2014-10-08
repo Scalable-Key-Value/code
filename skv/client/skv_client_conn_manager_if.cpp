@@ -286,7 +286,7 @@ Connect( const char* aConfigFile,
 {
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::Connect():: Entering "
-    << " aServerGroupName: " << aConfigFile
+    << " aConfigFile: " << (aConfigFile!=NULL? aConfigFile : "default")
     << " aFlags: " << aFlags
     << EndLogLine;
 
