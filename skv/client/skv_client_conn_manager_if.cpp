@@ -20,6 +20,7 @@
 #include <netdb.h>	/* struct hostent */
 
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 
 // Supported Operation State Machines
 
@@ -302,6 +303,55 @@ Connect( const char* aConfigFile,
 
   skv_configuration_t *config = skv_configuration_t::GetSKVConfiguration( aConfigFile );
 
+
+  // acquire the local interface address to check if server is local or remote
+  struct sockaddr_in my_addr;
+  struct ifaddrs *iflist, *ifent;
+  char ClientLocalAddr[ SKV_MAX_SERVER_ADDR_NAME_LENGTH ];
+  bzero( ClientLocalAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH );
+
+  AssertLogLine( getifaddrs(&iflist) == 0 )
+    << "Failed to obtain list of interfaces"
+    << EndLogLine;
+
+  ifent = iflist;
+  BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+    << "skv_client_conn_manager_if_t: Examining from ifent=" << ifent
+    << EndLogLine ;
+  while( ifent )
+  {
+    BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+        << "ifa_name=" << ifent->ifa_name
+        << " sa_family=" << ifent->ifa_addr->sa_family
+        << " GetCommIF()=" << config->GetCommIF()
+        << " AF_INET=" << AF_INET
+        << EndLogLine ;
+    if( strncmp( ifent->ifa_name, config->GetCommIF(), strnlen( ifent->ifa_name, 16 ) ) == 0 )
+    {
+      if( ifent->ifa_addr->sa_family == AF_INET )
+      {
+        struct sockaddr_in *tmp = (struct sockaddr_in*) (ifent->ifa_addr);
+        my_addr.sin_family = ifent->ifa_addr->sa_family;
+        my_addr.sin_addr.s_addr = tmp->sin_addr.s_addr;
+        snprintf( ClientLocalAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "%d.%d.%d.%d",
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[0],
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[1],
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[2],
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[3] );
+        BegLogLine( 1 )
+          << "skv_client_conn_manager_if_t: local address: " << (void*)(uintptr_t)my_addr.sin_addr.s_addr << "; fam: " << tmp->sin_family
+          << " ClientLocalAddr:" << ClientLocalAddr
+          << EndLogLine;
+        break;
+      }
+    }
+
+    ifent = ifent->ifa_next;
+  }
+  freeifaddrs( iflist );
+
+
+  // first pass of the server machine file to get the server count
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::Connect():: "
     << " ComputeFileNamePath: " << config->GetServerLocalInfoFile()
@@ -359,8 +409,14 @@ Connect( const char* aConfigFile,
     char* PortStr=firstspace+1;
     *firstspace=0;
 
-    // replace local hostname by loopback address
-    strcpy( ServerAddrs[ RankInx ].mName, ServerAddr );
+#ifdef SKV_ROQ_LOOPBACK_WORKAROUND
+    // compare with local address and replace with 127.0.0.1 if it matches
+    if( strncmp( ServerAddr, ClientLocalAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH ) == 0 )
+      sprintf( ServerAddrs[ RankInx ].mName, "127.0.0.1" );
+    else
+#endif
+      strcpy( ServerAddrs[ RankInx ].mName, ServerAddr );
+
     ServerAddrs[ RankInx ].mPort = atoi( PortStr );
 
     BegLogLine( SKV_CLIENT_CONN_INFO_LOG )

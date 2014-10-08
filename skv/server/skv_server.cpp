@@ -1620,18 +1620,7 @@ Init( int   aRank,
       char buff[ SKV_MAX_SERVER_ADDR_NAME_LENGTH ];
       bzero( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH );
 
-#ifdef SKV_ROQ_LOOPBACK_WORKAROUND
-      // replace local hostname by loopback address
-      if(  ( strlen( ServerName ) == strlen( ServerI ) ) &&
-           ( strncmp( ServerName, ServerI, strlen( ServerName ) ) == 0 ) )
-      {
-        snprintf( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "127.0.0.1 %s", PortI);
-      }
-      else
-#endif
-      {
-        snprintf( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "%s %s", ServerI, PortI);
-      }
+      snprintf( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "%s %s", ServerI, PortI);
       write( fd, buff, strlen( buff ) );
       write( fd, "\n", strlen("\n") );
     }
