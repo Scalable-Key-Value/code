@@ -201,6 +201,7 @@ set(TEST_C_SOURCES
 
 set(TEST_MPI_SOURCES
   test/skv_test_bulk.cpp
+  test/skv_bench.cpp
   test/skv_test_insert_retrieve_async.cpp
   test/skv_test_insert_retrieve_sync.cpp
   test/test_skv_remove_command.cpp
