@@ -168,8 +168,8 @@ add_definitions(
   ${IT_API_DEFS}
 )
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99 -pg -g")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x -pg -g")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x")
 
 
 #------------------------------------------------------------------------------
