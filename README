@@ -172,7 +172,7 @@ will create an RPM that can be used to install SKV.
 
    * clients can be either MPI or non-MPI programs.  Depending on
      which library and compiler was used to create the executable.
-     The default build of SKV creates and installes MPI- and non-MPI
+     The default build of SKV creates and installs MPI- and non-MPI
      versions of the client libraries.
 
    * a detailed description of the client API will be available
