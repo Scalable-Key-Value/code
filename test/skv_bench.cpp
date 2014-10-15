@@ -18,6 +18,7 @@
 #include <skv/client/skv_client.hpp>
 
 #include <unistd.h>
+#include <math.h>
 #include <string>
 #include <iostream>
 #include <iomanip>
@@ -36,14 +37,15 @@
 #define DEFAULT_QUEUE_DEPTH ( 16 )
 #define DEFAULT_BATCH_COUNT ( -4 )
 #define DEFAULT_DATA_CHECK ( false )
-#define DEFAULT_AVG_ERROR ( 5 )
+#define DEFAULT_AVG_ERROR ( 5.0 )
 #define DEFAULT_TIME_LIMIT ( 1 )
 #define DEFAULT_PDS_NAME "SKV_BENCH_PDS"
-#define DEFAULT_MAX_ATTEMPTS ( 15 )
+
+// queue length for gliding average
+#define SKV_BENCH_STAT_LEN ( 7 )
+#define DEFAULT_MAX_ATTEMPTS ( 20 )
 
 #define MB_FACTOR ( (1000 * 1000) )
-
-
 
 
 /*************************************************************
@@ -56,7 +58,7 @@
 #define SB_OUT_BWLEN (10)
 #define SB_OUT_IOLEN (10)
 #define SB_OUT_RQLEN (8)
-#define SB_OUT_SETLEN ( SB_OUT_RQLEN+SB_OUT_IOLEN+SB_OUT_BWLEN+1 )
+#define SB_OUT_SETLEN ( SB_OUT_IOLEN+SB_OUT_BWLEN )
 
 #define SB_OUTBW std::setw( SB_OUT_BWLEN )
 #define SB_OUTIO std::setw( SB_OUT_IOLEN )
@@ -269,6 +271,7 @@ public:
   }
 };
 
+skv_bench_config_t *GlobalConfRef;
 
 template<class streamclass>
 static streamclass&
@@ -336,8 +339,7 @@ template<class streamclass>
 static streamclass&
 operator<<( streamclass& os, const skv_bench_measurement_t& aIn )
 {
-  os << SB_OUTRQ << std::setprecision(0) << aIn.mRequests << "x"
-     << std::setprecision(1) << SB_OUTIO << aIn.mIOPS << SB_OUTBW << aIn.mBW;
+  os << std::setprecision(1) << SB_OUTIO << aIn.mIOPS << SB_OUTBW << aIn.mBW;
   return(os);
 }
 
@@ -365,7 +367,7 @@ template<class streamclass>
 static streamclass&
 operator<<( streamclass& os, const skv_measurement_set_t& aIn )
 {
-  os << aIn.mInsert << " |" << aIn.mRetrieve << " |" << aIn.mRemove;
+  os << SB_OUTRQ << std::setprecision(0) << aIn.mInsert.mRequests << "x" << aIn.mInsert << " |" << aIn.mRetrieve << " |" << aIn.mRemove;
   return(os);
 }
 
@@ -863,117 +865,205 @@ template<class streamclass>
 static streamclass&
 operator<<( streamclass& os, const skv_bench_t& aIn )
 {
-  os << std::setw(SB_OUT_KEYLEN) << aIn.mKeySize << std::setw(SB_OUT_VALLEN) << aIn.mValueSize << " |*|"
-     << std::fixed << std::setprecision(1) << aIn.mLocalData << " |*|" << aIn.mGlobalData;
+  os << std::fixed << std::setprecision(1) << aIn.mLocalData << " |*|" << aIn.mGlobalData;
   return(os);
 }
 
-#define SKV_BENCH_STAT_LEN ( 5 )
-
 class skv_bench_gliding_avg_t {
-  skv_measurement_set_t mList[ SKV_BENCH_STAT_LEN ];
-  int mCurrentIdx;
+  skv_bench_measurement_t mLocalInsertList[ SKV_BENCH_STAT_LEN ];
+  skv_bench_measurement_t mLocalRetrieveList[ SKV_BENCH_STAT_LEN ];
+  skv_bench_measurement_t mLocalRemoveList[ SKV_BENCH_STAT_LEN ];
 
-  double mAvgInsertIOPS;
-  double mAvgRetrieveIOPS;
-  double mAvgRemoveIOPS;
+  skv_bench_measurement_t mGlobalInsertList[ SKV_BENCH_STAT_LEN ];
+  skv_bench_measurement_t mGlobalRetrieveList[ SKV_BENCH_STAT_LEN ];
+  skv_bench_measurement_t mGlobalRemoveList[ SKV_BENCH_STAT_LEN ];
+
+  int mLocalIdx;
+  int mGlobalIdx;
 
 public:
+  skv_measurement_set_t mLocalAvg;
+  skv_measurement_set_t mGlobalAvg;
+
   void PrintHeader()
   {
     int x;
     std::cout << std::setw(SB_OUT_KVLEN) << "input size  " << " |*|"
-              << std::setw(SB_OUT_SETLEN) << "rank0 insert     " << " |"
-              << std::setw(SB_OUT_SETLEN) << "rank0 retreive    " << " |"
-              << std::setw(SB_OUT_SETLEN) << "rank0 remove     " << " |*|"
-              << std::setw(SB_OUT_SETLEN) << "global insert    " << " |"
-              << std::setw(SB_OUT_SETLEN) << "global retreive   " << " |"
-              << std::setw(SB_OUT_SETLEN) << "global remove    "
+              << std::setw(SB_OUT_SETLEN + SB_OUT_RQLEN + 1) << "rank0 insert     " << " |"
+              << std::setw(SB_OUT_SETLEN) << "rank0 retreive  " << " |"
+              << std::setw(SB_OUT_SETLEN) << "rank0 remove  " << " |*|"
+              << std::setw(SB_OUT_SETLEN + SB_OUT_RQLEN + 1 ) << "global insert    " << " |"
+              << std::setw(SB_OUT_SETLEN) << "global retreive " << " |"
+              << std::setw(SB_OUT_SETLEN) << "global remove  " << " | max"
               << std::endl;
 
-    std::cout << std::setw(SB_OUT_KEYLEN) << "key" << std::setw(SB_OUT_VALLEN) << "value" << " |*|"
-              << SB_OUTRQ << "#req" << " " << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
-              << SB_OUTRQ << "#req" << " " << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
-              << SB_OUTRQ << "#req" << " " << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
-              << "*|"
-              << SB_OUTRQ << "#req" << " " << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
-              << SB_OUTRQ << "#req" << " " << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
-              << SB_OUTRQ << "#req" << " " << SB_OUTIO << "IOPS" << SB_OUTBW << "BW"
+    std::cout << std::setw(SB_OUT_KEYLEN) << "key" << std::setw(SB_OUT_VALLEN) << "value" << " |*|" << SB_OUTRQ << "#req" << " " 
+              << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
+              << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
+              << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
+              << "*|"  << SB_OUTRQ << "#req" << " " 
+              << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
+              << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " |"
+              << SB_OUTIO << "IOPS" << SB_OUTBW << "BW" << " | stdev"
               << std::endl;
 
     std::cout << std::setfill('-') << std::setw(SB_OUT_KVLEN) << "-" << "-+-+"
-              << std::setw(SB_OUT_SETLEN) << "-" << "-+"
+              << std::setw(SB_OUT_SETLEN + SB_OUT_RQLEN + 1 ) << "-" << "-+"
               << std::setw(SB_OUT_SETLEN) << "-" << "-+"
               << std::setw(SB_OUT_SETLEN) << "-" << "-+-+"
+              << std::setw(SB_OUT_SETLEN + SB_OUT_RQLEN + 1) << "-" << "-+"
               << std::setw(SB_OUT_SETLEN) << "-" << "-+"
-              << std::setw(SB_OUT_SETLEN) << "-" << "-+"
-              << std::setw(SB_OUT_SETLEN) << "-" << "-"
+              << std::setw(SB_OUT_SETLEN) << "-" << "-+----------"
               << std::endl;
 
     std::cout << std::setfill(' ');
   }
   void Reset()
   {
-    mCurrentIdx = 0;
-    for( int n=0; n<SKV_BENCH_STAT_LEN; n++ )
-      mList[n].Reset();
+    mLocalIdx = 0;
+    mGlobalIdx = 0;
 
-    mAvgInsertIOPS = 0.0;
-    mAvgRetrieveIOPS = 0.0;
-    mAvgRemoveIOPS = 0.0;
+    for( int n=0; n<SKV_BENCH_STAT_LEN; n++ )
+    {
+      mLocalInsertList[ n ].Reset();
+      mLocalRetrieveList[ n ].Reset();
+      mLocalRemoveList[ n ].Reset();
+
+      mGlobalInsertList[ n ].Reset();
+      mGlobalRetrieveList[ n ].Reset();
+      mGlobalRemoveList[ n ].Reset();
+    }
+
+    mLocalAvg.Reset();
+    mGlobalAvg.Reset();
   }
-  void Append( const skv_bench_measurement_t &aInsert,
+  void Append( bool aGlobal,
+               const skv_bench_measurement_t &aInsert,
                const skv_bench_measurement_t &aRetrieve,
                const skv_bench_measurement_t &aRemove )
   {
-    mList[ mCurrentIdx ].mInsert = aInsert;
-    mList[ mCurrentIdx ].mRetrieve = aRetrieve;
-    mList[ mCurrentIdx ].mRemove = aRemove;
-    mCurrentIdx = ( mCurrentIdx + 1 ) % SKV_BENCH_STAT_LEN;
-  }
-  bool Converged( double aEps )
-  {
-    int rank;
-    MPI_Comm_rank( MPI_COMM_WORLD, &rank );
-
-    mAvgInsertIOPS = 0.0;
-    mAvgRetrieveIOPS = 0.0;
-    mAvgRemoveIOPS = 0.0;
-
-    aEps = aEps / 100;
-    for( int n=0; n<SKV_BENCH_STAT_LEN; n++ )
+    if( aGlobal )
     {
-      mAvgInsertIOPS += mList[ n ].mInsert.mIOPS;
-      mAvgRetrieveIOPS += mList[ n ].mRetrieve.mIOPS;
-      mAvgRemoveIOPS += mList[ n ].mRemove.mIOPS;
+      mGlobalInsertList[ mGlobalIdx ] = aInsert;
+      mGlobalRetrieveList[ mGlobalIdx ] = aRetrieve;
+      mGlobalRemoveList[ mGlobalIdx ] = aRemove;
+      mGlobalIdx = ( mGlobalIdx + 1 ) % SKV_BENCH_STAT_LEN;
     }
-    mAvgInsertIOPS = mAvgInsertIOPS / SKV_BENCH_STAT_LEN;
-    mAvgRetrieveIOPS = mAvgRetrieveIOPS / SKV_BENCH_STAT_LEN;
-    mAvgRemoveIOPS = mAvgRemoveIOPS / SKV_BENCH_STAT_LEN;
+    else
+    {
+      mLocalInsertList[ mLocalIdx ] = aInsert;
+      mLocalRetrieveList[ mLocalIdx ] = aRetrieve;
+      mLocalRemoveList[ mLocalIdx ] = aRemove;
+      mLocalIdx = ( mLocalIdx + 1 ) % SKV_BENCH_STAT_LEN;
+    }
+  }
+  skv_bench_measurement_t& CalcAverage( const skv_bench_measurement_t aList[], skv_bench_measurement_t &aIn )
+  {
+    aIn.Reset();
+    for( int n=0; n<SKV_BENCH_STAT_LEN; n++ )
+      {
+      aIn.mIOPS += aList[ n ].mIOPS;
+      aIn.mBW += aList[ n ].mBW;
+      aIn.mRequests += aList[ n ].mRequests;
+      aIn.mTime += aList[ n ].mTime;
+      }
+    aIn.mIOPS = aIn.mIOPS / (double)SKV_BENCH_STAT_LEN;
+    aIn.mBW = aIn.mBW / (double)SKV_BENCH_STAT_LEN;
+    aIn.mRequests = aIn.mRequests / (double)SKV_BENCH_STAT_LEN;
+    aIn.mTime = aIn.mTime / (double)SKV_BENCH_STAT_LEN;
+    return aIn;
+  }
 
+#define MAX(x,y) ( (x)>(y)?(x):(y) )
+#define MIN(x,y) ( (x)<(y)?(x):(y) )
+
+  skv_bench_measurement_t& CalcPrunedAverage( const skv_bench_measurement_t aList[], skv_bench_measurement_t &aIn )
+  {
+    aIn.Reset();
+    skv_bench_measurement_t max, min;
+    max.Reset();
+    min.mIOPS = 9e10;
+    min.mBW = 9e10;
+    min.mTime = 9e10;
+    min.mRequests = 9e10;
+
+    for( int n=0; n<SKV_BENCH_STAT_LEN; n++ )
+      {
+      aIn.mIOPS += aList[ n ].mIOPS;
+      aIn.mBW += aList[ n ].mBW;
+      aIn.mRequests += aList[ n ].mRequests;
+      aIn.mTime += aList[ n ].mTime;
+
+      max.mIOPS = MAX( max.mIOPS, aList[ n ].mIOPS );
+      max.mBW = MAX( max.mBW, aList[ n ].mBW );
+      max.mRequests = MAX( max.mRequests, aList[ n ].mRequests );
+      max.mTime = MAX( max.mTime, aList[ n ].mTime );
+
+      min.mIOPS = MIN( min.mIOPS, aList[ n ].mIOPS );
+      min.mBW = MIN( min.mBW, aList[ n ].mBW );
+      min.mRequests = MIN( min.mRequests, aList[ n ].mRequests );
+      min.mTime = MAX( min.mTime, aList[ n ].mTime );
+      }
+    aIn.mIOPS = (aIn.mIOPS - min.mIOPS - max.mIOPS) / (double)(SKV_BENCH_STAT_LEN-2);
+    aIn.mBW = (aIn.mBW - min.mBW - max.mBW) / (double)(SKV_BENCH_STAT_LEN-2);
+    aIn.mRequests = (aIn.mRequests - min.mRequests - max.mRequests) / (double)(SKV_BENCH_STAT_LEN-2);
+    aIn.mTime = (aIn.mTime - min.mTime - max.mTime) / (double)(SKV_BENCH_STAT_LEN-2);
+    return aIn;
+  }
+
+
+  void RegenerateAllAverages()
+  {
+    mLocalAvg.mInsert = CalcPrunedAverage( mLocalInsertList, mLocalAvg.mInsert );
+    mLocalAvg.mRetrieve = CalcPrunedAverage( mLocalRetrieveList, mLocalAvg.mRetrieve );
+    mLocalAvg.mRemove = CalcPrunedAverage( mLocalRemoveList, mLocalAvg.mRemove );
+
+    mGlobalAvg.mInsert = CalcPrunedAverage( mGlobalInsertList, mGlobalAvg.mInsert );
+    mGlobalAvg.mRetrieve = CalcPrunedAverage( mGlobalRetrieveList, mGlobalAvg.mRetrieve );
+    mGlobalAvg.mRemove = CalcPrunedAverage( mGlobalRemoveList, mGlobalAvg. mRemove );
+  }
+  bool Converged( double aEps, double *aSDev )
+  {
+    RegenerateAllAverages();
+
+    double sdev_ins = 0.0;
+    double sdev_ret = 0.0;
+    double sdev_rem = 0.0;
     double a,b;
     for( int n=0; n<SKV_BENCH_STAT_LEN; n++ )
     {
-      b = mList[ n ].mInsert.mIOPS;
-      a = mAvgInsertIOPS;
-      // if( rank == 0)
-      //   std::cout << "EPS: " << aEps << " ERR: " << ((b - a) * (b - a)) / ( a*a ) << std::endl;
-      if( ((b - a) * (b - a)) / ( a*a ) > aEps )
-        return false;
+      b = mGlobalInsertList[ n ].mIOPS;
+      a = mGlobalAvg.mInsert.mIOPS;
+      sdev_ins += ((b - a) * (b - a));
 
-      b = mList[ n ].mRetrieve.mIOPS;
-      a = mAvgRetrieveIOPS;
-      if( ((b - a) * (b - a)) / ( a*a ) > aEps )
-        return false;
+      b = mGlobalRetrieveList[ n ].mIOPS;
+      a = mGlobalAvg.mRetrieve.mIOPS;
+      sdev_ret += ((b - a) * (b - a));
 
-      b = mList[ n ].mRemove.mIOPS;
-      a = mAvgRemoveIOPS;
-      if( ((b - a) * (b - a)) / ( a*a ) > aEps )
-        return false;
+      b = mGlobalRemoveList[ n ].mIOPS;
+      a = mGlobalAvg.mRemove.mIOPS;
+      sdev_rem += ((b - a) * (b - a));
     }
-    return true;
+    sdev_ins = sqrt( ( sdev_ins ) / ( SKV_BENCH_STAT_LEN - 1 ) ) / mGlobalAvg.mInsert.mIOPS * 100;
+    sdev_ret = sqrt( ( sdev_ret ) / ( SKV_BENCH_STAT_LEN - 1 ) ) / mGlobalAvg.mRetrieve.mIOPS * 100;
+    sdev_rem = sqrt( ( sdev_rem ) / ( SKV_BENCH_STAT_LEN - 1 ) ) / mGlobalAvg.mRemove.mIOPS * 100;
+
+    *aSDev = MAX( sdev_ins, MAX( sdev_ret, sdev_rem) );
+
+    // if( GlobalConfRef->mRank == 0)
+    //   std::cout << "  EPS: " << std::setprecision(4) << aEps << " ins:" << sdev_ins << " ret:" << sdev_ret << " rem: " << sdev_rem << std::endl;
+
+    return ( ( sdev_ins < aEps ) && ( sdev_ret < aEps ) && ( sdev_rem < aEps ) );
   }
 };
+template<class streamclass>
+static streamclass&
+operator<<( streamclass& os, const skv_bench_gliding_avg_t& aIn )
+{
+  os << std::fixed << std::setprecision(1) << aIn.mLocalAvg << " |*|" << aIn.mGlobalAvg;
+  return(os);
+}
+
 
 
 /*************************************************************
@@ -989,6 +1079,8 @@ main(int argc, char **argv)
   if( config.Parse( argc, argv ) || !config.SanityCheck() )
     return 1;
 
+  GlobalConfRef = &config;
+
   MPI_Comm_rank( MPI_COMM_WORLD, &config.mRank );
   MPI_Comm_size( MPI_COMM_WORLD, &config.mNodeCount );
 
@@ -998,6 +1090,7 @@ main(int argc, char **argv)
   skv_status_t status = SKV_SUCCESS;
   skv_bench_t bench;
   skv_bench_gliding_avg_t glAvg;
+  double sdev;
 
   status = bench.Init( config );
   if( config.mRank == 0)
@@ -1008,27 +1101,40 @@ main(int argc, char **argv)
     {
       bench.Reset( k, v );
       glAvg.Reset();
+
       int MaxAttempts = DEFAULT_MAX_ATTEMPTS;
       double CurrentTime = MPI_Wtime();
       double StartTime = CurrentTime;
-      while( (status == SKV_SUCCESS) && ( MaxAttempts-- > 0) )
+      bool converged = false;
+      do 
       {
         status = bench.Run();
-        glAvg.Append( bench.mGlobalData.mInsert,
+        glAvg.Append( true,
+                      bench.mGlobalData.mInsert,
                       bench.mGlobalData.mRetrieve,
                       bench.mGlobalData.mRemove );
+        glAvg.Append( false,
+                      bench.mLocalData.mInsert,
+                      bench.mLocalData.mRetrieve,
+                      bench.mLocalData.mRemove );
 
+        converged = glAvg.Converged( config.mAvgError, &sdev );
         if( config.mRank == 0 )
-          std::cout << ".";
-        if( glAvg.Converged( config.mAvgError ) )
-        {
-          break;
-        }
+          {
+            std::cout << ".";
+            // std::cout << "\r" << std::setw(SB_OUT_KVLEN) << " *" << " |*|" << bench << ": " << sdev << "%" << std::endl;
+            // std::cout << std::setw(SB_OUT_KVLEN) << " *" << " |*|" << glAvg << std::endl;
+          }
 
         CurrentTime = MPI_Wtime();
-      }
+      } while( ( ! converged ) && (status == SKV_SUCCESS) && ( MaxAttempts-- > 0) );
+
       if( config.mRank == 0 )
-        std::cout << "\r" << bench << (MaxAttempts<=0?"!!":"") << std::endl;
+        std::cout << "\r" 
+                  << std::setw(SB_OUT_KEYLEN) << bench.mKeySize 
+                  << std::setw(SB_OUT_VALLEN) << bench.mValueSize << " |*|"
+                  << glAvg << " |" 
+                  << sdev << "%"  << (converged?" ":" !!!") << std::endl;
 
       if( status != SKV_SUCCESS )
       {
