@@ -108,7 +108,7 @@ int Init_test( int argc, char **argv )
 {
   int status = 0;
   int op;
-  while( (op = getopt( argc, argv, "ha:k:m:r:z:" )) != -1 )
+  while( (op = getopt( argc, argv, "hc:k:m:r:z:" )) != -1 )
   {
     char *endp;
     switch( op )
@@ -117,9 +117,9 @@ int Init_test( int argc, char **argv )
         status = -EINVAL;
       case 'h':
       {
-        std::cout << "USAGE: random_read \n";
+        std::cout << "USAGE: skv_base_test\n";
         std::cout << "  Arguments:\n";
-        std::cout << "  -f <config_file>   : skv config file (default ./skv_server.conf)\n";
+        std::cout << "  -c <config_file>   : skv config file (default ./skv_server.conf)\n";
         std::cout << "  -h                 : print this help\n";
         std::cout << "  -k <keysize>       : keysize for testing (default: 4)\n";
         std::cout << "  -m <test_mode>     : Testmode: [a]|[bcdipr]\n";
@@ -130,7 +130,7 @@ int Init_test( int argc, char **argv )
         std::cout << "  " << std::endl;
         return 1;
       }
-      case 'a':
+      case 'c':
         config.CONF_FILE.assign( optarg );
         break;
       case 'k':
