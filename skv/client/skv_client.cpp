@@ -43,7 +43,8 @@ Init( skv_client_group_id_t aCommGroupId,
     << EndLogLine;
 
   return ((skv_client_internal_t *)mSKVClientInternalPtr)->Init( aCommGroupId,
-                                                                 aFlags );
+                                                                 aFlags,
+                                                                 aConfigFile );
 }
 #else
 skv_status_t

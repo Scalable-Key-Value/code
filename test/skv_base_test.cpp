@@ -187,11 +187,7 @@ skv_status_t Init_skv()
   /*****************************************************************************
    * Init the SKV Client
    ****************************************************************************/
-  status = gdata.Client.Init( 0,
-#ifndef SKV_CLIENT_UNI
-                              MPI_COMM_WORLD,
-#endif
-                              0 );
+  status = gdata.Client.Init( 0, 0, config.CONF_FILE.c_str() );
 
   if( status == SKV_SUCCESS )
     {
