@@ -312,6 +312,44 @@ write_to_socket( int sock, char * buff, int len, int* wlen )
 
   return IWARPEM_SUCCESS;
   }
+static
+inline
+iWARPEM_Status_t
+write_to_socket( int sock, struct iovec *iov, int iov_count, int* wlen )
+{
+  BegLogLine(FXLOG_IT_API_O_SOCKETS)
+    << "Writing to FD=" << sock
+    << " iovec=" << (void *) iov
+    << " iov_count=" << iov_count
+    << EndLogLine ;
+writev_retry:
+  int write_rc = writev(sock,iov,iov_count) ;
+  if( write_rc < 0 )
+  {
+    switch( errno )
+    {
+      case EAGAIN:
+        goto writev_retry;
+      case ECONNRESET:
+        return IWARPEM_ERRNO_CONNECTION_RESET;
+      default:
+        StrongAssertLogLine( 0 )
+          << "write_to_socket:: ERROR:: "
+          << "failed to write to file: " << sock
+          << " iovec: " << (void *) iov
+          << " iov_count: " << iov_count
+          << " errno: " << errno
+          << EndLogLine;
+    }
+  }
+  *wlen = write_rc ;
+
+#if IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL
+  gBandOutStat.AddBytes( write_rc );
+#endif
+
+  return IWARPEM_SUCCESS;
+}
 
 #ifndef IT_API_READ_FROM_SOCKET_HIST 
 #define IT_API_READ_FROM_SOCKET_HIST ( 0 )
@@ -2374,28 +2412,29 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
     }
   else 
     {
-      int wlen = 0;
-      SendWR->mMessageHdr.EndianConvert() ;
-      iWARPEM_Status_t istatus = write_to_socket( SocketFD, 
-                                                  (char *) & SendWR->mMessageHdr, 
-                                                  LenToSend,
-                                                  & wlen );
-      if( istatus != IWARPEM_SUCCESS )
-        {
-          iwarpem_generate_conn_termination_event( SocketFD );
-          return;
-        }          
-
-      AssertLogLine( wlen == LenToSend )
-        << "iWARPEM_ProcessSendWR(): ERROR: "
-        << " LenToSend: " << LenToSend
-        << " wlen: " << wlen
-        << EndLogLine;
 
       switch( MsgType )
         {
         case iWARPEM_DISCONNECT_REQ_TYPE:
           {
+            int wlen = 0;
+            SendWR->mMessageHdr.EndianConvert() ;
+            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
+                                                        (char *) & SendWR->mMessageHdr,
+                                                        LenToSend,
+                                                        & wlen );
+            if( istatus != IWARPEM_SUCCESS )
+              {
+                iwarpem_generate_conn_termination_event( SocketFD );
+                return;
+              }
+
+            AssertLogLine( wlen == LenToSend )
+              << "iWARPEM_ProcessSendWR(): ERROR: "
+              << " LenToSend: " << LenToSend
+              << " wlen: " << wlen
+              << EndLogLine;
+
             BegLogLine( FXLOG_IT_API_O_SOCKETS )
               << "iWARPEM_ProcessSendWR(): About to call free(): " 
               << " MsgType: " << iWARPEM_Msg_Type_to_string( MsgType )
@@ -2409,6 +2448,24 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
           }
         case iWARPEM_DISCONNECT_RESP_TYPE:
           {		
+            int wlen = 0;
+            SendWR->mMessageHdr.EndianConvert() ;
+            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
+                                                        (char *) & SendWR->mMessageHdr,
+                                                        LenToSend,
+                                                        & wlen );
+            if( istatus != IWARPEM_SUCCESS )
+              {
+                iwarpem_generate_conn_termination_event( SocketFD );
+                return;
+              }
+
+            AssertLogLine( wlen == LenToSend )
+              << "iWARPEM_ProcessSendWR(): ERROR: "
+              << " LenToSend: " << LenToSend
+              << " wlen: " << wlen
+              << EndLogLine;
+
             BegLogLine( FXLOG_IT_API_O_SOCKETS )
               << "iWARPEM_ProcessSendWR(): About to call free(): " 
               << " MsgType: " << iWARPEM_Msg_Type_to_string( MsgType )
@@ -2424,6 +2481,24 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
           }
         case iWARPEM_DTO_RDMA_READ_REQ_TYPE:
           {
+            int wlen = 0;
+            SendWR->mMessageHdr.EndianConvert() ;
+            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
+                                                        (char *) & SendWR->mMessageHdr,
+                                                        LenToSend,
+                                                        & wlen );
+            if( istatus != IWARPEM_SUCCESS )
+              {
+                iwarpem_generate_conn_termination_event( SocketFD );
+                return;
+              }
+
+            AssertLogLine( wlen == LenToSend )
+              << "iWARPEM_ProcessSendWR(): ERROR: "
+              << " LenToSend: " << LenToSend
+              << " wlen: " << wlen
+              << EndLogLine;
+
             // Freeing of the SendWR happens in the ReceiverThread when the RDMA_READ_RESP is processed.
             // WARNING: WARNING: WARNING: 
             // WARNING: WARNING: WARNING: 
@@ -2442,6 +2517,12 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
         case iWARPEM_DTO_RDMA_WRITE_TYPE:
         case iWARPEM_DTO_SEND_TYPE:
           {
+            struct iovec iov[SendWR->num_segments+1] ;
+            int wlen = 0;
+            SendWR->mMessageHdr.EndianConvert() ;
+            iov[0].iov_base=(void *) & SendWR->mMessageHdr ;
+            iov[0].iov_len = LenToSend ;
+
             /**********************************************
              * Send data to destination
              *********************************************/		
@@ -2494,23 +2575,27 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                   Checksum += DestAddr[ j ];
 #endif
                 int wlen;
-                iWARPEM_Status_t istatus = write_to_socket( SocketFD,
-                                                            DestAddr,
-                                                            ntohl(SendWR->segments_array[ i ].length),
-                                                            & wlen );
-                if( istatus != IWARPEM_SUCCESS )
-                  {
-                    iwarpem_generate_conn_termination_event( SocketFD );
-                    error = 1;
-                    break;
-                  } 
+                iov[i+1].iov_base = ( void *) DestAddr ;
+                iov[i+1].iov_len = ntohl(SendWR->segments_array[ i ].length) ;
               }
 		
+            iWARPEM_Status_t istatus = IWARPEM_SUCCESS;
+
             if( error )
               {
                 goto free_WR_and_break;
               }
 
+            istatus = write_to_socket( SocketFD,
+                                       iov,
+                                       SendWR->num_segments+1,
+                                       & wlen );
+            if( istatus != IWARPEM_SUCCESS )
+              {
+                iwarpem_generate_conn_termination_event( SocketFD );
+                error = 1;
+                break;
+              }
 #if IT_API_CHECKSUM
             StrongAssertLogLine( Checksum == SendWR->mMessageHdr.mChecksum )
               << "iWARPEM_ProcessSendWR(): ERROR: "
