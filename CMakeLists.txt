@@ -88,10 +88,14 @@ set_property(CACHE SKV_COMM_API_TYPE
 
 if(SKV_COMM_API_TYPE MATCHES "verbs")
   find_package(OFED REQUIRED)
+  set( IT_API_LIBS ${OFED_LIBRARIES} pthread rt )
   add_definitions(
     # enable workaround for missing RoQ loopback functionality
     -DSKV_ROQ_LOOPBACK_WORKAROUND
   )
+endif()
+if(SKV_COMM_API_TYPE MATCHES "sockets")
+  set( IT_API_LIBS pthread rt )
 endif()
 
 
@@ -145,7 +149,7 @@ set(IT_API_PUBLIC_HEADERS
   it_api/it_api_os_specific.h
 )
 
-set(IT_API_LINK_LIBRARIES ${OFED_LIBRARIES})
+set(IT_API_LINK_LIBRARIES ${IT_API_LIBS} )
 
 
 
@@ -218,15 +222,15 @@ foreach(_test ${TEST_SOURCES})
   set_target_properties(${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS
     "SKV_CLIENT_UNI;SKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
-    ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+    ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
 
 foreach(_test ${TEST_MPI_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
-  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common it_api fxlogger
-    ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common ${IT_API_LINK_LIBRARIES} fxlogger
+    ${MPI_CXX_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
 
