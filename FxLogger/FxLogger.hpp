@@ -44,6 +44,11 @@ using namespace std;
 
 #endif
 
+#ifdef PK_CNK
+#include <firmware/include/personality.h>
+#include <spi/include/kernel/cnk/process_impl.h>
+#endif
+
 //NEED: this perhaps default to packet size.  Or be drawn from platform spec
 #define PKLOG_MAXBUF ( 2 * 4096 )
 
@@ -185,11 +190,13 @@ FxLogger_Init( const char* aProgramName,
 
   FxLoggerNodeId = aRank;
 
+#ifndef PK_CNK
   if ( setrlimit( RLIMIT_CORE, &RLim ) != 0 )
     {
     perror( "ERROR:: vlimit failed" );
     FxLogger_Abort( "ERROR:: vlimit failed" );
     }
+#endif
 
   const char* ProgName = FxLogger_GetStartPointInFilePathName( aProgramName, 1 );
 
@@ -316,7 +323,24 @@ class FxLogger_NodeName
           char hbuf[256];
           gethostname(hbuf,256);
           hbuf[20] = '\0'; // need to ensure string isn't too long
+#ifdef PK_CNK
+          uint32_t id = 0;
+          uint32_t rc;
+          Personality_t pers;
+          rc = Kernel_GetPersonality(&pers, sizeof(pers));
+          if (rc == 0)
+          {
+            Personality_Networks_t *net = &pers.Network_Config;
+            id = ((((((((net->Acoord
+                * net->Bnodes) + net->Bcoord)
+                * net->Cnodes) + net->Ccoord)
+                * net->Dnodes) + net->Dcoord)
+                * net->Enodes) + net->Ecoord);
+          }
+          int hpid = id ;
+#else
           int hpid = getpid();
+#endif
           sprintf( static_NodeName, "%s.%d", hbuf, hpid );
           }
         else
@@ -359,7 +383,7 @@ public:
 
   FxLogger_ThreadName()
     {
-#if defined(PK_LINUX) && !defined(PK_CNK)
+#if defined(PK_LINUX)
       pthread_t tid = pthread_self();
       sprintf( mThreadName, "%08X", (int) tid );
 #else
@@ -706,19 +730,19 @@ class
    class HexDump
       {
       public:
-        char *mAddr;
+        unsigned char *mAddr;
         int   mSize;
         int   mMax;
         HexDump( void *aAddr, int aSize )
           {
-          mAddr = (char*) aAddr;
+          mAddr = (unsigned char*) aAddr;
           mSize = aSize;
           mMax  = 0x999999; // this will be caught by the overall buffer monitor
           }
 
         HexDump( void *aAddr, int aSize, int aMax )
           {
-          mAddr = (char*) aAddr;
+          mAddr = (unsigned char*) aAddr;
           mSize = aSize;
           mMax  = aMax;
           }
@@ -813,7 +837,7 @@ class
     static SprintfStream& operator<< (SprintfStream& ls, long x) __attribute__((unused)) ;
     static SprintfStream& operator<< (SprintfStream& ls, long x)
       {
-      ls.SprintfToBuffer( x, "%d" );
+      ls.SprintfToBuffer( x, "%ld" );
       return( ls );
       }
 
@@ -845,20 +869,17 @@ class
     static SprintfStream& operator<< (SprintfStream& ls, unsigned long x) __attribute__((unused)) ;
     static SprintfStream& operator<< (SprintfStream& ls, unsigned long x)
       {
-      ls.SprintfToBuffer( x, "%u" );
+      ls.SprintfToBuffer( x, "%lu" );
       return( ls );
       }
 
     static SprintfStream& operator<< (SprintfStream& ls, void* x) __attribute__((unused)) ;
     static SprintfStream& operator<< (SprintfStream& ls, void* x)
       {
-#if defined( __64BIT__ )
-        int * ip = (int *) &x;
-        ls.SprintfToBuffer( ":XD:","%s" );
-        ls.SprintfToBuffer( ip[0], "%08X" );
-        ls.SprintfToBuffer( ip[1], "%08X" );
-#else
+#if defined( __32BIT__ )
       ls.SprintfToBuffer( x, "%08X" );
+#else
+      ls.SprintfToBuffer( x, "%08lX" );
 #endif
       return( ls );
       }
@@ -876,10 +897,17 @@ class
     static SprintfStream& operator<< (SprintfStream& ls, const char * x) __attribute__((unused)) ;
     static SprintfStream& operator<< (SprintfStream& ls, const char * x)
       {
-      if( (int) strlen( x ) > ls.mRemainingBufferSpace )
-	FxLogger_Abort( "SprintfStream& operator<< (SprintfStream& ls, char* x):  Log line would over run buffer" );
+      if ( NULL == x )
+      {
+        ls.SprintfToBuffer("(NULL)","%s") ;
+      }
+      else
+      {
+        if( (int) strlen( x ) > ls.mRemainingBufferSpace )
+          FxLogger_Abort( "SprintfStream& operator<< (SprintfStream& ls, char* x):  Log line would over run buffer" );
+        ls.SprintfToBuffer( x, "%s" );
+      }
 
-      ls.SprintfToBuffer( x, "%s" );
       return( ls );
       }
 
