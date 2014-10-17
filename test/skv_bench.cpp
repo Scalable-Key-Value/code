@@ -617,6 +617,9 @@ public:
         << " status: " << skv_status_to_string ( GetExitStatus() )
         << EndLogLine;
     }
+    BegLogLine( SKV_BENCH_LOG )
+      << "Completed InsertBatch()"
+      << EndLogLine;
     return status;
   }
   skv_status_t RetrieveBatch( const char* aKeyBuffer,
@@ -691,6 +694,9 @@ public:
         << " wait status: " << skv_status_to_string( GetExitStatus() )
         << EndLogLine;
     }
+    BegLogLine( SKV_BENCH_LOG )
+      << "Completed WaitForBatch()"
+      << EndLogLine;
     return GetExitStatus();
   }
   inline

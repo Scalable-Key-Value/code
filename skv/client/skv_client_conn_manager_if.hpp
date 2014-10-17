@@ -37,28 +37,6 @@
 #endif
 
 
-struct skv_client_cookie_t
-{
-  skv_client_server_conn_t*  mConn;
-  skv_client_ccb_t*          mCCB;
-  uint64_t                    mSeq;
-};
-
-template<class streamclass>
-static
-streamclass&
-operator<<(streamclass& os, const skv_client_cookie_t& aHdr)
-{
-  os << "skv_client_cookie_t [ "
-     << (void *) aHdr.mConn << ' '
-     << (void *) aHdr.mCCB << ' '
-     << aHdr.mSeq
-     << " ]";
-
-  return(os);
-}
-
-
 class skv_client_conn_manager_if_t
 {
   int                           mServerConnCount;

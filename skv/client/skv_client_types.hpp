@@ -251,10 +251,10 @@ struct skv_client_ccb_t
 
   // This status is only valid after the command
   // has completed
+  skv_client_ccb_manager_if_t*  mCCBMgrIF;
+  uint64_t                      mCmdReadyForDone;
   skv_status_t                  mStatus;
   int                           mCmdOrd;
-  skv_client_ccb_manager_if_t*  mCCBMgrIF;
-  unsigned char                 mCmdReadyForDone;
 
 public:
   void
@@ -299,10 +299,13 @@ public:
     return mSendCtrlMsgBuff;
   }
 
-  void SetSendWasFirst() { mCmdReadyForDone = 1; }
-  void SetRecvWasFirst() { mCmdReadyForDone = 1; }
-  int  CheckSendIsComplete() { return (int)mCmdReadyForDone; }
-  int  CheckRecvIsComplete() { return (int)mCmdReadyForDone; }
+  void SetSendWasFirst() { mCmdReadyForDone |= 1; }
+  void SetRecvWasFirst() { mCmdReadyForDone |= 1; }
+  bool CheckSendIsComplete() { return ( mCmdReadyForDone & 1 ) != 0; }
+  bool CheckRecvIsComplete() { return ( mCmdReadyForDone & 1 ) != 0; }
+
+  void SetRequestWithWrite() { mCmdReadyForDone |= 2; }
+  bool CheckRequestWithWrite() { return ( mCmdReadyForDone & 2 ) != 0; }
 
   void
   Init( it_lmr_handle_t aBaseLMR, skv_client_ccb_manager_if_t* aCCBMgrIF )

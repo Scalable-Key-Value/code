@@ -1054,7 +1054,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
           skv_client_ccb_t*            aCCB,
           int                          aCmdOrd )
 {
-  it_status_t status = IT_SUCCESS;
+  skv_status_t status = SKV_SUCCESS;
 
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::Dispatch():: Entering"
@@ -1134,36 +1134,10 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << " Hdr: " << *Hdr
     << EndLogLine;
 
-  it_rdma_addr_t dest_recv_slot = ( it_rdma_addr_t )( aConn->GetNextServerRecvAddress() ) ;
-
-  // if the server slot is 0 the do a signalled
-  it_dto_flags_t dto_write_flags = (it_dto_flags_t) (0);
-  if( dest_recv_slot == 0 )
-  {
-    dto_write_flags = (it_dto_flags_t) (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG);
-  }
-
   gSKVClientConnDispatch[CmdOrd].HitOE( SKV_CLIENT_PROCESS_CONN_TRACE,
       "SKVClientConnDispatch",   // this name is not used, see Init()
       mMyRankInGroup,
       gSKVClientConnDispatch );
-
-  skv_client_cookie_t Cookie;
-
-  Cookie.mConn = aConn;
-  Cookie.mCCB = aCCB;
-  Cookie.mSeq = aConn->mSeqNo;
-  mCookieSeq.mConn = aConn;
-  mCookieSeq.mCCB = aCCB;
-
-  it_dto_cookie_t* ITCookie = (it_dto_cookie_t*) &mCookieSeq;
-  mCookieSeq.mSeq = aConn->mSeqNo;
-
-  // status = it_post_send( aConn->mEP,
-  //                        & send_seg,
-  //                        1,
-  //                        *ITCookie,
-  //                        dto_send_flags );
 
   // Set EOM-mark or real checksum to be checked by remote memory polling
   ((char*) send_seg.addr.abs)[SKV_CONTROL_MESSAGE_SIZE - 1] = Hdr->CheckSum();
@@ -1192,24 +1166,8 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << EndLogLine;
 #endif
 
-    // uintptr_t *buffer = (uintptr_t*)send_seg.addr.abs;
-    // BegLogLine( 1 )
-    //   << "postBuf: " << HEXLOG(buffer[ 0 ])
-    //   << " " << HEXLOG(buffer[ 1 ])
-    //   << " " << HEXLOG(buffer[ 2 ])
-    //   << " " << HEXLOG(buffer[ 3 ])
-    //   << " " << HEXLOG(buffer[ 4 ])
-    //   << " TRLFLG: " << HEXLOG(buffer[ SKV_CONTROL_MESSAGE_SIZE / sizeof(uintptr_t) -1 ])
-    //   << " dest@: " << (void*)dest_recv_slot
-    //   << EndLogLine;
-
-  status = it_post_rdma_write( aConn->mEP,
-                               & send_seg,
-                               1,
-                               *ITCookie,
-                               dto_write_flags,
-                               dest_recv_slot,
-                               aConn->mServerCommandMem.GetRMRContext() );
+  mCookieSeq.mCCB = aCCB;
+  status = aConn->PostOrStoreRdmaWrite( send_seg, aCCB, mCookieSeq.mSeq );
 
   AssertLogLine( status == IT_SUCCESS )
     << "skv_client_conn_manager_if_t::Dispatch:: ERROR:: "
@@ -1222,15 +1180,6 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << " on EP: " << (void *) aConn->mEP
     << EndLogLine;
 
-  if( status != IT_SUCCESS )
-  {
-    return SKV_ERRNO_IT_POST_SEND_FAILED;
-  }
-
-  if( dest_recv_slot != 0 )
-  {
-    aCCB->SetSendWasFirst();   // if we don't use completion events, we need to signal that we are "ready"
-  }
   mCookieSeq.mSeq++;
 
   BegLogLine( 0 )
@@ -1241,7 +1190,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << "skv_client_conn_manager_if_t::Dispatch():: Leaving"
     << EndLogLine;
 
-  return SKV_SUCCESS;
+  return status;
 }
 
 /***
@@ -1303,7 +1252,10 @@ ProcessCCB( skv_client_server_conn_t*    aConn,
                                                      mMyRankInGroup,
                                                      gSKVClientConnProcessRecv );
 
-  skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
+  skv_status_t status = aConn->RequestCompletion( aCCB );
+
+  if( status != SKV_SUCCESS )
+    return status;
 
   skv_server_to_client_cmd_hdr_t* Hdr = (skv_server_to_client_cmd_hdr_t *) aCCB->GetRecvBuff();
 
@@ -1493,7 +1445,7 @@ ProcessSqEvent(it_event_t* event_rq)
       // in case the recv cmpl event was processed before the send
       // cmpl event, the recv handling has skipped processing of
       // overflow queue to check for pending commands. This has to be done here then
-      if( CCB->CheckRecvIsComplete() != 0 )
+      if( CCB->CheckRecvIsComplete() )
       {
         ProcessCCB( Conn, CCB );
 
@@ -1589,16 +1541,18 @@ ProcessConnectionsRqSq()
   //   << "skv_client_conn_manager_if_t::ProcessConnectionsRqSq(): Entering"
   //   << EndLogLine;
 
-  //  int dont_repeat = 0;
+  bool empty_poll = true;
   int DequeuedEventCount;
   it_status_t status;
+  static int last_server = 0;
 
   for( int pollLoops=0;
-       //       (dont_repeat == 0) &&
-      (pollLoops < SKV_CLIENT_RESPONSE_POLL_LOOPS);
+      ( empty_poll ) && (pollLoops < SKV_CLIENT_RESPONSE_POLL_LOOPS);
       pollLoops++ )
   {
-    for( int server=0; server<mServerConnCount; server++ )
+    int server = last_server;
+
+    do
     {
       skv_client_server_conn_t* Connection = & (mServerConns[ server ]);
 
@@ -1606,7 +1560,7 @@ ProcessConnectionsRqSq()
 
       int commandsCount = 0;
       while( ((RdmaHdr = Connection->CheckForNewResponse()) != NULL) &&
-             (commandsCount < SKV_MAX_COMMANDS_PER_EP) )   // run max one batch for one EP
+             (commandsCount < (SKV_MAX_COMMANDS_PER_EP>>2)) )   // run max one batch for one EP
       {
         skv_client_ccb_t *CCB = (skv_client_ccb_t *) RdmaHdr->mCmdCtrlBlk;
 
@@ -1626,10 +1580,14 @@ ProcessConnectionsRqSq()
         ProcessOverflow( Connection );
 
         commandsCount++;
-        //              dont_repeat = 1;
+        empty_poll = false;
       }
 
+      server = (server+1) % mServerConnCount;
     }
+    while( ( server != last_server ) );
+
+    last_server = server;
   }
 
   mEventLoops++;

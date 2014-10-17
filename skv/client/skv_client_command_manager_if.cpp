@@ -31,12 +31,12 @@ TestAny( skv_client_cmd_hdl_t* aCmdHdl )
 {
   skv_status_t status = SKV_SUCCESS;
 
-  mConnMgrIF->ProcessConnectionsRqSq();
-
   skv_client_ccb_t* CCB = mCCBMgrIF->RemoveFromFrontDoneCCBQueue();
 
   if( CCB == NULL )
   {
+    mConnMgrIF->ProcessConnectionsRqSq();
+
     // No block is done
     status = SKV_ERRNO_NOT_DONE;
   }
@@ -95,7 +95,6 @@ Test( skv_client_cmd_hdl_t aCmdHdl )
   //   << "skv_client_internal_t::Test():: Entering "
   //   << EndLogLine;
 
-  mConnMgrIF->ProcessConnectionsRqSq();
   // mConnMgrIF->ProcessConnections();
 
   skv_status_t status = SKV_SUCCESS;
@@ -107,6 +106,7 @@ Test( skv_client_cmd_hdl_t aCmdHdl )
   }
   else
   {
+    mConnMgrIF->ProcessConnectionsRqSq();
     status = SKV_ERRNO_NOT_DONE;
   }
 

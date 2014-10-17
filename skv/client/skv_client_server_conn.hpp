@@ -27,21 +27,61 @@
 #define SKV_CLIENT_RESPONSE_POLLING_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_CLIENT_REQUEST_COALESCING_LOG
+#define SKV_CLIENT_REQUEST_COALESCING_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
 typedef enum
-  {
+{
   SKV_CLIENT_CONN_DISCONNECTED = 1,
   SKV_CLIENT_CONN_CONNECTED
-  } skv_client_conn_state_t;
+} skv_client_conn_state_t;
 
-#define SKV_MAX_UNRETIRED_CMDS ( SKV_MAX_COMMANDS_PER_EP )
 #define ALIGNMENT ( 256 )
+#define SKV_MAX_COALESCED_COMMANDS ( 4 )
+#define SKV_MAX_UNRETIRED_CMDS ( SKV_MAX_COMMANDS_PER_EP * SKV_MAX_COALESCED_COMMANDS )
+#define SKV_COMMAND_PIPELINE_THRESHOLD ( 4 )   // number of outstanding post_rdma_write() to fill the pipeline
 
-struct skv_client_server_conn_t
+struct skv_client_server_conn_t;
+
+struct skv_client_cookie_t
+{
+  skv_client_server_conn_t*  mConn;
+  skv_client_ccb_t*          mCCB;
+  uint64_t                    mSeq;
+};
+
+template<class streamclass>
+static
+streamclass&
+operator<<(streamclass& os, const skv_client_cookie_t& aHdr)
+{
+  os << "skv_client_cookie_t [ "
+     << (void *) aHdr.mConn << ' '
+     << (void *) aHdr.mCCB << ' '
+     << aHdr.mSeq
+     << " ]";
+
+  return(os);
+}
+
+struct skv_client_queued_command_rep_t
+{
+  // sendseg is hold in separate array to allow post_rdma() without extra copy of segment list
+  skv_client_ccb_t *mCCB;
+  uint64_t mSeqNo;
+};
+ struct skv_client_server_conn_t
   {
     skv_client_conn_state_t mState;
     it_ep_handle_t mEP;
     skv_rmr_triplet_t mServerCommandMem;
     int mCurrentServerRecvSlot;
+    skv_client_queued_command_rep_t mQueuedCommands[ SKV_SERVER_COMMAND_SLOTS ];  // hold request metadata for completion processing
+    it_lmr_triplet_t mQueuedSegments[ SKV_SERVER_COMMAND_SLOTS ]; // hold request segments for post_rmda_write() call
+    int mSendSegsCount;
+    int mInFlightWriteCount;
+
 
     int mUnretiredRecvCount;
 
@@ -123,13 +163,11 @@ struct skv_client_server_conn_t
         return;
       }
 
-    /** \brief Get and advance the serverside slot address for the next command to write
+    /** \brief Get the serverside slot address for the next command to write
      */
-    uintptr_t GetNextServerRecvAddress()
+    uintptr_t GetCurrentServerRecvAddress()
       {
         uintptr_t address = mServerCommandMem.GetAddr();
-
-        mCurrentServerRecvSlot = (mCurrentServerRecvSlot + 1) % SKV_SERVER_COMMAND_SLOTS;
 
         address += mCurrentServerRecvSlot * SKV_CONTROL_MESSAGE_SIZE;
 
@@ -179,28 +217,9 @@ struct skv_client_server_conn_t
             );
 
         if( found )
-          {
-
-// #define HEXLOG( x )  (  (void*) (*((uint64_t*) &(x)) ) )
-            // BegLogLine( 1 )
-            //   << "responseBuf: " << HEXLOG(mResponseSlotBuffer[ Index ])
-            //   << " " << HEXLOG(mResponseSlotBuffer[ Index + sizeof(void*) * 1])
-            //   << " " << HEXLOG(mResponseSlotBuffer[ Index + sizeof(void*) * 2])
-            //   << " " << HEXLOG(mResponseSlotBuffer[ Index + sizeof(void*) * 3])
-            //   << " " << HEXLOG(mResponseSlotBuffer[ Index + sizeof(void*) * 4])
-            //   << EndLogLine;
-
-//         BegLogLine( SKV_CLIENT_RESPONSE_POLLING_LOG )
-//           << "skv_client_server_conn_t::CheckForNewResponse()::"
-//           << " EP: "        << ( void* )this
-//           << " found rsp: " << skv_command_type_to_string( NewResponse->mCmdType )
-//           << " in slot: "   << mCurrentResponseSlot
-//           << " event: "     << skv_client_event_to_string( NewResponse->mEvent )
-//           << " ChSum: "     << (int)( ((char*)NewResponse)[SKV_CONTROL_MESSAGE_SIZE-1] )
-//           << EndLogLine;
-
-            return NewResponse;
-          }
+        {
+          return NewResponse;
+        }
 
         return NULL;
       }
@@ -241,6 +260,122 @@ struct skv_client_server_conn_t
       {
         return (skv_server_to_client_cmd_hdr_t*) (&mResponseSlotBuffer[mCurrentResponseSlot * SKV_CONTROL_MESSAGE_SIZE]);
       }
+    inline
+    skv_status_t RequestCompletion( skv_client_ccb_t *aCCB )
+    {
+      if( aCCB->CheckRequestWithWrite() )
+        mInFlightWriteCount--;
+
+      bool needpost = ( ( mInFlightWriteCount < SKV_COMMAND_PIPELINE_THRESHOLD ) &&
+          ( mSendSegsCount > 0 ) );
+
+      BegLogLine( SKV_CLIENT_REQUEST_COALESCING_LOG )
+        << "RequestCompletion: EP: " << (void*)this
+        << " needpost: " << needpost
+        << " inFlight: " << mInFlightWriteCount
+        << " mSegsCount: " << mSendSegsCount
+        << " mUnretired: " << mUnretiredRecvCount
+        << EndLogLine;
+
+      if( needpost )
+      {
+        return PostRequest( );
+      }
+      return SKV_SUCCESS;
+    }
+    inline
+    skv_status_t PostRequest( )
+    {
+      it_status_t status = IT_SUCCESS;
+
+      it_rdma_addr_t dest_recv_slot_addr = ( it_rdma_addr_t )( GetCurrentServerRecvAddress() );
+      int active_srv_slot = mCurrentServerRecvSlot + mSendSegsCount -1;  // the last slot we're going to write
+      skv_client_cookie_t cookie;
+      cookie.mCCB = mQueuedCommands[ active_srv_slot ].mCCB;
+      cookie.mSeq = mQueuedCommands[ active_srv_slot ].mSeqNo;
+      cookie.mConn = this;
+
+      it_dto_cookie_t *ITCookie = (it_dto_cookie_t*) &cookie;
+
+      // if the server slot is 0 the do a signalled
+      it_dto_flags_t dto_write_flags = (it_dto_flags_t) (0);
+      if( mCurrentServerRecvSlot == 0 )
+        dto_write_flags = (it_dto_flags_t) (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG);
+
+      status = it_post_rdma_write( mEP,
+                                   &(mQueuedSegments[ mCurrentServerRecvSlot ]),
+                                   mSendSegsCount,
+                                   *ITCookie,
+                                   dto_write_flags,
+                                   dest_recv_slot_addr,
+                                   mServerCommandMem.GetRMRContext() );
+
+      // if we don't use completion events, we need to signal that we are "ready"
+      if( dto_write_flags != 0 )
+        for( int n=mSendSegsCount-1; n>=0; n-- )
+        {
+          mQueuedCommands[ mCurrentServerRecvSlot + n ].mCCB->SetSendWasFirst();
+        }
+
+      mCurrentServerRecvSlot = (mCurrentServerRecvSlot + mSendSegsCount) % SKV_SERVER_COMMAND_SLOTS;
+
+      if( status == IT_SUCCESS )
+      {
+        mQueuedCommands[ active_srv_slot ].mCCB->SetRequestWithWrite();
+        mInFlightWriteCount++;
+        mSendSegsCount = 0;
+      }
+      else
+        return SKV_ERRNO_IT_POST_SEND_FAILED;
+      return SKV_SUCCESS;
+    }
+
+    // create a queue of posts that has the sendseg, CCB and seq number
+    // we'll need the CCB in case a delayed write requires a signal - the cookie needs the CCB for completion processing
+    skv_status_t PostOrStoreRdmaWrite( it_lmr_triplet_t aSendSeg, skv_client_ccb_t *aCCB, uint64_t aSeqNo )
+    {
+      skv_status_t status = SKV_SUCCESS;
+
+      // requests cannot be combined when server buffer would wrap around
+      int base_srv_slot = mCurrentServerRecvSlot ;
+
+      AssertLogLine( base_srv_slot + mSendSegsCount < SKV_SERVER_COMMAND_SLOTS )
+        << "skv_client_server_conn_t:: protocol failure. server-command-slot and send segment counter out of range. "
+        << " base_slot: " << base_srv_slot
+        << " segm. count: " << mSendSegsCount
+        << EndLogLine;
+
+      // store the request metadata and send segments for potentially deferred post_rdma_write
+      mQueuedCommands[ base_srv_slot + mSendSegsCount ].mCCB = aCCB;
+      mQueuedCommands[ base_srv_slot + mSendSegsCount ].mSeqNo = aSeqNo;
+      mQueuedSegments[ base_srv_slot + mSendSegsCount ] = aSendSeg;
+      mSendSegsCount++;
+
+      /* post an actual rdma request if:
+       * - the pipeline isn't full yet
+       * - the max number of send-segments is reached
+       * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
+       */
+      bool needpost = ( ( mInFlightWriteCount < SKV_COMMAND_PIPELINE_THRESHOLD ) ||
+          ( mSendSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
+          (( base_srv_slot + mSendSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
+
+      BegLogLine( SKV_CLIENT_REQUEST_COALESCING_LOG )
+        << "PostOrStoreRdmaWrite: EP: " << (void*)this
+        << " needpost: " << needpost
+        << " inFlight: " << mInFlightWriteCount
+        << " mSegsCount: " << mSendSegsCount
+        << " mUnretired: " << mUnretiredRecvCount
+        << " base_srv_slot: " << base_srv_slot
+        << " aSeqNo: " << aSeqNo
+        << EndLogLine;
+
+      if( needpost )
+      {
+        status = PostRequest( );
+      }
+      return status;
+    }
     void
     Init(it_pz_handle_t aPZ_Hdl)
       {
@@ -276,7 +411,7 @@ struct skv_client_server_conn_t
           }
 
         mServerCommandMem.Init( 0, 0, 0 );
-        mCurrentServerRecvSlot = -1;
+        mCurrentServerRecvSlot = 0;
 
         // Create contigous area to place responses
         if( posix_memalign( (void**)(&mResponseSlotBuffer), ALIGNMENT, SKV_SERVER_COMMAND_SLOTS * SKV_CONTROL_MESSAGE_SIZE ) )
@@ -318,6 +453,10 @@ struct skv_client_server_conn_t
                            mResponseSlotBuffer,
                            SKV_SERVER_COMMAND_SLOTS * SKV_CONTROL_MESSAGE_SIZE );
 
+        mSendSegsCount = 0;
+        memset( mQueuedCommands, 0, sizeof( skv_client_queued_command_rep_t ) * SKV_SERVER_COMMAND_SLOTS );
+        memset( mQueuedSegments, 0, sizeof( it_lmr_triplet_t ) * SKV_SERVER_COMMAND_SLOTS );
+        mInFlightWriteCount = 0;
       }
 
     void
