@@ -311,7 +311,7 @@ Connect( const char* aConfigFile,
   bzero( ClientLocalAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH );
 
   AssertLogLine( getifaddrs(&iflist) == 0 )
-    << "Failed to obtain list of interfaces"
+    << "Failed to obtain list of interfaces, errno=" << errno
     << EndLogLine;
 
   ifent = iflist;
