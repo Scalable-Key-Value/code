@@ -303,7 +303,7 @@ Connect( const char* aConfigFile,
 
   skv_configuration_t *config = skv_configuration_t::GetSKVConfiguration( aConfigFile );
 
-
+#ifdef SKV_ROQ_LOOPBACK_WORKAROUND
   // acquire the local interface address to check if server is local or remote
   struct sockaddr_in my_addr;
   struct ifaddrs *iflist, *ifent;
@@ -349,7 +349,7 @@ Connect( const char* aConfigFile,
     ifent = ifent->ifa_next;
   }
   freeifaddrs( iflist );
-
+#endif
 
   // first pass of the server machine file to get the server count
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
