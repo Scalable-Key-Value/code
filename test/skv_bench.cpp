@@ -277,11 +277,13 @@ public:
         && ( mTimeLimit >= 0)
         );
   }
+  uint64_t GetKeySpace( const int aBits ) const
+  {
+    return aBits >= 28 ? (1<<28)/mNodeCount : ((0x1ull << aBits) / mNodeCount );
+  }
   void CalculateKeySpaceLen( int aBits, int aNodeCount )
   {
-    aBits = MIN( aBits, 64 );
-    mKeySpaceLen = (1 << aBits) / aNodeCount;
-    mKeySpaceLen = MAX( mKeySpaceLen, 1 );
+    mKeySpaceLen = GetKeySpace( aBits );
   }
 };
 
@@ -709,7 +711,7 @@ public:
     double TimeLimit = mConfigRef->mTimeLimit;
     double CurrentTime = MPI_Wtime();
     size_t Requests = 0;
-    size_t RequestLimit = mKeySize >= 3 ? (1<<20)/mConfigRef->mNodeCount : ((0x1 << (mKeySize * 8)) / mConfigRef->mNodeCount );
+    size_t RequestLimit = mConfigRef->GetKeySpace( mKeySize * 8 );
     int BatchIdx = 0;
     int MaxBatch = (int)(mConfigRef->mQueueDepth/mConfigRef->mBatchSize);
 
@@ -1111,6 +1113,7 @@ main(int argc, char **argv)
   for( int k = config.mKeySize.GetStart(); !config.mKeySize.OutOfRange( k ); k= config.mKeySize.Next( k ) )
     for( int v = config.mValueSize.GetStart(); !config.mValueSize.OutOfRange( v ); v = config.mValueSize.Next( v ) )
     {
+      config.CalculateKeySpaceLen( k * 8, config.mNodeCount );
       bench.Reset( k, v );
       glAvg.Reset();
 
