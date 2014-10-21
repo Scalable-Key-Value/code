@@ -182,8 +182,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x")
 
 common_library(fxlogger)
 common_library(it_api)
-set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS
-  "${SKV_IT_API_LOGGING}")
+set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS "${SKV_IT_API_LOGGING}" )
 
 
 #------------------------------------------------------------------------------
