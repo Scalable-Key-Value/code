@@ -66,6 +66,12 @@
 
 
 /*************************************************************
+ * Other macros and helpers
+ */
+#define MAX(x,y) ( (x)>(y)?(x):(y) )
+#define MIN(x,y) ( (x)<(y)?(x):(y) )
+
+/*************************************************************
  * Parameter Range Handling
  */
 class skv_parameter_range_t
@@ -187,6 +193,7 @@ public:
   skv_parameter_range_t mKeySize;
   skv_parameter_range_t mValueSize;
   double mAvgError;
+  uint64_t mKeySpaceLen;
   int mQueueDepth;
   int mTimeLimit;
   int mBatchSize;
@@ -201,6 +208,7 @@ public:
     mKeySize(),
     mValueSize(),
     mAvgError( DEFAULT_AVG_ERROR ),
+    mKeySpaceLen( 0 ),
     mNodeCount( 1 ),
     mRank( 0 ),
     mQueueDepth( DEFAULT_QUEUE_DEPTH ),
@@ -268,6 +276,12 @@ public:
     return ( ( mBatchSize > 0)
         && ( mTimeLimit >= 0)
         );
+  }
+  void CalculateKeySpaceLen( int aBits, int aNodeCount )
+  {
+    aBits = MIN( aBits, 64 );
+    mKeySpaceLen = (1 << aBits) / aNodeCount;
+    mKeySpaceLen = MAX( mKeySpaceLen, 1 );
   }
 };
 
@@ -424,7 +438,7 @@ private:
         << " cpy: " << (void*)(Key) << ":" << (void*)((char*)&keyval) << ":" << mKeySize
         << EndLogLine;
 
-      keyval += mConfigRef->mNodeCount;
+      keyval++;
     }
   }
   void InitValueBuffer( char* aValueBuffer, int aItems )
@@ -714,7 +728,8 @@ public:
     }
 
     double StartTime = MPI_Wtime();
-    InitKeyBuffer( mKeyBuffer, mConfigRef->mQueueDepth, mConfigRef->mRank );
+    uint64_t keyRangeStart = mConfigRef->mRank * mConfigRef->mKeySpaceLen;
+    InitKeyBuffer( mKeyBuffer, mConfigRef->mQueueDepth, keyRangeStart );
     InitValueBuffer( mValueBuffer, mConfigRef->mQueueDepth );
 
     // fill the pipeline
@@ -732,7 +747,7 @@ public:
       SetExitStatus( status );
 
       /// recreate batch of requests
-      InitKeyBuffer( KeyBufferList[ BatchIdx ], mConfigRef->mBatchSize, mConfigRef->mRank + Requests * mConfigRef->mNodeCount );
+      InitKeyBuffer( KeyBufferList[ BatchIdx ], mConfigRef->mBatchSize, keyRangeStart + Requests );
       InitValueBuffer( ValueBufferList[ BatchIdx ], mConfigRef->mBatchSize );
 
       /// post batch of requests
@@ -765,7 +780,7 @@ public:
     RequestLimit = Requests;  // Never do more retrieve/remove requests than inserts!
     Requests = 0;
     BatchIdx = 0;
-    InitKeyBuffer( mKeyBuffer, mConfigRef->mQueueDepth, mConfigRef->mRank );
+    InitKeyBuffer( mKeyBuffer, mConfigRef->mQueueDepth, keyRangeStart );
 
     // fill the pipeline
     StartTime = MPI_Wtime();
@@ -783,7 +798,7 @@ public:
       SetExitStatus( status );
 
       /// recreate batch of requests
-      InitKeyBuffer( KeyBufferList[ BatchIdx ], mConfigRef->mBatchSize, mConfigRef->mRank + Requests * mConfigRef->mNodeCount );
+      InitKeyBuffer( KeyBufferList[ BatchIdx ], mConfigRef->mBatchSize, keyRangeStart + Requests );
 
       /// post batch of requests
       status = RetrieveBatch( (const char*)(KeyBufferList[ BatchIdx ]),
@@ -814,7 +829,7 @@ public:
     CurrentTime = MPI_Wtime();
     Requests = 0;
     BatchIdx = 0;
-    InitKeyBuffer( mKeyBuffer, mConfigRef->mQueueDepth, mConfigRef->mRank );
+    InitKeyBuffer( mKeyBuffer, mConfigRef->mQueueDepth, keyRangeStart );
 
     // fill the pipeline
     StartTime = MPI_Wtime();
@@ -831,7 +846,7 @@ public:
       SetExitStatus( status );
 
       /// recreate batch of requests
-      InitKeyBuffer( KeyBufferList[ BatchIdx ], mConfigRef->mBatchSize, mConfigRef->mRank + Requests * mConfigRef->mNodeCount );
+      InitKeyBuffer( KeyBufferList[ BatchIdx ], mConfigRef->mBatchSize, keyRangeStart + Requests );
 
       /// post batch of requests
       status = RemoveBatch( (const char*)(KeyBufferList[ BatchIdx ]),
@@ -973,9 +988,6 @@ public:
     aIn.mTime = aIn.mTime / (double)SKV_BENCH_STAT_LEN;
     return aIn;
   }
-
-#define MAX(x,y) ( (x)>(y)?(x):(y) )
-#define MIN(x,y) ( (x)<(y)?(x):(y) )
 
   skv_bench_measurement_t& CalcPrunedAverage( const skv_bench_measurement_t aList[], skv_bench_measurement_t &aIn )
   {
