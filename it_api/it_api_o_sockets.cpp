@@ -2578,19 +2578,28 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 
                 iWARPEM_Object_EventQueue_t* SendCmplEventQueue =
                   (iWARPEM_Object_EventQueue_t*) LocalEndPoint->request_sevd_handle;
-//
-//                BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//                  << "RDMA write completion, queue=" << SendCmplEventQueue
-//                  << " transferred_length=" << dtoce->transferred_length
-//                  << EndLogLine ;
-//                int enqrc = SendCmplEventQueue->Enqueue( DTOCompletetionEvent );
-                BegLogLine(FXLOG_IT_API_O_SOCKETS)
-                  << "RDMA write completion, wants queue=" << gSendCmplQueue
-                  << EndLogLine ;
-                int enqrc=gSendCmplQueue->Enqueue(*(it_event_t *) dtoce) ;
-                it_api_o_sockets_signal_accept() ;
-		    
-                StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;	  
+
+                if ( gSendCmplQueue == NULL )
+                  {
+                    iWARPEM_Object_Event_t *FSDTOCompletionEvent=(iWARPEM_Object_Event_t *)malloc(sizeof(iWARPEM_Object_Event_t)) ;
+                    *FSDTOCompletionEvent=DTOCompletetionEvent ;
+                    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+                      << "RDMA write completion, queue=" << SendCmplEventQueue
+                      << " transferred_length=" << dtoce->transferred_length
+                      << EndLogLine ;
+                    int enqrc = SendCmplEventQueue->Enqueue( FSDTOCompletionEvent );
+                    StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
+                  }
+                else
+                  {
+                    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+                      << "RDMA write completion, wants queue=" << gSendCmplQueue
+                      << EndLogLine ;
+                    int enqrc=gSendCmplQueue->Enqueue(*(it_event_t *) dtoce) ;
+                    it_api_o_sockets_signal_accept() ;
+
+                    StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
+                  }
                 /*********************************************/
               }
 		
