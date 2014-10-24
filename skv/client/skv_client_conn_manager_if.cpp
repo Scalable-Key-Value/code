@@ -1072,6 +1072,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
       << " CCB: " << (void*)aCCB
       << " conn: " << (void*)aConn
       << " queued: " << aConn->mOverflowCommands->size()
+      << " outstanding: " << aConn->mOutStandingRequests
       << EndLogLine;
 
     aConn->mOverflowCommands->push( aCCB );
@@ -1392,6 +1393,12 @@ ProcessOverflow( skv_client_server_conn_t* aConn )
 
       return Dispatch( aConn, CCB );
   }
+
+  BegLogLine( ((SKV_CLIENT_PROCESS_CONN_LOG | SKV_CLIENT_PROCESS_CONN_N_DEQUEUE_LOG) & (aConn->mOverflowCommands->size() > 0)) )
+    << "skv_client_conn_manager_if_t::ProcessOverflow(): exit without action.."
+    << " unretired: " << aConn->mUnretiredRecvCount
+    << " oustanding: " << aConn->mOutStandingRequests
+    << EndLogLine;
 
   if( aConn->mOverflowCommands->size() > 0 )
     return SKV_ERRNO_MAX_UNRETIRED_CMDS;
