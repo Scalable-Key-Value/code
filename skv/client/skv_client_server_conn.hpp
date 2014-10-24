@@ -80,8 +80,8 @@ struct skv_client_queued_command_rep_t
     skv_client_queued_command_rep_t mQueuedCommands[ SKV_SERVER_COMMAND_SLOTS ];  // hold request metadata for completion processing
     it_lmr_triplet_t mQueuedSegments[ SKV_SERVER_COMMAND_SLOTS ]; // hold request segments for post_rmda_write() call
     int mSendSegsCount;
-    int mInFlightWriteCount;
-
+    int mInFlightWriteCount;   // number of posted rdma_write()
+    int mOutStandingRequests;  // number of uncompleted requests ( rdma_write() might post more than one request )
 
     int mUnretiredRecvCount;
 
@@ -144,8 +144,9 @@ struct skv_client_queued_command_rep_t
     ReleaseCmdOrdinal(int aCmdOrd)
       {
         mUnretiredRecvCount--;
+        mOutStandingRequests--;
 
-        AssertLogLine( mUnretiredRecvCount >= 0 )
+        AssertLogLine(( mUnretiredRecvCount >= 0 ) && ( mOutStandingRequests >= 0 ))
           << "skv_client_server_conn_t::ReleaseCmdOrdinal():: ERROR:: "
           << " mUnretiredRecvCount: " << mUnretiredRecvCount
           << EndLogLine;
@@ -323,6 +324,7 @@ struct skv_client_queued_command_rep_t
       {
         mQueuedCommands[ active_srv_slot ].mCCB->SetRequestWithWrite();
         mInFlightWriteCount++;
+        mOutStandingRequests += mSendSegsCount;
         mSendSegsCount = 0;
       }
       else
@@ -384,6 +386,7 @@ struct skv_client_queued_command_rep_t
 
         mState = SKV_CLIENT_CONN_DISCONNECTED;
         mUnretiredRecvCount = 0;
+        mOutStandingRequests = 0;
 
         mSeqNo = 0;
         mServerIsLocal = false;

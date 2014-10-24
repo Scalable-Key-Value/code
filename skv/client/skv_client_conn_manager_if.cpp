@@ -1064,7 +1064,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << EndLogLine;
 
   // instead of posting send/recv we might have to defer the Dispatch() and push the request to an OverflowQueue
-  if( aConn->mUnretiredRecvCount >= SKV_MAX_UNRETIRED_CMDS )
+  if(( aConn->mUnretiredRecvCount >= SKV_MAX_UNRETIRED_CMDS )||( aConn->mOutStandingRequests >= SKV_MAX_COMMANDS_PER_EP ))
   {
     // Need to enqueue the request into the overflow queue
     BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
