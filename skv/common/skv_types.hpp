@@ -54,14 +54,14 @@ extern "C"
 /** \brief number of outstanding commands which are really posted to the it_api
  *  \note This must not exceed the number of WQEs that is set for the verbs QP (setting inside IT_API)
  */
-#define SKV_MAX_COMMANDS_PER_EP                     ( 16 )
+#define SKV_MAX_COMMANDS_PER_EP                     ( 32 )
 #define SKV_SIGNALED_WRITE_INTERVAL                 ( 16 )   // !!! has to be less/equal than SKV_MAX_COMMANDS_PER_EP !!!
-#define SKV_SERVER_SENDQUEUE_SIZE                   ( SKV_MAX_COMMANDS_PER_EP * 2 )
+#define SKV_SERVER_SENDQUEUE_SIZE                   ( SKV_MAX_COMMANDS_PER_EP * 16 )
 #define SKV_SERVER_PENDING_EVENTS_PER_EP            ( SKV_MAX_COMMANDS_PER_EP + 4 )
 #define SKV_SERVER_COMMAND_SLOTS                    ( SKV_MAX_COMMANDS_PER_EP * 2 )
 
 
-#define SKV_EVD_SEVD_QUEUE_SIZE                     ( SKV_MAX_COMMANDS_PER_EP * 4 )
+#define SKV_EVD_SEVD_QUEUE_SIZE                     ( SKV_MAX_COMMANDS_PER_EP * 16 )
 
 // Priority settings for event sources in SKV server
 // value determines interval of loops between check for new events  (lower is higher prio, not linear!)

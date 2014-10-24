@@ -71,7 +71,7 @@
 /** \brief maximum number of events to dequeue and process from receive queue in one chunk (it_evd_dequeue_n)
  *
  */
-#define SKV_CLIENT_RQ_EVENTS_TO_DEQUEUE_COUNT ( 4 )
+#define SKV_CLIENT_RQ_EVENTS_TO_DEQUEUE_COUNT ( 8 )
 #define SKV_CLIENT_RESPONSE_POLL_LOOPS ( 10 )
 
 #ifndef SKV_CLIENT_PROCESS_CONN_TRACE
@@ -1514,7 +1514,7 @@ InitializeFromResponseData( skv_client_ccb_t* aCCB,
 }
 
 
-#define SKV_CLIENT_SKIP_EVENT_CHECK ( SKV_MAX_COMMANDS_PER_EP * 2 )
+#define SKV_CLIENT_SKIP_EVENT_CHECK ( (SKV_CLIENT_RQ_EVENTS_TO_DEQUEUE_COUNT>>1) )
 
 skv_status_t
 skv_client_conn_manager_if_t::
@@ -1560,7 +1560,7 @@ ProcessConnectionsRqSq()
 
       int commandsCount = 0;
       while( ((RdmaHdr = Connection->CheckForNewResponse()) != NULL) &&
-             (commandsCount < (SKV_MAX_COMMANDS_PER_EP>>2)) )   // run max one batch for one EP
+             (commandsCount < (SKV_MAX_COMMANDS_PER_EP)) )   // run max one batch for one EP
       {
         skv_client_ccb_t *CCB = (skv_client_ccb_t *) RdmaHdr->mCmdCtrlBlk;
 
