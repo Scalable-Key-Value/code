@@ -1567,7 +1567,7 @@ ProcessConnectionsRqSq()
 
       int commandsCount = 0;
       while( ((RdmaHdr = Connection->CheckForNewResponse()) != NULL) &&
-             (commandsCount < (SKV_MAX_COMMANDS_PER_EP)) )   // run max one batch for one EP
+             (commandsCount < (SKV_MAX_COMMANDS_PER_EP >> 2)) )   // run max one batch for one EP
       {
         skv_client_ccb_t *CCB = (skv_client_ccb_t *) RdmaHdr->mCmdCtrlBlk;
 
