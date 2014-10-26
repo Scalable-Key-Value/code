@@ -17,7 +17,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <ifaddrs.h>
-
+#include <mpi.h>
 #include <skv/common/skv_types.hpp>
 #include <skv/utils/skv_trace_clients.hpp>
 
