@@ -173,11 +173,11 @@ typedef enum
 #endif
 
 #ifndef IT_API_REPORT_BANDWIDTH_INCOMMING_TOTAL
-#define IT_API_REPORT_BANDWIDTH_INCOMMING_TOTAL ( 1 | IT_API_REPORT_BANDWIDTH_ALL )
+#define IT_API_REPORT_BANDWIDTH_INCOMMING_TOTAL ( 0 | IT_API_REPORT_BANDWIDTH_ALL )
 #endif
 
 #ifndef IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL
-#define IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL ( 1 | IT_API_REPORT_BANDWIDTH_ALL)
+#define IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL ( 0 | IT_API_REPORT_BANDWIDTH_ALL)
 #endif
 
 #define IT_API_REPORT_BANDWIDTH_DEFAULT_MODULO_BYTES (100*1024*1024)
@@ -1032,7 +1032,7 @@ struct iWARPEM_Object_WR_Queue_t
 iWARPEM_Object_WR_Queue_t* gSendWrQueue = NULL;
 
 
-unsigned int               gBlockedFlag = 0;
+volatile unsigned int      gBlockedFlag = 0;
 pthread_mutex_t            gBlockMutex;
 pthread_cond_t             gBlockCond;
 iWARPEM_Object_WR_Queue_t* gRecvToSendWrQueue = NULL;
@@ -1040,12 +1040,6 @@ iWARPEM_Object_WR_Queue_t* gRecvToSendWrQueue = NULL;
 void
 iwarpem_enqueue_send_wr( iWARPEM_Object_WR_Queue_t* aQueue, iWARPEM_Object_WorkRequest_t * aSendWr )
 {
-  
-  if( gBlockedFlag )
-    {
-      pthread_cond_broadcast( &gBlockCond );      
-    }
-  
   int enqrc = aQueue->Enqueue( aSendWr );
 
   AssertLogLine( enqrc == 0 )
@@ -2644,7 +2638,7 @@ iWARPEM_DataSenderThread( void* args )
 
   pthread_mutex_unlock( & gSendThreadStartedMutex );
 
-  int Even=1;
+  bool Even=false;
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
     << "gRecvToSendWrQueue=" << gRecvToSendWrQueue
     << " gSendWrQueue=" << gSendWrQueue
@@ -2683,57 +2677,6 @@ iWARPEM_DataSenderThread( void* args )
 
         }
       
-      if( ( dstat_0 == -1 ) && (dstat_0 == -1) )
-        {
-          
-          // This is a dummy mutex needed as an argument to pthread_cond_timedwait
-          pthread_mutex_lock( &gBlockMutex );
-          
-          struct timespec CondWaitTimeout;
-          CondWaitTimeout.tv_sec = 0;
-          CondWaitTimeout.tv_nsec = 10000000; //0.01
-
-          gBlockedFlag = 1;
-#if defined(__powerpc__)
-          _bgp_msync();
-#endif
-
-          BegLogLine( 0 )
-            << "iWARPEM_DataSenderThread(): Queues are empty about to pthread_cond_timedwait() "
-            << " gBlockedFlag: " << gBlockedFlag
-            << EndLogLine;
-          struct timespec now ;
-          clock_gettime(CLOCK_REALTIME,&now) ;
-          struct timespec expiry ;
-          long nsec=now.tv_nsec + CondWaitTimeout.tv_nsec ;
-          if (nsec >= 1000000000)
-            {
-              expiry.tv_nsec=nsec-1000000000 ;
-              expiry.tv_sec=now.tv_sec+CondWaitTimeout.tv_sec+1 ;
-            }
-          else
-            {
-              expiry.tv_nsec=nsec ;
-              expiry.tv_sec=now.tv_sec+CondWaitTimeout.tv_sec ;
-            }
-          
-          pthread_cond_timedwait( &gBlockCond, &gBlockMutex, &expiry );
-          
-          pthread_mutex_unlock( &gBlockMutex );
-          
-          gBlockedFlag = 0;
-#if defined(__powerpc__)
-          _bgp_msync();
-#endif
-
-          // BegLogLine( FXLOG_IT_API_O_SOCKETS )
-          BegLogLine( 0 )
-            << "iWARPEM_DataSenderThread(): After pthread_cond_timedwait() "
-            << " gBlockedFlag: " << gBlockedFlag
-            << EndLogLine;
-        }
-            
-
       Even = ! Even;
     }
 
@@ -3984,10 +3927,13 @@ it_status_t it_listen_create (
 
   int brc;
 
-  if( brc = bind( s, saddr, addrlen ) < 0 )
+  if( (brc = bind( s, saddr, addrlen )) < 0 )
     {
-    perror("udp socket bind()");
     close(s);
+    pthread_mutex_unlock( & gITAPIFunctionMutex );
+
+    free( AcceptObject );
+    return IT_ERR_ABORT;
     }
 
   StrongAssertLogLine( brc >= 0 )
@@ -4019,6 +3965,16 @@ it_status_t it_listen_create (
   AcceptObject->mListenSockFd = s;
 
   int ListenRc = listen( s, 2048 );
+  if( ListenRc < 0 )
+    {
+    close(s);
+    pthread_mutex_unlock( & gITAPIFunctionMutex );
+
+    free( AcceptObject );
+    return IT_ERR_ABORT;
+    }
+
+
   StrongAssertLogLine( ListenRc == 0 )
     << "iWARPEM_AcceptThread(): "
     << " ListenRc: " << ListenRc
