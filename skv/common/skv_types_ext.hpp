@@ -14,12 +14,12 @@
 #ifndef __SKV_TYPES_EXT_HPP__
 #define __SKV_TYPES_EXT_HPP__
 
-#include <skv/common/skv_errno.hpp>
-#include <skv/c/skv.h>
-
 #ifndef SKV_CLIENT_UNI
 #include <mpi.h>
 #endif
+
+#include <skv/common/skv_errno.hpp>
+#include <skv/c/skv.h>
 
 #ifdef SKV_CLIENT_FILEBASED
 // \todo: check if this is outdated
