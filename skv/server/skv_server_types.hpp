@@ -358,6 +358,7 @@ struct skv_server_local_kv_twophase_rdma_data_t
 struct skv_server_local_kv_retrieve_n_keys_data_t
 {
   skv_lmr_triplet_t *mKeysSizesSegs;
+  skv_local_kv_req_ctx_t mReqCtx;
   int mKeysCount;
   int mKeysSizesSegsCount;
 };
@@ -790,6 +791,9 @@ struct skv_server_ep_state_t
     delete mAssociatedStateList;
 
     it_lmr_free(mCommandBuffLMR);
+    BegLogLine(SKV_SERVER_CLEANUP_LOG)
+      << "mCommandBuffsRaw free -> " << (void *) mCommandBuffsRaw
+      << EndLogLine ;
     free( mCommandBuffsRaw );
     mCommandBuffsRaw = NULL;
 
@@ -931,8 +935,13 @@ struct skv_server_ep_state_t
     int CommandBuffSize = SKV_CONTROL_MESSAGE_SIZE * SKV_SERVER_COMMAND_SLOTS
       + SKV_CONTROL_MESSAGE_SIZE * SKV_COMMAND_TABLE_LEN + SAFETY_GAP;
 
+    /* TODO This seems leaked. Maybe no call to Finalize() ? */
     mCommandBuffsRaw   = (char *) malloc( CommandBuffSize + ALIGNMENT );
 
+    BegLogLine(SKV_SERVER_COMMAND_POLLING_LOG)
+      << "mCommandBuffsRaw malloc -> " << (void *) mCommandBuffsRaw
+      << EndLogLine ;
+  
     StrongAssertLogLine( mCommandBuffsRaw != NULL )
       << "skv_server_ep_state_t::Init():: ERROR:: not enough memory for "
       << " BuffSize: " << CommandBuffSize
@@ -1006,7 +1015,7 @@ struct skv_server_ep_state_t
       << "skv_server_ep_state_t::Init():: "
       << " EPState: " << (void*)this
       << " RecvSlot: " << mCurrentCommandSlot
-      << " HexRecvSlot: " << (void*)mCurrentCommandSlot
+      << " HexRecvSlot: " << (void*)(uintptr_t)mCurrentCommandSlot
       << " addr: " << (void*)&mCurrentCommandSlot
       << EndLogLine;
 

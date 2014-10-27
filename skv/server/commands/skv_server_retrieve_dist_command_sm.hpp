@@ -62,6 +62,8 @@ private:
             (char *) aDist,
             sizeof( skv_distribution_t ) );
 
+    RetrieveDistResp->EndianConvert() ;
+
     skv_status_t status = aEPState->Dispatch( aCommand,
                                               aSeqNo,
                                               aCommandOrdinal );

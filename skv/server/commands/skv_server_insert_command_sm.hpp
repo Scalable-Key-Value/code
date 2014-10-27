@@ -26,6 +26,8 @@
 #define SKV_SERVER_LOCK_LOG ( 0 )
 #endif
 
+//#define SKV_INSERT_DATA_LOG
+
 class skv_server_insert_command_sm
 {
 private:
@@ -81,13 +83,15 @@ private:
   {
     // we have copied all Req data into response buffer already at cmd init
     skv_cmd_RIU_req_t *Req = (skv_cmd_RIU_req_t *) aCommand->GetSendBuff();
+
+    Req->EndianConvert() ;
     *aReq = Req;
 
     // Check if the key is in the buffer
     int KeySize = Req->mKeyValue.mKeySize;
 
     BegLogLine( SKV_SERVER_INSERT_LOG )
-      << "skv_server_insert_command_sm:: Lookup with flags: " << (void*)( Req->mFlags & (SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE
+      << "skv_server_insert_command_sm:: Lookup with flags: " << (void*)( (uintptr_t)Req->mFlags & (SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE
           | SKV_COMMAND_RIU_INSERT_OVERWRITE_VALUE_ON_DUP
           | SKV_COMMAND_RIU_UPDATE
           | SKV_COMMAND_RIU_APPEND) )
@@ -200,6 +204,7 @@ private:
       Cmpl->mHdr.mEvent = SKV_CLIENT_EVENT_CMD_COMPLETE;
 
     Cmpl->mStatus = aRC;
+    Cmpl->EndianConvert() ;
 
     skv_status_t status = aEPState->Dispatch( aCommand,
                                               aSeqNo,
@@ -229,11 +234,28 @@ private:
 
     BegLogLine( SKV_SERVER_INSERT_LOG )
       << "skv_server_insert_command_sm::Execute():: Lookup returned: " << skv_status_to_string( lookup_status )
-      << " will go for case: " << (void*)( aReq->mFlags & (SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE
+      << " will go for case: " << (void*)( (uintptr_t)aReq->mFlags & (SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE
           | SKV_COMMAND_RIU_INSERT_OVERWRITE_VALUE_ON_DUP
           | SKV_COMMAND_RIU_UPDATE
           | SKV_COMMAND_RIU_APPEND) )
       << EndLogLine;
+
+#ifdef SKV_INSERT_DATA_LOG
+    if( aReq->mFlags & SKV_COMMAND_RIU_INSERT_KEY_VALUE_FIT_IN_CTL_MSG )
+    {
+      HexDump FxString( &aReq->mKeyValue.mData[ aReq->mKeyValue.mKeySize ], aReq->mKeyValue.mValueSize );
+
+      BegLogLine( 1 )
+        << "skv_server_insert_command_sm::insert_sequence(): "
+        << " Size: " << aReq->mKeyValue.mValueSize
+        << " FxString: " << FxString
+        << EndLogLine;
+    }
+    else
+      BegLogLine( 1 )
+        << "skv_server_insert_command_sm::insert_sequence(): Data not in ctrl-msg. can't display."
+        << EndLogLine;
+#endif
 
     skv_local_kv_cookie_t *cookie = &aCommand->mLocalKVCookie;
     cookie->Set( aCommandOrdinal, aEPState );
@@ -516,7 +538,7 @@ public:
 
             skv_local_kv_cookie_t *cookie = &Command->mLocalKVCookie;
             cookie->Set( aCommandOrdinal, aEPState );
-            status = aLocalKV->InsertPostProcess( &(Command->mLocalKVData.mRDMA.mReqCtx ),
+            status = aLocalKV->InsertPostProcess( Command->mLocalKVData.mRDMA.mReqCtx,
                                                   &(Command->mLocalKVData.mRDMA.mValueRDMADest),
                                                   cookie );
 

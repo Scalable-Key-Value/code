@@ -73,7 +73,7 @@ public:
       BegLogLine( 1 )
         << "skv_queue_t::" << aContext << "(): "
         << " TestBuf: " << (void *) Buf
-        << " TestBuf->GetSize(): " << (void *) Buf->GetSize()
+        << " TestBuf->GetSize(): " << (void *)(uintptr_t) Buf->GetSize()
         << EndLogLine;
 	
       Buf = Buf->mNext;
@@ -185,7 +185,7 @@ public:
       BegLogLine( 1 )
         << "skv_stack_t::" << aContext << "(): "
         << " TestBuf: " << (void *) Buf
-        << " TestBuf->GetSize(): " << (void *) Buf->GetSize()
+        << " TestBuf->GetSize(): " << (void *)(uintptr_t) Buf->GetSize()
         << EndLogLine;
 
       Buf = Buf->mNext;

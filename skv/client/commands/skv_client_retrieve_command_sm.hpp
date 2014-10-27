@@ -98,6 +98,7 @@ public:
                 skv_cmd_retrieve_value_rdma_write_ack_t* Ack = 
                   (skv_cmd_retrieve_value_rdma_write_ack_t *) RecvBuff;
 
+                Ack->EndianConvert() ;
                 int retrievedSize = Ack->mValue.mValueSize;
 
                 // if the server indicates that there's more data, then only get the amount that fits into user buffer!

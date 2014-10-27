@@ -1216,7 +1216,7 @@ extern "C" {
 
 #define IT_EVENT_STREAM_MASK  0xff000
 
-#define IT_TIMEOUT_INFINITE   ((uint64_t)(-1))
+#define IT_TIMEOUT_INFINITE   ((uint64_t)(-1L))
 
   typedef enum
     {
@@ -1319,7 +1319,7 @@ extern "C" {
     } cause;
   } it_affiliated_event_t;
 
-#define IT_MAX_PRIV_DATA 32
+#define IT_MAX_PRIV_DATA 64
 
   typedef enum
     {

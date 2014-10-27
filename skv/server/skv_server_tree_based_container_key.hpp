@@ -124,14 +124,14 @@ public:
   void
   SetMagicValue()
   {
-    mUserKey.mSize = SKV_MAGIC_VALUE;
+    mUserKey.mSizeBE = SKV_MAGIC_VALUE;
     mUserKey.mData = NULL;
   }
 
   int
   IsMagicValueSet() const
   {
-    return (mUserKey.mSize == SKV_MAGIC_VALUE);
+    return (mUserKey.mSizeBE == SKV_MAGIC_VALUE);
   }
 
   void

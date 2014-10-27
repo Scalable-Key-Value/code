@@ -614,8 +614,14 @@ ProcessEvent( skv_server_state_t  aState,
         {
           // Figure out the command
           skv_server_ep_state_t* StateForEP;
+          BegLogLine(SKV_PROCESS_IT_EVENT_LOG)
+            << "About to call InitNewStateForEP"
+            << EndLogLine ;
           status = mNetworkEventManager.InitNewStateForEP( mEPStateMap,
                                                            &StateForEP );
+          BegLogLine(SKV_PROCESS_IT_EVENT_LOG)
+            << "Back from InitNewStateForEP"
+            << EndLogLine ;
 
           int ConnCommandOrdinal = StateForEP->GetConnCommandOrdinal();
 
@@ -730,34 +736,58 @@ ProcessEvent( skv_server_state_t  aState,
             << " ord: " << aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetCmdOrd()
             << EndLogLine;
 
-          if( aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetIsLast() )
+          if( Func == NULL )  // without a function attached, this is a completion from a command-triggered write
           {
-            if( Func == EPSTATE_RetrieveWriteComplete )
+            skv_server_ep_state_t* EPStatePtr =
+                (skv_server_ep_state_t*) (aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetContext());
+            int CmdOrd = aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetCmdOrd();
+
+            skv_server_ccb_t* Command = EPStatePtr->GetCommandForOrdinal( CmdOrd );
+            switch( Command->GetType() )
             {
-              skv_server_ep_state_t* EPStatePtr =
-                  (skv_server_ep_state_t*) (aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetContext());
-              int CmdOrd = aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetCmdOrd();
+              case SKV_COMMAND_RETRIEVE:
+                BegLogLine( SKV_PROCESS_IT_EVENT_WRITE_LOG )
+                  << "skv_server_t::ProcessEvent(): calling execute in for receive "
+                  << EndLogLine;
 
-              BegLogLine( SKV_PROCESS_IT_EVENT_WRITE_LOG )
-                << "skv_server_t::ProcessEvent(): calling execute in for receive "
-                << EndLogLine;
+                status = skv_server_retrieve_command_sm::Execute( &mLocalKV,
+                                                                  EPStatePtr,
+                                                                  CmdOrd,
+                                                                  aEvent,
+                                                                  &mSeqNo,
+                                                                  mNetworkEventManager.GetPZ(),
+                                                                  mMyRank );
 
-              status = skv_server_retrieve_command_sm::Execute( &mLocalKV,
-                                                                EPStatePtr,
-                                                                CmdOrd,
-                                                                aEvent,
-                                                                &mSeqNo,
-                                                                mNetworkEventManager.GetPZ(),
-                                                                mMyRank );
+                break;
+              case SKV_COMMAND_RETRIEVE_N_KEYS:
+                BegLogLine( SKV_PROCESS_IT_EVENT_WRITE_LOG )
+                  << "skv_server_t::ProcessEvent(): calling execute in for receive_n_keys "
+                  << EndLogLine;
 
-              AssertLogLine( status == SKV_SUCCESS )
-                << "skv_server_t::ProcessEvent::ERROR:: "
-                << " Event: " << skv_server_event_type_to_string( aEvent->mEventType )
-                << " status: " << skv_status_to_string( status )
-                << EndLogLine;
-
+                status = skv_server_retrieve_n_keys_command_sm::Execute( &mLocalKV,
+                                                                         EPStatePtr,
+                                                                         CmdOrd,
+                                                                         aEvent,
+                                                                         &mSeqNo,
+                                                                         mNetworkEventManager.GetPZ() );
+                break;
+              default:
+                StrongAssertLogLine( 1 )
+                  << "ProcessEvents(): Unexpected command type in write completion event."
+                  << " Type:" << skv_command_type_to_string( Command->GetType() )
+                  << EndLogLine;
+                break;
             }
-            else if( Func != NULL )
+            AssertLogLine( status == SKV_SUCCESS )
+              << "skv_server_t::ProcessEvent::ERROR:: "
+              << " Event: " << skv_server_event_type_to_string( aEvent->mEventType )
+              << " status: " << skv_status_to_string( status )
+              << EndLogLine;
+
+          }
+          else   // i.e. if( Func != NULL )
+          {
+            if( aEvent->mEventMetadata.mRdmaWriteCmplCookie.GetIsLast() )
             {
               void* Arg = &(aEvent->mEventMetadata.mRdmaWriteCmplCookie);
 
@@ -1475,8 +1505,17 @@ Init( int   aRank,
    *   and we loose the automatic setup of this by placing only one address into the machinefile
    */
   ifent = iflist;
+  BegLogLine(SKV_SERVER_INIT_LOG)
+    << "Examining from ifent=" << ifent
+    << EndLogLine ;
   while( ifent )
   {
+    BegLogLine(SKV_SERVER_INIT_LOG)
+        << "ifa_name=" << ifent->ifa_name
+        << " sa_family=" << ifent->ifa_addr->sa_family
+        << " GetCommIF()=" << mSKVConfiguration->GetCommIF()
+        << " AF_INET=" << AF_INET
+        << EndLogLine ;
     if( strncmp( ifent->ifa_name, mSKVConfiguration->GetCommIF(), strlen( ifent->ifa_name ) ) == 0 )
     {
       if( ifent->ifa_addr->sa_family == AF_INET )
@@ -1490,7 +1529,7 @@ Init( int   aRank,
                   (int) ((char*) &(tmp->sin_addr.s_addr))[2],
                   (int) ((char*) &(tmp->sin_addr.s_addr))[3] );
         BegLogLine( 1 )
-          << "skv_server_t: got addr: " << (void*)my_addr.sin_addr.s_addr << "; fam: " << tmp->sin_family
+          << "skv_server_t: got addr: " << (void*)(uintptr_t)my_addr.sin_addr.s_addr << "; fam: " << tmp->sin_family
           << " ServerName:" << ServerName
           << EndLogLine;
         break;
@@ -1581,18 +1620,7 @@ Init( int   aRank,
       char buff[ SKV_MAX_SERVER_ADDR_NAME_LENGTH ];
       bzero( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH );
 
-#ifdef SKV_ROQ_LOOPBACK_WORKAROUND
-      // replace local hostname by loopback address
-      if(  ( strlen( ServerName ) == strlen( ServerI ) ) &&
-           ( strncmp( ServerName, ServerI, strlen( ServerName ) ) == 0 ) )
-      {
-        snprintf( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "127.0.0.1 %s", PortI);
-      }
-      else
-#endif
-      {
-        snprintf( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "%s %s", ServerI, PortI);
-      }
+      snprintf( buff, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "%s %s", ServerI, PortI);
       write( fd, buff, strlen( buff ) );
       write( fd, "\n", strlen("\n") );
     }

@@ -138,7 +138,7 @@ GetPkTime( pk_time_t* aPkTime )
 
   gettimeofday( & TimeNow, NULL );
   aPkTime->mSeconds     = TimeNow.tv_sec;
-  aPkTime->mNanoseconds = TimeNow.tv_usec;
+  aPkTime->mNanoseconds = TimeNow.tv_usec * 1000;
 #endif
 
   return;

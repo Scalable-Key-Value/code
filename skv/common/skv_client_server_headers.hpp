@@ -18,6 +18,10 @@
 #include <skv/server/skv_server_event_type.hpp>
 #include <skv/client/skv_client_types.hpp>
 
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
+#endif
+
 #define SKV_CTRL_MSG_FLAG_EMPTY             0x00
 #define SKV_CTRL_MSG_FLAG_REQUEST_COMPLETE  0x01
 #define SKV_CTRL_MSG_FLAG_RESPONSE_COMPLETE 0x02
@@ -39,6 +43,13 @@ struct skv_client_to_server_cmd_hdr_t
   uint64_t                  mMarker; // to track messages
 #endif
 
+  void EndianConvert(void)
+    {
+      BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+        << "mEventType " << mEventType
+        << EndLogLine ;
+      mEventType=(skv_server_event_type_t) ntohl(mEventType) ;
+    }
   void
   Init( skv_server_event_type_t aEventType,
         skv_client_ccb_t* aCmdCtrlBlk,
@@ -47,7 +58,10 @@ struct skv_client_to_server_cmd_hdr_t
     mEventType  = aEventType;
     mCmdCtrlBlk = (uint64_t) (uintptr_t) aCmdCtrlBlk;
 
-    mCmdType   = aCmdType;
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "aCmdType=" << aCmdType
+      << EndLogLine ;
+    mCmdType = aCmdType ; // will be endian-converted later
     mCmdOrd    = -1;            // initialize without valid CmdOrd
     mCmdLength = 0;             // initialize without valid CmdLength
 
@@ -120,6 +134,9 @@ struct skv_client_to_server_cmd_hdr_t
     mCmdOrd     = aHdr2.mCmdOrd;
     mCmdType    = aHdr2.mCmdType;
     mCmdLength  = aHdr2.mCmdLength;
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "assigned mCmdType=" << mCmdType
+      << EndLogLine ;
 
 #ifdef SKV_DEBUG_MSG_MARKER
     mMarker     = aHdr2.mMarker;
@@ -159,6 +176,15 @@ struct skv_server_to_client_cmd_hdr_t
   uint64_t              mMarker;
 #endif
 
+  void EndianConvert(void)
+    {
+      mEvent=(skv_client_event_t) ntohl(mEvent) ;
+      mCmdType=(skv_command_type_t) ntohl(mCmdType) ;
+      BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+        << "mEvent endian converted to " << mEvent
+        << " mCmdType endian converted to " << mCmdType
+        << EndLogLine ;
+    }
   skv_server_to_client_cmd_hdr_t&
   operator=( const skv_client_to_server_cmd_hdr_t & aHdr )
   {
@@ -166,6 +192,9 @@ struct skv_server_to_client_cmd_hdr_t
     mCmdOrd     = aHdr.mCmdOrd;
     mCmdType    = aHdr.mCmdType;
     mCmdLength  = aHdr.mCmdLength;
+    BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+      << "assigned mCmdType=" << mCmdType
+      << EndLogLine ;
 
 #ifdef SKV_DEBUG_MSG_MARKER
     mMarker     = aHdr.mMarker;

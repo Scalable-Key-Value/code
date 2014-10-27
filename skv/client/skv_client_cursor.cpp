@@ -146,6 +146,10 @@ RetrieveNextCachedKey( skv_client_cursor_handle_t   aCursorHdl,
     << EndLogLine;
 
   int CachedKeySize = *((int *) aCursorHdl->mCurrentCachedKey );
+  BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
+    << "Endian-converting cached key size=" << CachedKeySize
+    << EndLogLine ;
+  CachedKeySize=htonl(CachedKeySize) ;
 
   if( CachedKeySize > aRetrievedKeyMaxSize )
   {
@@ -172,6 +176,7 @@ RetrieveNextCachedKey( skv_client_cursor_handle_t   aCursorHdl,
     << " CachedKeySize: " << CachedKeySize
     << " aCursorHdl->mCurrentCachedKeyIdx: " << aCursorHdl->mCurrentCachedKeyIdx
     << " aCursorHdl->mCachedKeysCount: " << aCursorHdl->mCachedKeysCount
+    << " Now retrieving value..."
     << EndLogLine;
 
   skv_status_t status = Retrieve( & aCursorHdl->mPdsId,
@@ -224,8 +229,17 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
   /**************************************************
    * Check limits
    *************************************************/
+  BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
+    << "aStartingKeyBufferSize=" << aStartingKeyBufferSize
+    << " SKV_KEY_LIMIT=" << SKV_KEY_LIMIT
+    << EndLogLine ;
   if( aStartingKeyBufferSize > SKV_KEY_LIMIT )
-    return SKV_ERRNO_KEY_TOO_LARGE;
+    {
+      BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
+          << "Returning SKV_ERRNO_KEY_TOO_LARGE"
+          << EndLogLine ;
+      return SKV_ERRNO_KEY_TOO_LARGE;
+    }
 
   // Starting a new command, get a command control block
   skv_client_ccb_t* CmdCtrlBlk;
@@ -280,6 +294,11 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
              aCursorHdl->mCachedKeys,
              SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE );
   /*****************************************************/
+  Req->EndianConvert() ;
+
+  BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
+    << "mEventType=" << Req->mHdr.mEventType
+    << EndLogLine ;
 
   BegLogLine( SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG )
     << "skv_client_internal_t: Created RetrieveN request:"
@@ -301,6 +320,10 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieveNKeys.mCachedKeysCountMax  = SKV_CLIENT_MAX_CURSOR_KEYS_TO_CACHE;
   /*****************************************************/
 
+  BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
+    << "mEventType=" << Req->mHdr.mEventType
+    << EndLogLine ;
+
   skv_status_t status = mConnMgrIF.Dispatch( aCursorHdl->mCurrentNodeId, CmdCtrlBlk );
 
   AssertLogLine( status == SKV_SUCCESS )
@@ -308,7 +331,17 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
     << " status: " << skv_status_to_string( status )
     << EndLogLine;
 
-  status = Wait( CmdCtrlBlk );
+  BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
+    << "mEventType=" << Req->mHdr.mEventType
+    << EndLogLine ;
+
+  status = Wait( CmdCtrlBlk );  
+
+  status=(skv_status_t) ntohl(status) ;
+
+  BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
+    << "mEventType=" << Req->mHdr.mEventType
+    << EndLogLine ;
 
   BegLogLine( SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG )
     << "skv_client_internal_t::RetrieveNKeys():: Leaving..."
@@ -354,12 +387,19 @@ GetFirstLocalElement( skv_client_cursor_handle_t aCursorHdl,
     StartSizeToRetrieve = *aRetrievedKeySize;
   }
 
-  skv_status_t status = RetrieveNKeys( aCursorHdl,
+  BegLogLine( SKV_CLIENT_CURSOR_LOG )
+    << "Endian-converting StartSizeToRetrieve=" << StartSizeToRetrieve
+    << EndLogLine ;
+  StartSizeToRetrieve=ntohl(StartSizeToRetrieve) ;
+
+  skv_status_t status = RetrieveNKeys( aCursorHdl, 
                                        StartToRetrive,
                                        StartSizeToRetrieve,
                                        (skv_cursor_flags_t) ( (int)aFlags | SKV_CURSOR_RETRIEVE_FIRST_ELEMENT_FLAG ));
 
-  if( status != SKV_SUCCESS )
+  // return only if there were no keys retrieved.
+  if( ( aCursorHdl->mCurrentCachedKeyIdx == aCursorHdl->mCachedKeysCount ) &&
+      ( status != SKV_SUCCESS ) )
     return status;
 
   AssertLogLine( aCursorHdl->mCachedKeysCount > 0 )
@@ -419,6 +459,11 @@ GetNextLocalElement(  skv_client_cursor_handle_t   aCursorHdl,
 
     char* StartingKeyBuffer = aCursorHdl->mPrevCachedKey + sizeof(int);
     int StartingKeyBufferSize = *((int *) aCursorHdl->mPrevCachedKey);
+
+    BegLogLine( SKV_CLIENT_CURSOR_LOG )
+      << "Endian-converting StartingKeyBufferSize=" << StartingKeyBufferSize
+      << EndLogLine ;
+    StartingKeyBufferSize=ntohl(StartingKeyBufferSize) ;
 
     skv_status_t status = RetrieveNKeys( aCursorHdl,
                                          StartingKeyBuffer,

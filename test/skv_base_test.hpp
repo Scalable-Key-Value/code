@@ -15,6 +15,10 @@
 #ifndef SKV_BASE_TEST_HPP_
 #define SKV_BASE_TEST_HPP_
 
+#ifndef SKV_TEST_LOG
+#define SKV_TEST_LOG ( 0 )
+#endif
+
 static inline
 skv_status_t skv_base_test_open_pds( const char * aPDSName,
                                      const skv_pds_priv_t aPrivs,
@@ -22,6 +26,13 @@ skv_status_t skv_base_test_open_pds( const char * aPDSName,
 {
   skv_status_t status = SKV_SUCCESS;
   skv_pds_id_t PDSId;
+
+  BegLogLine( SKV_TEST_LOG )
+    << "skv_base_test_open_pds() calling open with: "
+    << "  PDSName: " << aPDSName
+    << "  privs: " << aPrivs
+    << "  flags: " << aFlags
+    << EndLogLine;
 
   status = gdata.Client.Open( (char*)aPDSName,
                               aPrivs,
@@ -31,6 +42,11 @@ skv_status_t skv_base_test_open_pds( const char * aPDSName,
   switch( status )
   {
     case SKV_SUCCESS:
+      BegLogLine( SKV_TEST_LOG )
+        << "skv_base_test_open_pds() calling close with: "
+        << " PdsId: " << PDSId
+        << EndLogLine;
+
       if( gdata.Client.Close( &PDSId ) != SKV_SUCCESS )
       {
         BegLogLine( 1 )
@@ -255,6 +271,13 @@ skv_status_t skv_base_test_retrieve( const char *aPDSName,
   if( (status == SKV_SUCCESS) && (!verify_data( value, aDataSize, aKey, aOffset)) )
     status = SKV_ERRNO_CHECKSUM_MISMATCH;
 
+  if(( retrieved != aDataSize )&&(status == SKV_SUCCESS))
+    BegLogLine( 1 )
+      << "retrieve: requested data size differs from returned size: " << retrieved << " != " << aDataSize
+      << EndLogLine;
+  if( !(aFlags & SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN) && ( retrieved != aDataSize ))
+    status == SKV_ERRNO_VALUE_TOO_LARGE;
+
   if( gdata.Client.Close( &PDSId ) != SKV_SUCCESS )
   {
     BegLogLine( 1 )
@@ -354,11 +377,22 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
                                   value,
                                   DataSize,
                                   SKV_BULK_INSERTER_FLAGS_NONE );
+    BegLogLine( status != SKV_SUCCESS )
+      << "BulkInsert:Insert() return status: " << skv_status_to_string( status )
+      << EndLogLine;
   }
   if( test_level >= 2 )
   {
     status = gdata.Client.Flush( BulkLoaderHandle );
+    BegLogLine( status != SKV_SUCCESS )
+      << "BulkInsert:FLush() return status: " << skv_status_to_string( status )
+      << EndLogLine;
+
     status = gdata.Client.CloseBulkInserter( BulkLoaderHandle );
+    BegLogLine( status != SKV_SUCCESS )
+      << "BulkInsert:Close() return status: " << skv_status_to_string( status )
+      << EndLogLine;
+
     test_level = 1;
   }
 
@@ -398,6 +432,7 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
                                    bool local=true )
 {
   skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
+  skv_status_t ctrl_status = SKV_SUCCESS;
   skv_pds_id_t PDSId;
   int test_level = 0;
   int KeyCount = 0;
@@ -457,17 +492,19 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
                                                aMaxDataSize,
                                                SKV_CURSOR_NONE_FLAG );
 
-      if( status == SKV_SUCCESS )
-        KeyCount++;
-
-      if( (status == SKV_SUCCESS) && (!verify_data( value, valueSize, Key, 0)) )
-        status = SKV_ERRNO_CHECKSUM_MISMATCH;
-
-      if( status != SKV_SUCCESS )
+      switch( status )
       {
-        BegLogLine( 1 )
-          << "skv_base_test: Error after GetFirstElement: " << skv_status_to_string( status )
-          << EndLogLine;
+        case SKV_SUCCESS:
+          KeyCount++;
+          if (!verify_data( value, valueSize, Key, 0))
+            status = SKV_ERRNO_CHECKSUM_MISMATCH;
+          break;
+        case SKV_ERRNO_END_OF_RECORDS:
+          break;
+        default:
+          BegLogLine( 1 )
+            << "skv_base_test: Error after GetFirstElement: " << skv_status_to_string( status )
+            << EndLogLine;
       }
 
       while( status == SKV_SUCCESS )
@@ -505,9 +542,9 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
       }
 
       if( local )
-        status = gdata.Client.CloseLocalCursor( CursorHdl );
+        ctrl_status = gdata.Client.CloseLocalCursor( CursorHdl );
       else
-        status = gdata.Client.CloseCursor( CursorHdl );
+        ctrl_status = gdata.Client.CloseCursor( CursorHdl );
     }
   }
 
@@ -520,6 +557,8 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
 
     if( !local && (KeyCount != aKeyCount) )
       status = SKV_ERRNO_CURSOR_DONE;
+    if( local && (KeyCount > aKeyCount) )
+      status = SKV_ERRNO_RETRIEVE_BUFFER_MAX_SIZE_EXCEEDED;
     test_level = 1;
   }
 
@@ -529,6 +568,9 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
       << "cursor closing failed."
       << EndLogLine;
   }
+  // propagate ctrl-error status if the other operations where clean
+  if( (ctrl_status != SKV_SUCCESS) && (status == SKV_SUCCESS))
+    status = ctrl_status;
   return status;
 }
 #endif /* SKV_BASE_TEST_HPP_ */

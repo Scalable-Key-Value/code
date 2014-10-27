@@ -66,6 +66,7 @@ private:
       aCmpl->mHdr.mEvent = SKV_CLIENT_EVENT_ERROR;
 
     aCmpl->mStatus     = aRC;
+    aCmpl->EndianConvert() ;
 
     BegLogLine( SKV_SERVER_REMOVE_COMMAND_LOG )
       << "skv_server_remove_command_sm::Execute()::"
@@ -125,6 +126,8 @@ public:
           case SKV_SERVER_EVENT_TYPE_IT_DTO_REMOVE_CMD:
           {
             skv_cmd_remove_req_t *Req = (skv_cmd_remove_req_t *) Command->GetSendBuff();
+
+            Req->EndianConvert() ;
 
             int KeySize   = Req->mKeyValue.mKeySize;
 

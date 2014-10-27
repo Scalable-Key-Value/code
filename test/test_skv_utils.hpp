@@ -17,7 +17,7 @@
 
 #include <fstream>
 #include <string>
-#include <common/skv_config.hpp>
+#include <skv/common/skv_config.hpp>
 
 #ifndef SKV_TEST_LOG
 #define SKV_TEST_LOG ( 0 )

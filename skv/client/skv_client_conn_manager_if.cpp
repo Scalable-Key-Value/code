@@ -20,6 +20,7 @@
 #include <netdb.h>	/* struct hostent */
 
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 
 // Supported Operation State Machines
 
@@ -51,6 +52,10 @@
 
 #ifndef SKV_CLIENT_PROCESS_SEND_RECV_RACE_LOG
 #define SKV_CLIENT_PROCESS_SEND_RECV_RACE_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
 #endif
 
 #ifdef SKV_DEBUG_MSG_MARKER  // defined in client_server_protocol.hpp (or via compile flag)
@@ -87,13 +92,18 @@ TraceClient                                      gSKVClientConnProcessRecv[ SKV_
  ***/
 skv_status_t
 skv_client_conn_manager_if_t::
-Init( skv_client_group_id_t        aClientGroupId,
+Init( skv_client_group_id_t         aClientGroupId,
       int                           aMyRank,
       it_ia_handle_t*               aIA_Hdl,
       it_pz_handle_t*               aPZ_Hdl,
       int                           aFlags,
-      skv_client_ccb_manager_if_t* aCCBMgrIF )
+      skv_client_ccb_manager_if_t*  aCCBMgrIF )
 {
+  BegLogLine(SKV_CLIENT_PROCESS_CONN_LOG)
+    << "aClientGroupId" << aClientGroupId
+    << " aMyRank=" << aMyRank
+    << EndLogLine ;
+
   mServerConnCount = 0;
   mServerConns = NULL;
 
@@ -277,7 +287,7 @@ Connect( const char* aConfigFile,
 {
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::Connect():: Entering "
-    << " aServerGroupName: " << aConfigFile
+    << " aConfigFile: " << (aConfigFile!=NULL? aConfigFile : "default")
     << " aFlags: " << aFlags
     << EndLogLine;
 
@@ -293,6 +303,55 @@ Connect( const char* aConfigFile,
 
   skv_configuration_t *config = skv_configuration_t::GetSKVConfiguration( aConfigFile );
 
+#ifdef SKV_ROQ_LOOPBACK_WORKAROUND
+  // acquire the local interface address to check if server is local or remote
+  struct sockaddr_in my_addr;
+  struct ifaddrs *iflist, *ifent;
+  char ClientLocalAddr[ SKV_MAX_SERVER_ADDR_NAME_LENGTH ];
+  bzero( ClientLocalAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH );
+
+  AssertLogLine( getifaddrs(&iflist) == 0 )
+    << "Failed to obtain list of interfaces, errno=" << errno
+    << EndLogLine;
+
+  ifent = iflist;
+  BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+    << "skv_client_conn_manager_if_t: Examining from ifent=" << ifent
+    << EndLogLine ;
+  while( ifent )
+  {
+    BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+        << "ifa_name=" << ifent->ifa_name
+        << " sa_family=" << ifent->ifa_addr->sa_family
+        << " GetCommIF()=" << config->GetCommIF()
+        << " AF_INET=" << AF_INET
+        << EndLogLine ;
+    if( strncmp( ifent->ifa_name, config->GetCommIF(), strnlen( ifent->ifa_name, 16 ) ) == 0 )
+    {
+      if( ifent->ifa_addr->sa_family == AF_INET )
+      {
+        struct sockaddr_in *tmp = (struct sockaddr_in*) (ifent->ifa_addr);
+        my_addr.sin_family = ifent->ifa_addr->sa_family;
+        my_addr.sin_addr.s_addr = tmp->sin_addr.s_addr;
+        snprintf( ClientLocalAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "%d.%d.%d.%d",
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[0],
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[1],
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[2],
+                  (int) ((char*) &(tmp->sin_addr.s_addr))[3] );
+        BegLogLine( 1 )
+          << "skv_client_conn_manager_if_t: local address: " << (void*)(uintptr_t)my_addr.sin_addr.s_addr << "; fam: " << tmp->sin_family
+          << " ClientLocalAddr:" << ClientLocalAddr
+          << EndLogLine;
+        break;
+      }
+    }
+
+    ifent = ifent->ifa_next;
+  }
+  freeifaddrs( iflist );
+#endif
+
+  // first pass of the server machine file to get the server count
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::Connect():: "
     << " ComputeFileNamePath: " << config->GetServerLocalInfoFile()
@@ -350,8 +409,14 @@ Connect( const char* aConfigFile,
     char* PortStr=firstspace+1;
     *firstspace=0;
 
-    // replace local hostname by loopback address
-    strcpy( ServerAddrs[ RankInx ].mName, ServerAddr );
+#ifdef SKV_ROQ_LOOPBACK_WORKAROUND
+    // compare with local address and replace with 127.0.0.1 if it matches
+    if( strncmp( ServerAddr, ClientLocalAddr, SKV_MAX_SERVER_ADDR_NAME_LENGTH ) == 0 )
+      sprintf( ServerAddrs[ RankInx ].mName, "127.0.0.1" );
+    else
+#endif
+      strcpy( ServerAddrs[ RankInx ].mName, ServerAddr );
+
     ServerAddrs[ RankInx ].mPort = atoi( PortStr );
 
     BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
@@ -444,12 +509,20 @@ skv_status_t
 skv_client_conn_manager_if_t::
 Disconnect()
 {
+    BegLogLine(SKV_CLIENT_PROCESS_CONN_LOG)
+        << "mMyRankInGroup=" << mMyRankInGroup
+        << EndLogLine ;
   int conn = mMyRankInGroup;
+  if( conn >= mServerConnCount )
+    conn = 0;
 
   int Counter = 0;
 
   while( 1 )
   {
+      BegLogLine(SKV_CLIENT_PROCESS_CONN_LOG)
+          << "Disconnecting from server " << conn
+          << EndLogLine ;
     skv_status_t status = DisconnectFromServer( &mServerConns[conn] );
 
     StrongAssertLogLine( status == SKV_SUCCESS )
@@ -493,8 +566,10 @@ ConnectToServer( int                        aServerRank,
 {
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::ConnectToServer():: Entering "
-    << "aServerAddr.mName: " << aServerAddr.mName
-    << "aServerAddr.mPort: " << aServerAddr.mPort
+    << "aServerRank: " << aServerRank
+    << " aServerAddr.mName: " << aServerAddr.mName
+    << " aServerAddr.mPort: " << aServerAddr.mPort
+    << " aServerConn: " << aServerConn
     << EndLogLine;
 
   it_ep_rc_creation_flags_t      ep_flags = (it_ep_rc_creation_flags_t) 0;
@@ -565,13 +640,13 @@ ConnectToServer( int                        aServerRank,
   path.u.iwarp.ip_vers = IT_IP_VERS_IPV4;
 
 
-  if( strncmp( aServerAddr.mName, "127.0.0.1", 9 ) == 0 )
+  if( strncmp( aServerAddr.mName, "127.0.0.1", SKV_MAX_SERVER_ADDR_NAME_LENGTH ) == 0 )
   {
     path.u.iwarp.laddr.ipv4.s_addr = INADDR_LOOPBACK;
 
     BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
       << "skv_client_conn_manager_if_t::ConnectToServer():: using loopback to connect to local server"
-      << " addr: " << (void*)(path.u.iwarp.laddr.ipv4.s_addr)
+      << " addr: " << (void*)((uintptr_t)path.u.iwarp.laddr.ipv4.s_addr)
       << EndLogLine;
       aServerConn->mServerIsLocal = true;
   }
@@ -623,7 +698,7 @@ ConnectToServer( int                        aServerRank,
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::ConnectToServer()::  "
     << " assigned path.s_addr of " << remote_host->h_name
-    << " (void*)s_addr : " << (void*)path.u.iwarp.raddr.ipv4.s_addr
+    << " (void*)s_addr : " << (void*)(uintptr_t)path.u.iwarp.raddr.ipv4.s_addr
     << EndLogLine;
 
   conn_qual.type = IT_IANA_LR_PORT;
@@ -678,7 +753,7 @@ ConnectToServer( int                        aServerRank,
                                       &aServerConn->GetResponseRMRContext()
                                       );
 
-    if( status != IT_SUCCESS )
+    if( ( status != IT_SUCCESS )&&( status != IT_ERR_QUEUE_EMPTY ) )
     {
       BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
         << "skv_client_conn_manager_if_t::ConnectToServer():: "
@@ -862,7 +937,7 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
   {
     it_event_t event_cmm;
 
-    BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
+    BegLogLine( 0 )
       << "skv_client_conn_manager_if_t::DisconnectFromServer():: going it_evd_dequeue"
       << EndLogLine;
 
@@ -903,7 +978,7 @@ DisconnectFromServer( skv_client_server_conn_t* aServerConn )
     }
     else
     {
-      BegLogLine( 1 )
+      BegLogLine( 0 )
         << "skv_client_conn_manager_if_t::DisconnectFromServer()::ERROR:: "
         << "it_evd_dequeue failed with " << istatus
         << EndLogLine;
@@ -1036,6 +1111,12 @@ Dispatch( skv_client_server_conn_t*    aConn,
 
   skv_client_to_server_cmd_hdr_t* Hdr = (skv_client_to_server_cmd_hdr_t *) aCCB->GetSendBuff();
   Hdr->SetCmdOrd( CmdOrd );
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+    << "Endian-converting the header mEventType=" << Hdr->mEventType
+    << " mCmdType=" << Hdr->mCmdType
+    << EndLogLine ;
+  Hdr->mEventType=(skv_server_event_type_t)htonl(Hdr->mEventType) ;
+  Hdr->mCmdType=(skv_command_type_t)htonl(Hdr->mCmdType) ;
 
 #ifdef SKV_DEBUG_MSG_MARKER
   Hdr->mMarker = mCookieSeq.mSeq;
@@ -1225,6 +1306,11 @@ ProcessCCB( skv_client_server_conn_t*    aConn,
   skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
 
   skv_server_to_client_cmd_hdr_t* Hdr = (skv_server_to_client_cmd_hdr_t *) aCCB->GetRecvBuff();
+
+  BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+   << "Endian converting the header"
+   << EndLogLine ;
+  Hdr->EndianConvert() ;
 
   skv_command_type_t CommandType = aCCB->mCommand.mType;
 

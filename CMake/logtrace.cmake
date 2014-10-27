@@ -14,7 +14,7 @@ add_definitions(
  -DFXLOG_IT_API_O_VERBS_CONNECT=1
  -DFXLOG_IT_API_O_VERBS=1
 # all logging enabled
- -DSKV_LOGGING_ALL=1
+# -DSKV_LOGGING_ALL=1
 
 # general detailed logging
 # -DSKV_DISTRIBUTION_MANAGER_LOG=1
@@ -32,7 +32,7 @@ add_definitions(
 # -DSKV_SERVER_ACTIVE_BCAST_COMMAND_SM_LOG=1
 # -DSKV_SERVER_BUFFER_AND_COMMAND_LOG=1
 # -DSKV_SERVER_CLEANUP_LOG=1
- -DSKV_SERVER_CLIENT_CONN_EST_LOG=1
+# -DSKV_SERVER_CLIENT_CONN_EST_LOG=1
 # -DSKV_SERVER_COMMAND_DISPATCH_LOG=1
 # -DSKV_SERVER_COMMAND_POLLING_LOG=1
 # -DSKV_SERVER_COMMAND_TRANSIT_LOG=1
@@ -94,6 +94,10 @@ add_definitions(
 # logging in tests
 # activate inner-loop logging for test programm
 # -DSKV_TEST_LOG=1
+
+
+
+
 )
 
 ############################################################
@@ -115,4 +119,30 @@ add_definitions(
 # -DSKV_CLIENT_CURSOR_STREAM_TRACE=1
 # -DSKV_CLIENT_INSERT_TRACE=1
 # -DSKV_CLIENT_PROCESS_CONN_TRACE=1
+)
+
+set(SKV_IT_API_LOGGING
+# enable extensive logging
+#FXLOG_IT_API_O_VERBS=1
+#FXLOG_IT_API_O_SOCKETS=1
+
+# enable evd thread logging
+#IT_API_O_VERBS_THREAD_LOG=1
+
+# enable connection-related logging only (incomplete coverage)
+#FXLOG_IT_API_O_VERBS_CONNECT=1
+#FXLOG_IT_API_O_SOCKETS_CONNECT=1
+
+# enable logging for memory registration (incomplete coverage)
+#FXLOG_IT_API_O_VERBS_MEMREG=1
+
+# enable logging for rdma write ops (incomplete coverage)
+#FXLOG_IT_API_O_VERBS_WRITE=1
+
+# enable logging for types
+#IT_API_O_VERBS_TYPES_LOG=1
+
+#FXLOG_IT_API_O_VERBS_QUEUE_LENGTHS_LOG=1
+#THREAD_SAFE_QUEUE_FXLOG=1
+#THREAD_SAFE_QUEUE_INIT_FXLOG=1
 )

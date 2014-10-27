@@ -233,9 +233,11 @@ PrepareEvent( skv_server_event_t *currentEvent, skv_server_ep_state_t *aEPState 
 #endif
 
   // This event is generated on the client
-  skv_server_event_type_t CmdEventType = InBoundHdr->mEventType;
+  skv_server_event_type_t CmdEventType = (skv_server_event_type_t)ntohl(InBoundHdr->mEventType);
+//  skv_server_event_type_t CmdEventType = InBoundHdr->mEventType ;
 
-  skv_command_type_t      CmdType      = InBoundHdr->mCmdType;
+  skv_command_type_t      CmdType      = (skv_command_type_t)ntohl(InBoundHdr->mCmdType);
+//  skv_command_type_t      CmdType      = InBoundHdr->mCmdType;
 
   CCB->SetType( CmdType );
   CCB->SetCommandClass( SKV_COMMAND_CLASS_IMMEDIATE );  // assume immediate for now
@@ -247,6 +249,7 @@ PrepareEvent( skv_server_event_t *currentEvent, skv_server_ep_state_t *aEPState 
     << " ServerCCB: " << (void *) CCB
     << " CmdEventType: " << skv_server_event_type_to_string ( CmdEventType )
     << " CmdType: " << skv_command_type_to_string( CmdType )
+    << (void *) CmdType
     << EndLogLine;
 
   switch( CmdType )

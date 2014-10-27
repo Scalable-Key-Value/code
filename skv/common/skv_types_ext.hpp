@@ -20,6 +20,7 @@
 
 #include <skv/common/skv_errno.hpp>
 #include <skv/c/skv.h>
+#include <arpa/inet.h>
 
 #ifdef SKV_CLIENT_FILEBASED
 // \todo: check if this is outdated
@@ -34,10 +35,10 @@ struct skv_pds_id_t
   unsigned int mIdOnOwner;
 
   void
-  Init()
+  Init( int aOwner=0, int aId=0 )
   {
-    mOwnerNodeId = 0;
-    mIdOnOwner = 0;
+    mOwnerNodeId = aOwner;
+    mIdOnOwner = aId;
   }
 
   bool
@@ -88,6 +89,11 @@ struct skv_pds_attr_t
   skv_pds_priv_t       mPrivs;
   skv_pdsname_string_t mPDSName[ SKV_MAX_PDS_NAME_SIZE ];
   skv_pds_id_t         mPDSId;
+  void EndianConvert(void)
+    {
+      mSize=htobe64(mSize) ;
+      mPrivs=(skv_pds_priv_t)htonl(mPrivs) ;
+    }
 };
 
 template<class streamclass>

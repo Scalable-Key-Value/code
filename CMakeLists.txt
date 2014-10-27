@@ -14,7 +14,7 @@ include(Common)
 # pick up any site specific configuration that might differ from default
 set(SKV_SITE "default" CACHE STRING
   "Select the main target platform {default, CSCS, ykt}")
-set_property(CACHE SKV_SITE PROPERTY STRINGS "default" "CSCS" "ykt")
+set_property(CACHE SKV_SITE PROPERTY STRINGS "default" "CSCS" "ykt" "pers_example")
 include(Site/${SKV_SITE})
 
 # do default magic
@@ -44,7 +44,7 @@ set_property(CACHE SKV_MPI
   PROPERTY STRINGS "AUTO" "MVAPICH2_RHEL65" "MPICH_BGQ" "BGAS-MVAPICH")
 
 include(Platform/${SKV_ENV})
-message(STATUS "Environment ${SKV_ENV}; MPI ${SKV_MPI}")
+message(STATUS "Environment ${SKV_ENV}; MPI ${SKV_MPI} (mpicc: ${MPI_C_COMPILER})")
 
 if(SKV_MPI MATCHES "AUTO")
   find_package(MPI REQUIRED)
@@ -52,13 +52,16 @@ else()
   include(MPI/${SKV_MPI})
 endif()
 
-find_package(OFED REQUIRED)
-
 include_directories(${MPI_INCLUDE_PATH})
+
 
 #------------------------------------------------------------------------------
 # Options
 #------------------------------------------------------------------------------
+
+# eile: Disabled static linking. For some unfathomable reason fxlogger
+# then forces the link against gcc 4.4.7 libs which can't work
+set(COMMON_LIBRARY_TYPE STATIC SHARED)
 
 #############################################
 # Define the local KV backend to use
@@ -71,6 +74,31 @@ set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING
 set_property(CACHE SKV_LOCAL_KV_BACKEND
   PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
 
+if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
+  find_package(ZLIB REQUIRED)
+  find_package(BZip2 REQUIRED)
+  find_package(rocksdb REQUIRED)
+endif()
+
+
+set(SKV_COMM_API_TYPE "verbs" CACHE STRING
+  "Select a database backend {verbs, sockets}")
+set_property(CACHE SKV_COMM_API_TYPE
+  PROPERTY STRINGS "verbs" "sockets")
+
+if(SKV_COMM_API_TYPE MATCHES "verbs")
+  find_package(OFED REQUIRED)
+  set( IT_API_LIBS ${OFED_LIBRARIES} pthread rt )
+  add_definitions(
+    # enable workaround for missing RoQ loopback functionality
+    -DSKV_ROQ_LOOPBACK_WORKAROUND
+  )
+endif()
+if(SKV_COMM_API_TYPE MATCHES "sockets")
+  set( IT_API_LIBS pthread rt )
+endif()
+
+
 include(logtrace)
 set(GLOBAL_DEFS
   ${PLATFORM_GLOBAL_DEFS}
@@ -80,6 +108,31 @@ set(GLOBAL_DEFS
   -DONLY_MSPACES
  )
 
+
+#------------------------------------------------------------------------------
+# include dirs
+#------------------------------------------------------------------------------
+include_directories(it_api FxLogger)
+
+#------------------------------------------------------------------------------
+# FxLogger library
+#------------------------------------------------------------------------------
+set(FXLOGGER_SOURCES
+  FxLogger/FxLogger.cpp
+  FxLogger/Trace.cpp
+  FxLogger/dlmalloc.c
+)
+
+set(FXLOGGER_PUBLIC_HEADERS
+  FxLogger/FxLogger.hpp
+  FxLogger/Time.hpp
+  FxLogger/Histogram.hpp
+  FxLogger/Trace.hpp
+)
+
+#------------------------------------------------------------------------------
+# IT_API library
+#------------------------------------------------------------------------------
 set(IT_API_DEFS
   # use event-based CQ reaping, if undefined it uses polling
   -DDIT_API_USE_EVENT_CQ
@@ -87,47 +140,18 @@ set(IT_API_DEFS
   -DIT_API_USE_SIW_HACK
 )
 
-#------------------------------------------------------------------------------
-# include dirs
-#------------------------------------------------------------------------------
-include_directories(it_api/include lib/include FxLogger)
-
-#------------------------------------------------------------------------------
-# Define source files
-#------------------------------------------------------------------------------
-
-set(FXLOGGER_SOURCES
-  FxLogger/FxLogger.cpp
-  FxLogger/Trace.cpp
-  FxLogger/dlmalloc.c
-)
-
 set(IT_API_SOURCES
-  it_api/src/it_api_o_verbs.cpp
-  it_api/src/it_api_o_verbs_thread.cpp
+  it_api/it_api_o_${SKV_COMM_API_TYPE}.cpp
+  it_api/it_api_o_${SKV_COMM_API_TYPE}_thread.cpp
 )
-set(IT_API_LINK_LIBRARIES ${OFED_LIBRARIES})
-
-set(TEST_SOURCES
-  test/skv_base_test.cpp
-)
-
-set(TEST_C_SOURCES
-  test/skv_test_clib.c
+set(IT_API_PUBLIC_HEADERS
+  it_api/it_api.h
+  it_api/it_api_os_specific.h
 )
 
-set(TEST_MPI_SOURCES
-  test/skv_test_bulk.cpp
-  test/skv_test_insert_retrieve_async.cpp
-  test/skv_test_insert_retrieve_sync.cpp
-  test/test_skv_insert_command.cpp
-  test/test_skv_remove_command.cpp
-)
+set(IT_API_LINK_LIBRARIES ${IT_API_LIBS} )
 
-set(UNITTEST_SOURCES
-  unittest/test_skv_rdma_data_buffer.cpp
-  unittest/test_skv_ringbuffer_ptr.cpp
-)
+
 
 #------------------------------------------------------------------------------
 # Compile settings
@@ -138,12 +162,10 @@ add_definitions(
   -DDEFAULT_CONFIG_FILE="${CMAKE_CURRENT_SOURCE_DIR}/.skv_server.conf"
 # enable command header checksum
   -DSKV_HEADER_CHECKSUM
-# enable workaround for missing RoQ loopback functionality
-  -DSKV_ROQ_LOOPBACK_WORKAROUND
 # set the local kv backend for SKV
   -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
 # data checking in tests
-  -DDO_CHECK
+#  -DDO_CHECK
 
 # seems to be necessary for the tests to link
   ${GLOBAL_DEFS}
@@ -151,17 +173,47 @@ add_definitions(
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x")
+
 
 #------------------------------------------------------------------------------
-# libraries
-
-# eile: Disabled static linking. For some unfathomable reason fxlogger
-# then forces the link against gcc 4.4.7 libs which can't work
-#set(COMMON_LIBRARY_TYPE STATIC)
+# Create library targets
+#------------------------------------------------------------------------------
 
 common_library(fxlogger)
 common_library(it_api)
+set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS "${SKV_IT_API_LOGGING}" )
+
+
+#------------------------------------------------------------------------------
+# Define test source files
+#------------------------------------------------------------------------------
+
+set(TEST_SOURCES
+  test/skv_base_test.cpp
+  test/test_skv_insert_command.cpp
+)
+
+set(TEST_C_SOURCES
+  test/skv_test_clib.c
+)
+
+set(TEST_MPI_SOURCES
+  test/skv_test_bulk.cpp
+  test/skv_bench.cpp
+  test/skv_test_insert_retrieve_async.cpp
+  test/skv_test_insert_retrieve_sync.cpp
+  test/test_skv_remove_command.cpp
+)
+
+set(UNITTEST_SOURCES
+  unittest/test_skv_rdma_data_buffer.cpp
+  unittest/test_skv_ringbuffer_ptr.cpp
+)
+
+#------------------------------------------------------------------------------
+# tests
+
 add_subdirectory(skv)
 
 foreach(_test ${TEST_SOURCES})
@@ -170,7 +222,16 @@ foreach(_test ${TEST_SOURCES})
   target_compile_definitions(${TEST_NAME} PUBLIC
 	"-DSKV_CLIENT_UNI -DSKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
-    ${MPI_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+    ${SKV_COMMON_LINK_LIBRARIES})
+  install(TARGETS ${TEST_NAME} DESTINATION bin)
+endforeach()
+
+foreach(_test ${TEST_MPI_SOURCES})
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common ${IT_API_LINK_LIBRARIES} fxlogger
+    ${MPI_CXX_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
+  install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
 
 include(skvCPack)

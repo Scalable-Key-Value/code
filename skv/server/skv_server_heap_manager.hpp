@@ -25,8 +25,16 @@
 #include <unistd.h>
 #include <math.h>
 
+#ifndef SKV_LOGGING_ALL
+#define SKV_LOGGING_ALL ( 0 )
+#endif
+
 #ifndef SKV_SERVER_HEAP_MANAGER_LOG
-#define SKV_SERVER_HEAP_MANAGER_LOG ( 0 )
+#define SKV_SERVER_HEAP_MANAGER_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
+#ifndef SKV_SERVER_HEAP_MANAGER_ALLOC_FREE_LOG
+#define SKV_SERVER_HEAP_MANAGER_ALLOC_FREE_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
 #define PERSISTENT_FILEPATH_MAX_SIZE            512
@@ -37,7 +45,7 @@
 #define MY_HOSTNAME_SIZE 128
 
 //#define PERSISTENT_IMAGE_MAX_LEN                ( 2u * 1024u * 1024u * 1024u )
-#define PERSISTENT_IMAGE_MAX_LEN                ( 3u * 1024u * 1024u * 1024u )
+#define PERSISTENT_IMAGE_MAX_LEN                ( 2u * 1024u * 1024u * 1024u )
 //#define PERSISTENT_IMAGE_MAX_LEN                ( 1024u * 1024u * 1024u )
 //#define PERSISTENT_IMAGE_MAX_LEN                ( 1724u * 1024u * 1024u )
 
@@ -110,12 +118,22 @@ public:
   void*
   Allocate( int bytes )
   {
+#ifdef DEBUG_USE_GLIBC_MALLOC
+    void* Ptr = malloc( bytes );
+#else
     void* Ptr = mspace_malloc( mMspace, bytes );
+#endif
 
     StrongAssertLogLine( Ptr != NULL )
       << "Allocate(): ERROR: Not enough memory. "
       << " bytes: " << bytes
       << EndLogLine;
+    BegLogLine(SKV_SERVER_HEAP_MANAGER_ALLOC_FREE_LOG)
+      << "Allocate( " << bytes
+      << " ) --> " << Ptr
+      << " " << (long) Ptr
+      << " "
+      << EndLogLine
 
     return Ptr;
   }
@@ -124,7 +142,16 @@ public:
   void
   Free( void * addr )
   {
+      BegLogLine(SKV_SERVER_HEAP_MANAGER_ALLOC_FREE_LOG)
+          << "Free( " << addr
+          << " " << (long) addr
+          << " )"
+          << EndLogLine ;
+#ifdef DEBUG_USE_GLIBC_MALLOC
+      free(addr) ;
+#else
     mspace_free( mMspace, addr );
+#endif
   }
 
   static

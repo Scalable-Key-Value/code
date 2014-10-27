@@ -89,6 +89,7 @@ struct skv_client_cursor_control_block_t
       << "skv_client_cursor_control_block_t::Init():: Leaving..."
       << " & mCachedKeys[ 0 ]: " << (void *) & mCachedKeys[ 0 ]
       << " mKeysDataLMRHdl: " << (void *) mKeysDataLMRHdl
+      << "mKeysDataRMRHdl=" << (void *) mKeysDataRMRHdl
       << EndLogLine;
 
     StrongAssertLogLine( status == IT_SUCCESS )

@@ -26,15 +26,19 @@
 
 #include <skv/server/skv_server.hpp>
 
+#if defined(USE_MTRACE)
+#include <mcheck.h>
+#endif
+
 skv_server_t Server;
 
-// #ifndef SKV_SERVER_READY_FILE
-// #define SKV_SERVER_READY_FILE "/var/run/skv_server.ready"
-// #endif
+int 
+main(int argc, char **argv) 
+{ 
+#if defined(USE_MTRACE)
+    mtrace() ;
+#endif
 
-int
-main(int argc, char **argv)
-{
   /************************************************************
    * Initialize MPI
    ***********************************************************/

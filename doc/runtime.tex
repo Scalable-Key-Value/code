@@ -1,0 +1,144 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Copyright (c) IBM Corp. 2014
+% All rights reserved. This program and the accompanying materials
+% are made available under the terms of the Eclipse Public License v1.0
+% which accompanies this distribution, and is available at
+% http://www.eclipse.org/legal/epl-v10.html
+%
+% Contributors:
+%    lschneid
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Configuration}\label{sec:skv:config}
+This section will cover the compiletime and runtime configuration of
+SKV client and server.
+
+\subsection{Compile Time Configuration}\label{sec:skv:config:cmp}
+There are a ton of macros that affect the behaviour and performance of
+SKV.  Most of them are bundled in \verb|make.conf.in|.
+
+When SKV source is build for the first time, the \verb|bootstrap.sh|
+script will be executed.  It creates an initial \verb|make.conf| by
+copying the original \verb|make.conf.in|.  After this step the default
+configuration is set up.
+
+For more system and environment specific configurations like paths and
+compiler flags, SKV provides an option to do individual configuration
+without modifying the main config.  You'll find a few files named
+\verb|make.conf_dev| or \verb|make.conf_rpm|.  These files are
+prepended to \verb|make.conf| and selected via environment variable
+\verb|SKV_CONF|.  For example:
+
+\begin{verbatim}
+$> export SKV_CONF=dev
+\end{verbatim}
+ 
+Will select \verb|make.conf_dev| to be used to compile SKV.  If any of
+the existing files is close to what you plan to do, make your own copy
+and set \verb|SKV_CONF| accordingly.
+
+
+\paragraph{IT\_API Configuration} works the same way as the SKV
+configuration.  Since the IT\_API component was moved into SKV only
+recently, the build and configuration is not yet fully merged.
+Therefore, it still has parts of the configuration in separate files
+in the \verb|it_api| directory.
+
+
+
+\subsection{Client Libraries}\label{sec:config:libs}
+SKV supports MPI-based and non-MPI clients.  Both have some slight
+differences in the API, especially for initialization.  This is also
+reflected by the availability of 2 flavors of libraries that need to
+be linked to a client application.
+
+The \verb|libskv_common| and \verb|libskv_client| have a non-MPI
+version and a MPI-version.  The MPI-version includes \verb|_mpi| in
+the names.
+
+To build a non-MPI client, you need to define the macro
+\verb|SKV_CLIENT_UNI| before including
+\verb|include/client/skv_client.hpp|.
+
+
+There's also a C-style library for SKV named \verb|libskvc.a| (and
+\verb|libskvc_mpi.a| for MPI clients).  The C include file is
+\verb|lib/skv.h|.
+
+
+\subsection{Runtime Configuration}\label{sec:skv:config:run}
+The main configuration of SKV is done via the \verb|skv_server.conf|
+file.  Despite its name, it's also used by the client to find out
+about the server location and connection options.
+
+An example server config file can be found in
+\verb|system/bgq/etc/skv_server.conf|.  The comments in this file
+explain the details of each setting.  However, for convenience,
+settings are explained below:
+\begin{description}
+\item[SKV\_SERVER\_PORT] will be the base port number the server will
+  start trying to listen.  If the port is blocked by another SKV
+  server instance (\abrEG if multiple servers run on the same node),
+  SKV will attempt to bind to the subsequent ports.  The limit for
+  attempts is determined by the macro \verb|SKV_MAX_SERVER_PER_NODE|
+  in file \verb|include/common/skv_types.hpp|.
+\item[SKV\_SERVER\_READY\_FILE] determines the file name that the
+  server will create when it's ready to accept connections from
+  clients.  The file is an empty file.
+\item[SKV\_SERVER\_MACHINE\_FILE] This file will contain the IP
+  addresses/hostnames and port numbers of the running server.  This
+  type of file is required for a client to connect to a server.
+\item[PERSISTENT\_FILENAME] This is the base file name of the file or
+  directory used by the SKV server for persisting the data.  For
+  example, in case of the in-memory storage back-end, this will be the
+  base name of the mmapped file.
+\item[PERSISTENT\_FILE\_LOCAL\_PATH] represents the full absolute path
+  and base name for the persistent file or directory.  The server will
+  append a rank number and maybe other identifiers to make this file
+  unique within a server group.
+\item[SKV\_SERVER\_LOCAL\_INFO\_FILE] In case SKV is exclusively run
+  on a single node with multiple instances, this file is used instead
+  of the server machine file.  It is suggested to use the same name
+  here as for \verb|SKV_SERVER_MACHINE_FILE| because this option is
+  obsolete and might disappear in the future.
+\item[SKV\_SERVER\_COMM\_IF] Determines the primary interface that's
+  picked by the server.  The IP address or hostname of this device
+  will be placed in the machine file.
+\end{description}
+
+
+\subsubsection{Running the Server}\label{sec:skv:run:server}
+When the server is started, the following options for the config file
+are available:
+\begin{enumerate}
+\item an absolute path and file name provided at the command line via
+  \verb|-c| option.
+\item A user specific config file \verb|$(HOME)/.skv_server.conf|
+\item A system-wide config file \verb|/etc/skv_server.conf|
+\item Compile-time defaults will be used if there's no config file
+  found or provided by any of the above options.
+\end{enumerate}
+
+
+
+\subsubsection{Running a Client}\label{sec:skv:run:client}
+During the initialization of a client, the configuration file is
+looked up via:
+\begin{enumerate}
+\item A user specific config file \verb|$(HOME)/.skv_server.conf|
+\item A system-wide config file \verb|/etc/skv_server.conf|
+\item Compile-time defaults will be used if there's no config file
+  found or provided by any of the above options.
+\end{enumerate}
+
+
+
+
+\endinput
+
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: "skvdoc"
+%%% End: 

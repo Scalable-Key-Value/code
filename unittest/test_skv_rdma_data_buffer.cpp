@@ -245,6 +245,7 @@ int main( int argc, char **argv )
   rc += single_function_tests( 1000000 );
   cout << "Single_Function_Test completed with rc=" << rc << " [" << (rc==0?"PASS":"FAIL") << "]" << endl;
   rc += chasing_test( 1000000 );
+  cout << "head/tail chasing Test completed with rc=" << rc << " [" << (rc==0?"PASS":"FAIL") << "]" << endl;
   rc += exit_itape();
   cout << "IT_APE Exit completed with rc=" << rc << " [" << (rc==0?"PASS":"FAIL") << "]" << endl;
   return rc;

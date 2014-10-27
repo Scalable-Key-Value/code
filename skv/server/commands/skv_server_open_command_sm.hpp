@@ -60,6 +60,8 @@ private:
     OpenResp->mStatus = rc;
     OpenResp->mPDSId = PDSId;
 
+    OpenResp->EndianConvert() ;
+
     skv_status_t status = aEPState->Dispatch( aCommand,
                                               aSeqNo,
                                               aCommandOrdinal );
@@ -96,6 +98,7 @@ public:
         BegLogLine( SKV_SERVER_OPEN_COMMAND_SM_LOG )
           << "skv_server_open_command_sm::Execute():: returned from async"
           << " PDSId: " << Command->mLocalKVData.mPDSOpen.mPDSId
+          << " status: " << skv_status_to_string( Command->mLocalKVrc )
           << EndLogLine;
 
         status = open_post_response( aEPState,
@@ -115,6 +118,8 @@ public:
           {
             // we have copied all Req data into response buffer already at cmd init
             skv_cmd_open_req_t* OpenReq = (skv_cmd_open_req_t *) Command->GetSendBuff();
+
+            OpenReq->EndianConvert() ;
 
             char*                  PDSName = OpenReq->mPDSName;
             skv_pds_priv_t         Privs   = OpenReq->mPrivs;

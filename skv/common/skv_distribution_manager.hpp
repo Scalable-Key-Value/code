@@ -23,6 +23,10 @@ typedef unsigned int HashKeyT;
 #define SKV_HASH_DISTRIBUTION_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_CLIENT_ENDIAN_LOG
+#define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
+#endif
+
 struct skv_hash_func_t
 {
   unsigned long long mP;
@@ -43,6 +47,17 @@ struct skv_hash_func_t
     mA = 65413;
     mB = 16777049;
   }
+  void EndianConvert(void)
+    {
+      mP=be64toh(mP) ;
+      mA=ntohl(mA) ;
+      mB=ntohl(mB) ;
+      BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+        << "Endian-converting hash function to mP=" << mP
+        << " mA=" << mA
+        << " mB=" << mB
+        << EndLogLine ;
+    }
 
   HashKeyT
   GetHashUINT( unsigned int aX ) const
@@ -58,8 +73,8 @@ struct skv_hash_func_t
   }
 
   HashKeyT
-  GetHashSimple( char* aData, int aLen ) const
-  {
+  GetHashSimple( const char* aData, int aLen ) const
+  {      
     AssertLogLine( aData != NULL )
       << "skv_hash_func_t::GetHash() "
       << " aData != NULL "
@@ -105,8 +120,8 @@ struct skv_hash_func_t
     return hashValue;
   }
 
-  HashKeyT
-  GetHash( char* aData, int aLen ) const
+  HashKeyT 
+  GetHash( const char* aData, int aLen ) const
   {
     AssertLogLine( aData != NULL )
       << "skv_hash_func_t::GetHash() "
@@ -118,11 +133,7 @@ struct skv_hash_func_t
       << " aLen: " << aLen
       << EndLogLine;
 
-#ifdef USE_BOB_JENKINS_HASH_FUNCTION
-    HashKeyT hashValue = hashbig( aData, aLen, 0 );
-#else
     HashKeyT hashValue = GetHashSimple( aData, aLen );
-#endif
 
     return hashValue;
   }
@@ -130,13 +141,8 @@ struct skv_hash_func_t
   void
   GetRange( unsigned int &aLow, unsigned int &aHigh ) const
   {
-#ifdef USE_BOB_JENKINS_HASH_FUNCTION
-    aLow  = 0;
-    aHigh = UINT_MAX;
-#else
     aLow = 0;
     aHigh = mP - 1;
-#endif
   }
 
 };
@@ -161,11 +167,19 @@ struct skv_distribution_hash_t
 
   skv_status_t Init( int aCount );
   skv_status_t Finalize();
+  void EndianConvert(void)
+    {
+      mCount=ntohl(mCount) ;
+      BegLogLine(SKV_CLIENT_ENDIAN_LOG)
+        << "mCount endian-converted to " << mCount
+        << EndLogLine ;
+      mHashFunc.EndianConvert() ;
+    }
   int GetNode( skv_key_t* aKey ) const;
 
   // Input is a list of points to data
   // with a parallel list of data lengths
-  int GetNode( char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount ) const;
+  int GetNode( const char** aListOfDataElem, int* aListOfSizesOfData, int aListElementCount ) const;
 };
 
 template<class streamclass>

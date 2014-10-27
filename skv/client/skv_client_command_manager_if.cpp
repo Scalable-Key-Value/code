@@ -47,6 +47,7 @@ TestAny( skv_client_cmd_hdl_t* aCmdHdl )
     mCCBMgrIF->AddToFreeCCBQueue( CCB );
 
     status = CCB->mStatus;
+    status=(skv_status_t)ntohl(status) ;
   }
 
   return status;
@@ -101,6 +102,7 @@ Test( skv_client_cmd_hdl_t aCmdHdl )
   if( aCmdHdl->mState == SKV_CLIENT_COMMAND_STATE_DONE )
   {
     status = aCmdHdl->mStatus;
+    status=(skv_status_t)ntohl(status) ;
     ReleaseAssumeDone( aCmdHdl );
   }
   else
@@ -168,7 +170,12 @@ Wait( skv_client_cmd_hdl_t aCmdHdl )
       continue;
     }
     else
+    {
+      BegLogLine( SKV_CLIENT_WAIT_LOG )
+        << "skv_client_internal_t::Wait():: Leaving status=" << status
+        << EndLogLine;
       return status;
+    }
   }
 
   BegLogLine( SKV_CLIENT_WAIT_LOG )

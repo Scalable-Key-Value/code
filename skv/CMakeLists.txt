@@ -67,7 +67,8 @@ set(SKVSERVER_SOURCES
   server/skv_server_tree_based_container.cpp
   server/skv_server_uber_pds.cpp
 )
-set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES} ${MPI_LIBRARIES}
+set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES}
+  ${MPI_CXX_LIBRARIES}  ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${ROCKSDB_LIBRARIES}
   skv_common it_api fxlogger)
 
 #------------------------------------------------------------------------------
@@ -83,6 +84,8 @@ common_library(skv_client_mpi)
 common_library(skvc)
 common_library(skvc_mpi)
 
+set_target_properties(skv_common PROPERTIES COMPILE_DEFINITIONS
+  "SKV_CLIENT_UNI;SKV_NON_MPI")
 set_target_properties(skv_client PROPERTIES COMPILE_DEFINITIONS
   "SKV_CLIENT_UNI;SKV_NON_MPI")
 set_target_properties(skvc PROPERTIES COMPILE_DEFINITIONS
@@ -91,6 +94,13 @@ set_target_properties(skvc PROPERTIES COMPILE_DEFINITIONS
 #------------------------------------------------------------------------------
 # executables
 common_application(SKVServer)
+
+if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
+  set_target_properties(SKVServer PROPERTIES COMPILE_DEFINITIONS
+    "WITH_ROCKSDB")
+  # for some reason, the rocksdb includes were not found...
+  include_directories(${ROCKSDB_INCLUDE_DIRS})
+endif()
 
 
 #------------------------------------------------------------------------------

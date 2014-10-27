@@ -146,7 +146,7 @@ iBulkInsert( int                 aNodeId,
              // aBufferRMR,
              BufferChecksum );
   /*****************************************************/
-
+  Req->EndianConvert() ;
 
 
   /******************************************************

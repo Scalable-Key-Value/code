@@ -67,6 +67,9 @@ Init( int aPartitionSize,
   it_evd_flags_t evd_flags = (it_evd_flags_t) 0;
 
 #ifdef SKV_SERVER_USE_AGGREGATE_EVD
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating aggregate event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_AEVD_NOTIFICATION_EVENT_STREAM,
                             evd_flags,
@@ -89,6 +92,9 @@ Init( int aPartitionSize,
     << EndLogLine;
 #endif
 
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating unaffiliated event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_ASYNC_UNAFF_EVENT_STREAM,
                             evd_flags,
@@ -103,6 +109,9 @@ Init( int aPartitionSize,
     << " itstatus: " << itstatus
     << EndLogLine;
 
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating affiliated event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_ASYNC_AFF_EVENT_STREAM,
                             evd_flags,
@@ -121,6 +130,9 @@ Init( int aPartitionSize,
   // The EVD size here should depend
   int cmr_sevd_queue_size = aPartitionSize;
 
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating mEvd_Cmr_Hdl event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_CM_REQ_EVENT_STREAM,
                             evd_flags,
@@ -137,6 +149,9 @@ Init( int aPartitionSize,
 
   int cmm_sevd_queue_size = aPartitionSize;
 
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating mEvd_Cmm_Hdl event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_CM_MSG_EVENT_STREAM,
                             evd_flags,
@@ -157,6 +172,9 @@ Init( int aPartitionSize,
   int rq_sevd_queue_size = 2 * SKV_MAX_COMMANDS_PER_EP * aPartitionSize;
 #endif
 
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating mEvd_Rq_Hdl event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_DTO_EVENT_STREAM,
                             evd_flags,
@@ -184,6 +202,9 @@ Init( int aPartitionSize,
     << " sq_sevd_queue_size: " << sq_sevd_queue_size
     << EndLogLine;
 
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating mEvd_Sq_Hdl event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_DTO_EVENT_STREAM,
                             evd_flags,
@@ -198,6 +219,9 @@ Init( int aPartitionSize,
     << " itstatus: " << itstatus
     << EndLogLine;
 
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "Creating mEvd_Seq_Hdl event queue"
+    << EndLogLine ;
   itstatus = it_evd_create( mIA_Hdl,
                             IT_SOFTWARE_EVENT_STREAM,
                             evd_flags,
@@ -327,6 +351,11 @@ FinalizeEPState(  EPStateMap_T*         aEPStateMap,
 
   aStateForEP->Finalize();
 
+  BegLogLine(SKV_SERVER_CLEANUP_LOG)
+    << "free(aStateForEP= " << (void *) aStateForEP
+    << " )"
+    << EndLogLine ;
+
   free( aStateForEP );
 
   aEPStateMap->erase( aEP );
@@ -395,6 +424,10 @@ InitNewStateForEP( EPStateMap_T* aEPStateMap,
     << EndLogLine;
 
   *aStateForEP = (skv_server_ep_state_t *) malloc( sizeof( skv_server_ep_state_t ) );
+
+  BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
+    << "malloc *aStateForEP -> " << (void *) *aStateForEP
+    << EndLogLine ;
   StrongAssertLogLine( *aStateForEP != NULL )
     << "skv_server_t::InitNewStateForEP()::ERROR not enough memory for "
     << " sizeof( skv_server_ep_state_t ): " << sizeof( skv_server_ep_state_t )

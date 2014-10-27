@@ -297,7 +297,8 @@ main(int argc, char **argv)
         NUMBER_OF_TRIES = MAX_ALLOC_FOR_TRIES / testDataSize;
 #endif
 
-      printf( "running test with data size: %d\n", testDataSize );
+      if( Rank == 0)
+        printf( "running test with data size: %d\n", testDataSize );
 
       /*****************************************************************************
        * Allocate Insert/Retrieve data arrays

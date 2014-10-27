@@ -1,0 +1,579 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Copyright (c) IBM Corp. 2014
+% All rights reserved. This program and the accompanying materials
+% are made available under the terms of the Eclipse Public License v1.0
+% which accompanies this distribution, and is available at
+% http://www.eclipse.org/legal/epl-v10.html
+%
+% Contributors:
+%    lschneid
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Client Interface}\label{sec:api}
+This section explains the client API in the way that applications
+would use to access the SKV Server.
+
+\subsection{Client Initialization and Exit}\label{sec:api:init}
+\begin{lstlisting}
+skv_status_t Init( skv_client_group_id_t aCommGroupId,
+                   MPI_Comm aComm,
+                   int aFlags,
+                   const char* aConfigFile = NULL );
+\end{lstlisting}
+
+The first thing for every client to do is to initialize SKV.
+\begin{description}
+\item[aCommGroupId] This is an identifier for this group of clients.
+  It helps the server to distinguish between different client groups
+  and make sure data is retrieved or returned to the correct client.
+  This setting is more important for multi-process client (\abrEG MPI
+  based applications).
+\item[aComm] The MPI communicator has to be provided for the MPI
+  version of the client API (libskv\_mpi, libskv\_client\_mpi).
+\item[aFlags] Initialization flags for SKV. Currently unused.
+\item[aConfigFile] The path and name of the skv configuration file.
+  This file contains several important settings for the server and the
+  client.  The parameter is optional.  If omitted,
+  \code{/etc/skv\_server.conf} will be used as a default.  See
+  \ref{sec:skv:config} for details.
+\end{description}
+The initialization with this call can be thought of the client side
+initialization of SKV.  It does not attempt to connect to any server.
+
+\begin{lstlisting}
+skv_status_t Finalize();
+\end{lstlisting}
+
+Finalize will cleanup any initialized and accumulated state of the SKV
+client.
+
+
+\subsection{Server Connection}\label{sec:api:connect}
+
+\begin{lstlisting}
+skv_status_t Connect( const char* aConfigFile,
+                      int aFlags );
+\end{lstlisting}
+
+Before a client can access a server, it has to connect to a server.
+\begin{description}
+\item[aConfigFile] Since the server may consist of a group of
+  processes, it's not meaningful to connect to a particular address.
+  Instead, the config file contains the name and the path of the
+  server's machinefile which contains a list of addresses and port
+  numbers for the client to connect to.  This might change in the
+  future, especially, since the config file was already provided with
+  the Init() call (see Section\,\ref{sec:api:init}).
+\item[aFlags] Connection flags for SKV. Currently unused.
+\end{description}
+
+NOTE: The parameters for this are under review.  Especially, the
+config file parameter might change into a single address again. For
+example, one could think of connecting to one server and retrieve the
+list of server addresses from it.
+
+
+\begin{lstlisting}
+skv_status_t Disconnect();
+\end{lstlisting}
+
+Disconnecting from server(s).  Notice, the lack of distinction between
+different server connections, means that one client object can have a
+connection to only one server group at a time.  If an application
+needs to connect to different servers, it has to use multiple client
+objects that are initialized differently.
+
+
+
+\subsection{Partitioned Data Set Operations}\label{sec:api:pds_ops}
+
+\begin{lstlisting}
+skv_status_t Open( char* aPDSName,
+                   skv_pds_priv_t aPrivs,
+                   skv_cmd_open_flags_t aFlags,
+                   skv_pds_id_t* aPDSId );
+
+skv_status_t iOpen( char* aPDSName,
+                    skv_pds_priv_t aPrivs,
+                    skv_cmd_open_flags_t aFlags,
+                    skv_pds_id_t* aPDSId,
+                    skv_client_cmd_ext_hdl_t* aCmdHdl );
+\end{lstlisting}
+
+Open access to a Partitioned Data Set (PDS).  There's a blocking and a
+non-blocking version of the Open() call.
+\begin{description}
+\item[aPDSName] A \code{char*} representation of the PDS.  Each PDS
+  needs to have a name represented by a c-style string.
+
+\item[aPrivs] The privileges that will be used while the PDS is open.
+  \begin{description}
+  \item[\tiny SKV\_PDS\_READ] Allow users to read data from PDS.
+  \item[\tiny SKV\_PDS\_WRITE] Allow users to write data to the PDS.
+  \end{description}
+
+\item[aFlags] A set of flags determining the response of the server
+  under certain conditions.
+  \begin{description}
+  \item [\tiny SKV\_COMMAND\_OPEN\_FLAGS\_NONE] No special flags. This is
+    the default.
+  \item[\tiny SKV\_COMMAND\_OPEN\_FLAGS\_CREATE] Create a new PDS if it
+    doesn't exists.
+  \item[\tiny SKV\_COMMAND\_OPEN\_FLAGS\_EXCLUSIVE] Only try to open the PDS
+    if it exists.  Otherwise return an error.
+  \item[\tiny SKV\_COMMAND\_OPEN\_FLAGS\_DUP] Allow opening of a PDS that
+    has duplicates. (Not fully supported at the moment)
+  \end{description}
+
+\item[aPDSId] Open will return a PDSId which is required for any
+  further interaction with this PDS.  Inserting or retrieving data,
+  everything needs the returned PDSId.
+
+\item[aCmdHdl] If the non-blocking version of the command is used,
+  this will return the command handle to check for completion of the
+  operation.
+\end{description}
+
+
+\begin{lstlisting}
+skv_status_t PDScntl( skv_pdscntl_cmd_t aCmd,
+                      skv_pds_attr_t *aPDSAttr );
+
+skv_status_t iPDScntl( skv_pdscntl_cmd_t aCmd,
+                       skv_pds_attr_t *aPDSAttr,
+                       skv_client_cmd_ext_hdl_t *aCmdHdl );
+\end{lstlisting}
+
+Perform various commands for a PDS.  This allows to retrieve
+information about an existing PDS.  For example to return the
+attributes.
+\begin{description}
+\item[aCmd] The command to execute.
+  \begin{description}
+    \item[\tiny SKV\_PDSCNTL\_CMD\_STAT\_SET] Set the attributes of a
+      PDS.
+    \item[\tiny SKV\_PDSCNTL\_CMD\_STAT\_GET] Get the attributes of a
+      PDS.
+    \item[\tiny SKV\_PDSCNTL\_CMD\_CLOSE] Close a PDS.  There's a
+      separate Close() call available which has a simpler interface.
+  \end{description}
+
+\item[aPDSAttr] The attribute argument serves as both, input and
+  output parameter.  The input has at least to be filled with the PDS
+  name or the PDSid in order to find the PDS for the command.
+
+\item[aCmdHdl] If the non-blocking version of the command is used,
+  this will return the command handle to check for completion of the
+  operation.
+\end{description}
+
+
+\begin{lstlisting}
+skv_status_t Close( skv_pds_id_t* aPDSId );
+
+skv_status_t iClose( skv_pds_id_t* aPDSId,
+                     skv_client_cmd_ext_hdl_t* aCmdHdl );
+\end{lstlisting}
+
+Close an open PDS with a given PDSId.
+\begin{description}
+\item[aPDSId] The id of the PDS to close.  This id is returned by Open().
+\item[aCmdHdl] If the non-blocking version of the command is used,
+  this will return the command handle to check for completion of the
+  operation.
+\end{description}
+
+
+
+
+\subsection{Inserting KV-Pairs}\label{sec:api:insert}
+
+\begin{lstlisting}
+skv_status_t Insert( skv_pds_id_t* aPDSId,
+                     char* aKeyBuffer,
+                     int aKeyBufferSize,
+                     char* aValueBuffer,
+                     int aValueBufferSize,
+                     int aValueBufferOffset,
+                     skv_cmd_RIU_flags_t aFlags );
+
+skv_status_t iInsert( skv_pds_id_t* aPDSId,
+                      char* aKeyBuffer,
+                      int aKeyBufferSize,
+                      char* aValueBuffer,
+                      int aValueBufferSize,
+                      int aValueBufferOffset,
+                      skv_cmd_RIU_flags_t aFlags,
+                      skv_client_cmd_ext_hdl_t* aCmdHdl );
+\end{lstlisting}
+
+Inserts a key-value pair to a PDS.
+\begin{description}
+\item[aPDSId] The PDSId returned from the Open() call.
+\item[aKeyBuffer] Pointing to a buffer that contains the key.
+\item[aKeyBufferSize] The size of the key.  Note, the maximum size of
+  the key is currently limited by the size of the control message
+  (\code{SKV\_CONTROL\_MESSAGE\_SIZE} defined in file
+  include/common/skv\_types.hpp.
+\item[aValueBuffer] Pointing to the buffer that contains the value.
+\item[aValueBufferSize] The size of the value to insert.
+\item[aValueBufferOffset] The offset at which the value buffer will be
+  inserted at the server.  The offset has no effect on the source
+  value buffer.
+\item[aFlags] Insert flags described in Section\,\ref{sec:api:RIU:flags}.
+\item[aCmdHdl] If the non-blocking version of the command is used,
+  this will return the command handle to check for completion of the
+  operation.
+\end{description}
+
+
+\subsection{Update KV-Pairs}\label{sec:api:update}
+\begin{lstlisting}
+skv_status_t Update( skv_pds_id_t* aPDSId,
+                     char* aKeyBuffer,
+                     int aKeyBufferSize,
+                     char* aValueBuffer,
+                     int aValueUpdateSize,
+                     int aOffset,
+                     skv_cmd_RIU_flags_t aFlags );
+
+skv_status_t iUpdate( skv_pds_id_t* aPDSId,
+                      char* aKeyBuffer,
+                      int aKeyBufferSize,
+                      char* aValueBuffer,
+                      int aValueUpdateSize,
+                      int aOffset,
+                      skv_cmd_RIU_flags_t aFlags,
+                      skv_client_cmd_ext_hdl_t* aCmdHdl );
+\end{lstlisting}
+This command is new and not yet implemented at the server. The
+interface might change in the near future to include update triggers.
+
+
+\subsection{Retrieve KV-Pairs}\label{sec:api:retrieve}
+\begin{lstlisting}
+skv_status_t Retrieve( skv_pds_id_t* aPDSId,
+                       char* aKeyBuffer,
+                       int aKeyBufferSize,
+                       char* aValueBuffer,
+                       int aValueBufferSize,
+                       int* aValueRetrievedSize,
+                       int aOffset,
+                       skv_cmd_RIU_flags_t aFlags );
+
+skv_status_t iRetrieve( skv_pds_id_t* aPDSId,
+                        char* aKeyBuffer,
+                        int aKeyBufferSize,
+                        char* aValueBuffer,
+                        int aValueBufferSize,
+                        int* aValueRetrievedSize,
+                        int aOffset,
+                        skv_cmd_RIU_flags_t aFlags,
+                        skv_client_cmd_ext_hdl_t* aCmdHdl );
+\end{lstlisting}
+Retrieves the value (or parts) for a given key.
+\begin{description}
+\item[aPDSId] The PDSId returned from the Open() call.
+\item[aKeyBuffer] Pointing to a buffer that contains the key.
+\item[aKeyBufferSize] The size of the key.  Note, the maximum size of
+  the key is currently limited by the size of the control message
+  (\code{SKV\_CONTROL\_MESSAGE\_SIZE} defined in file
+  include/common/skv\_types.hpp.
+\item[aValueBuffer] Pointing to the buffer that will hold the value
+  after completion.
+\item[aValueBufferSize] The number of bytes that the user requests to
+  retrieve from the server.  Needs to be less than or equal to the
+  size of the ValueBuffer.
+\item[aValueRetrievedSize] Returns the actual number of retrieved
+  bytes if the parameter is not NULL and the return status is
+  \code{SKV\_SUCCESS}
+\item[aOffset] The offset in the stored value where the retrieve
+  should start to fetch data into \code{aValueBuffer}.
+\item[aFlags] Retrieve flags. (See Section\,\ref{sec:api:RIU:flags})
+\item[aCmdHdl] If the non-blocking version of the command is used,
+  this will return the command handle to check for completion of the
+  operation.
+\end{description}
+
+
+% \paragraph{Retrieve Size and Return Code}
+% The returned data size and error code maybe counter-intuitive.
+% However, this way it allows the retrieve command to return more
+% information about the stored value at the server.  This extended
+% semantics of parameter \code{ValueRetrievedSize} will return
+% \code{SKV\_ERRNO\_VALUE\_TOO\_LARGE} if the data at the server is
+% larger than the requested size.  In this situation, the data is
+% properly retrieved into the user buffer and the retrieved size matches
+% the requested size.  It's only that the return value in
+% \code{ValueRetrievedSize} reflects the total size of the stored value
+% and therefore will be larger than \code{ValueBufferSize}.
+
+\subsection{Flags for Insert, Retrieve, and Update}\label{sec:api:RIU:flags}
+Explanation of insert flags:  \todo{ls: need check for implementation
+  inconsistencies of some flags}
+\begin{description}
+\item[SKV\_COMMAND\_RIU\_FLAGS\_NONE] This is the default.  If a
+  record with the same key already exists, SKV returns an error
+  (\code{SKV\_ERRNO\_RECORD\_ALREADY\_EXISTS}).
+\item[SKV\_COMMAND\_RIU\_APPEND] If a record with the same key
+  already exists, the new value is appended at the end of the existing
+  value(s).
+\item[SKV\_COMMAND\_RIU\_UPDATE] If a record with the same key already
+  exists, the existing value is overwritten with the new one.  If the
+  new value has a different size, the size is adjusted to match the
+  lenght of the new value.  This also includes partial updates with
+  provided offsets as long as $offset <= existing\_value\_size$.
+\item[SKV\_COMMAND\_RIU\_INSERT\_EXPANDS\_VALUE] When used with the
+  proper offset, this flag can be used to append new data at or after
+  the end of existing values.  The semantics is the same as with
+  append except that the user is responsible for using correct
+  offsets.  Note that the provided offset has to be larger or equal to
+  the size of the existing value (non-overlapping inserts).
+\item[SKV\_COMMAND\_RIU\_INSERT\_OVERWRITE\_VALUE\_ON\_DUP] Overwrites
+  existing parts of the value without adjusting the size of the
+  record.  Only works properly if $offset + length <= size$.
+\item[SKV\_COMMAND\_RIU\_INSERT\_OVERLAPPING] Allow overlapping
+  updates. For example in conjunction with
+  \code{SKV\_COMMAND\_RIU\_INSERT\_EXPANDS\_VALUE} to enable arbitrary
+  partial updates to a value.
+\item[SKV\_COMMAND\_RIU\_RETRIEVE\_SPECIFIC\_VALUE\_LEN] Enable report of
+  the totalsize even if less data was requested.
+\end{description}
+
+
+\subsection{Remove KV-Pairs}\label{sec:api:remove}
+\begin{lstlisting}
+skv_status_t Remove( skv_pds_id_t* aPDSId,
+                     char* aKeyBuffer,
+                     int aKeyBufferSize,
+                     skv_cmd_remove_flags_t aFlags );
+
+skv_status_t iRemove( skv_pds_id_t* aPDSId,
+                      char* aKeyBuffer,
+                      int aKeyBufferSize,
+                      skv_cmd_remove_flags_t aFlags,
+                      skv_client_cmd_ext_hdl_t* aCmdHdl );
+\end{lstlisting}
+Deletes a Key/Value pair from the server storage.
+\begin{description}
+\item[aPDSId] The PDSId returned from the Open() call.
+\item[aKeyBuffer] Pointing to a buffer that contains the key.
+\item[aKeyBufferSize] The size of the key.  Note, the maximum size of
+  the key is currently limited by the size of the control message
+  (\code{SKV\_CONTROL\_MESSAGE\_SIZE} defined in file
+  include/common/skv\_types.hpp.
+\item[aFlags] Command flags for remove. \todo{check if used at all}
+\item[aCmdHdl] If the non-blocking version of the command is used,
+  this will return the command handle to check for completion of the
+  operation.
+\end{description}
+
+
+\subsection{Bulk Insert}\label{sec:api:bulkinsert}
+Allows accumulated insertion of data.
+
+\begin{lstlisting}
+skv_status_t CreateBulkInserter( skv_pds_id_t* aPDSId,
+                                 skv_bulk_inserter_flags_t aFlags,
+                                 skv_client_bulk_inserter_ext_hdl_t* aBulkInserterHandle );
+\end{lstlisting}
+Creates a context/handle for bulk insertion of data.
+\begin{description}
+\item[aPDSId] The PDSId returned from the Open() call.
+\item[aFlags] Bulk-inserter flags for configuration.
+\item[aBulkInserterHandle] returned context/handle for use with
+  insert, flush, and close operations.
+\end{description}
+
+\begin{lstlisting}
+skv_status_t Insert( skv_client_bulk_inserter_ext_hdl_t aBulkInserterHandle,
+                     char* aKeyBuffer,
+                     int aKeyBufferSize,
+                     char* aValueBuffer,
+                     int aValueBufferSize,
+                     skv_bulk_inserter_flags_t aFlags
+                     );
+\end{lstlisting}
+Add a key/value pair into the bulk-inserter.  If the internal buffer
+reaches a threshold, it will be automatically flushed. Otherwise, the
+Flush() command can be used.
+\begin{description}
+\item[aBulkInserterHandle] The context/handle returned from the
+  CreateBulkInserter() call.
+\item[aKeyBuffer] Pointing to a buffer that contains the key.
+\item[aKeyBufferSize] The size of the key.  Note, the maximum size of
+  the key is currently limited by the size of the control message
+  (\code{SKV\_CONTROL\_MESSAGE\_SIZE} defined in file
+  include/common/skv\_types.hpp.
+\item[aValueBuffer] Pointing to the buffer that will hold the value
+  after completion.
+\item[aValueBufferSize] The number of bytes that the user requests to
+  retrieve from the server.  Needs to be less than or equal to the
+  size of the ValueBuffer.
+\item[aFlags] Only \code{SKV\_BULK\_INSERTER\_FLAGS\_NONE} is
+  defined yet.
+\end{description}
+
+\begin{lstlisting}
+skv_status_t Flush( skv_client_bulk_inserter_ext_hdl_t aBulkInserterHandle );
+\end{lstlisting}
+\begin{lstlisting}
+skv_status_t CloseBulkInserter( skv_client_bulk_inserter_ext_hdl_t aBulkInserterHandle );
+\end{lstlisting}
+
+  
+\subsection{Asynchronous Completion}\label{sec:api:async}
+\begin{lstlisting}
+skv_status_t TestAny( skv_client_cmd_ext_hdl_t* aCmdHdl );
+
+skv_status_t Test( skv_client_cmd_ext_hdl_t aCmdHdl );
+\end{lstlisting}
+Non-blocking test if a specific \code{aCmdHdl} is complete or not.
+\code{TestAny} will return a valid handle if any outstanding request
+is complete.
+
+Once a test is successful, there's no further need for cleanup by the
+application.  That means, a particular \code{aCmdHdl} will only show
+up once whether the application uses test or wait variants of the
+calls.
+
+\begin{lstlisting}
+skv_status_t WaitAny( skv_client_cmd_ext_hdl_t* aCmdHdl );
+
+skv_status_t Wait( skv_client_cmd_ext_hdl_t aCmdHdl );
+\end{lstlisting}
+Blocking test if a specific \code{aCmdHdl} is complete or not.  The
+call blocks until either any (\code{WaitAny()}) or a particular
+(\code{Wait()}) command completed.
+
+
+
+
+\subsection{Iterators/Cursors}\label{sec:api:cursor}
+Cursors enable iteration over the existing key/value pairs of a given
+PDS.  There are 2 flavors of iterators\footnote{The terms cursor and
+  iterator will be used as synonyms here.}: a local and a global
+cursor.
+
+The main mode of operation for both flavors of the cursors:
+\begin{enumerate}
+\item Open a cursor to get a handle for further operation
+\item Call \verb|GetFirst(Local)Element()| to seek to the beginning of
+  the list of entries.
+\item Call \verb|GetNext(Local)Element()| to iterate
+\item Close the cursor to release resources and invalidate the handle.
+\end{enumerate}
+
+
+\subsubsection{Local Iterator}\label{sec:api:cursor_local}
+The local cursor allows iteration over the key/value entries of only
+one server.  The term \emph{local} might be misleading because the
+client library will contact the server with a given MPI rank.  This
+may be non-intuitive especially if servers and clients run on disjoint
+sets of nodes/machines.
+
+\begin{lstlisting}
+skv_status_t OpenLocalCursor( int aNodeId,
+                              skv_pds_id_t* aPDSId,
+                              skv_client_cursor_ext_hdl_t* aCursorHdl );
+\end{lstlisting}
+\begin{description}
+\item[aNodeId] Provide the NodeID or MPI-rank of the server you want
+  to iterate.
+\item[aPDSId] The PDSId returned from the Open() call.
+\item[aCursorHdl] This output parameter will return a handle for the
+  iterator to be used for the \verb|GetLocalNNN()| calls.
+\end{description}
+
+\begin{lstlisting}
+skv_status_t GetFirstLocalElement( skv_client_cursor_ext_hdl_t aCursorHdl,
+                                   char* aRetrievedKeyBuffer,
+                                   int* aRetrievedKeySize,
+                                   int aRetrievedKeyMaxSize,
+                                   char* aRetrievedValueBuffer,
+                                   int* aRetrievedValueSize,
+                                   int aRetrievedValueMaxSize,
+                                   skv_cursor_flags_t aFlags );
+
+skv_status_t GetNextLocalElement( skv_client_cursor_ext_hdl_t aCursorHdl,
+                                  char* aRetrievedKeyBuffer,
+                                  int* aRetrievedKeySize,
+                                  int aRetrievedKeyMaxSize,
+                                  char* aRetrievedValueBuffer,
+                                  int* aRetrievedValueSize,
+                                  int aRetrievedValueMaxSize,
+                                  skv_cursor_flags_t aFlags );
+\end{lstlisting}
+
+\begin{description}
+\item[aCursorHdl] The cursor handle returned from the
+  OpenLocalCursor() call.
+\item[aRetrievedKeyBuffer] Points to a buffer that will contain the
+  first retreived key.
+\item[aRetrievedKeySize] Will contain the size of the retrieved key
+  when the call returns.
+\item[aRetrievedKeyMaxSize] The maximum size of any key expected for
+  the cursor (\abrIE the size of the provided buffer).
+\item[aRetrievedValueBuffer] Points to a buffer that will contain the
+  first retrieved value.
+\item[aRetrievedValueSize] Will contain the size of the retrieved
+  value when the call returns.
+\item[aRetrievedValueMaxSize] The maximum size of any value expected
+  for the cursor (\abrIE the size of the provided buffer).
+\item[aFlags] Currently not in use.  First- and Next- call set these
+  flags accordingly so that there's nothing to do for the user.
+\end{description}
+
+\begin{lstlisting}
+skv_status_t CloseLocalCursor( skv_client_cursor_ext_hdl_t aCursorHdl );
+\end{lstlisting}
+
+Closes the cursor and invalidates the cursor handle.
+\begin{description}
+\item[aCursorHdl] The cursor handle returned from the
+  OpenLocalCursor() call.
+\end{description}
+
+\subsubsection{Global Iterator}\label{sec:api:cursor_global}
+The global iterator will iterate over all available key/value pairs of
+a PDS on all connected servers.  The usage of the API calls is the
+same as for the local generator.
+
+\begin{lstlisting}
+skv_status_t OpenCursor( skv_pds_id_t* aPDSId,
+                         skv_client_cursor_ext_hdl_t* aCursorHdl );
+
+skv_status_t CloseCursor( skv_client_cursor_ext_hdl_t aCursorHdl );
+
+skv_status_t GetFirstElement( skv_client_cursor_ext_hdl_t aCursorHdl,
+                              char* aRetrievedKeyBuffer,
+                              int* aRetrievedKeySize,
+                              int aRetrievedKeyMaxSize,
+                              char* aRetrievedValueBuffer,
+                              int* aRetrievedValueSize,
+                              int aRetrievedValueMaxSize,
+                              skv_cursor_flags_t aFlags );
+
+skv_status_t GetNextElement( skv_client_cursor_ext_hdl_t aCursorHdl,
+                             char* aRetrievedKeyBuffer,
+                             int* aRetrievedKeySize,
+                             int aRetrievedKeyMaxSize,
+                             char* aRetrievedValueBuffer,
+                             int* aRetrievedValueSize,
+                             int aRetrievedValueMaxSize,
+                             skv_cursor_flags_t aFlags );
+\end{lstlisting}
+
+
+\subsection{Example Client}\label{sec:api:example}
+Source not pasted here.  There are several examples that can be found
+in the SKV source tree under \verb|test|.
+
+\endinput
+
+
+
+%%% Local Variables: 
+%%% mode: latex
+%%% TeX-master: "skvdoc"
+%%% End: 
