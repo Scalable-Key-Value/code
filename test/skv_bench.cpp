@@ -31,6 +31,10 @@
 #define SKV_BENCH_DATA_LOG ( 0 )
 #endif
 
+#ifndef SKV_BENCH_RESULT_LOG
+#define SKV_BENCH_RESULT_LOG ( 1 )
+#endif
+
 #define DEFAULT_START ( 1 )
 #define DEFAULT_END   ( 2 )
 #define DEFAULT_STEP  ( 1 )
@@ -591,6 +595,9 @@ public:
                             skv_client_cmd_ext_hdl_t *aHandleBuffer,
                             int aBatchSize )
   {
+    BegLogLine( SKV_BENCH_LOG )
+      << "Started InsertBatch()"
+      << EndLogLine;
     BegLogLine( SKV_BENCH_DATA_LOG )
       << "INST FIRST HANDLE @" << (void*)aHandleBuffer << EndLogLine;
     skv_status_t status = SKV_SUCCESS;
@@ -627,6 +634,9 @@ public:
                               skv_client_cmd_ext_hdl_t *aHandleBuffer,
                               int aBatchSize )
   {
+    BegLogLine( SKV_BENCH_LOG )
+      << "Started RetrieveBatch()"
+      << EndLogLine;
     skv_status_t status = SKV_SUCCESS;
     size_t keyptr_offset = NEXT_X8_SIZE( mKeySize ) - mKeySize;
 
@@ -653,12 +663,18 @@ public:
         << " status: " << skv_status_to_string ( GetExitStatus() )
         << EndLogLine;
     }
+    BegLogLine( SKV_BENCH_LOG )
+      << "Completed RetrieveBatch()"
+      << EndLogLine;
     return status;
   }
   skv_status_t RemoveBatch( const char* aKeyBuffer,
                             skv_client_cmd_ext_hdl_t *aHandleBuffer,
                             int aBatchSize )
   {
+    BegLogLine( SKV_BENCH_LOG )
+      << "Started RemoveBatch()"
+      << EndLogLine;
     skv_status_t status = SKV_SUCCESS;
     size_t keyptr_offset = NEXT_X8_SIZE( mKeySize ) - mKeySize;
 
@@ -679,10 +695,16 @@ public:
         << " status: " << skv_status_to_string ( GetExitStatus() )
         << EndLogLine;
     }
+    BegLogLine( SKV_BENCH_LOG )
+      << "Completed RemoveBatch()"
+      << EndLogLine;
     return status;
   }
   skv_status_t WaitForBatch( skv_client_cmd_ext_hdl_t *aHandleBuffer, int aItems )
   {
+    BegLogLine( SKV_BENCH_LOG )
+      << "Started WaitForBatch()"
+      << EndLogLine;
     BegLogLine( SKV_BENCH_DATA_LOG )
       << "WAIT FIRST HANDLE @" << (void*)aHandleBuffer << EndLogLine;
     for( int i=0; ( i < aItems ); i++ )
@@ -1142,8 +1164,11 @@ main(int argc, char **argv)
         converged = glAvg.Converged( config.mAvgError, &sdev );
         if( config.mRank == 0 )
           {
+#if ( SKV_BENCH_RESULT_LOG == 0 )
             std::cout << ".";
-            // std::cout << "\r" << std::setw(SB_OUT_KVLEN) << " *" << " |*|" << bench << ": " << sdev << "%" << std::endl;
+#else
+            std::cout << std::setw(SB_OUT_KVLEN) << " *" << " |*|" << bench << ": " << sdev << "%" << std::endl;
+#endif
             // std::cout << std::setw(SB_OUT_KVLEN) << " *" << " |*|" << glAvg << std::endl;
           }
 
