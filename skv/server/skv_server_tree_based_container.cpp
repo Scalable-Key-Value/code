@@ -10,7 +10,7 @@
  * Contributors:
  *     arayshu, lschneid - initial implementation
  */
-
+#include <mpi.h>
 #include <skv/client/skv_client_server_conn.hpp>
 #include <skv/common/skv_client_server_protocol.hpp>
 #include <skv/server/skv_server_tree_based_container.hpp>

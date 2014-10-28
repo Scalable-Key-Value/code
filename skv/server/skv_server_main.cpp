@@ -11,6 +11,7 @@
  *     arayshu, lschneid - initial implementation
  */
 
+#include <mpi.h>
 #include <skv/common/skv_types.hpp>
 #include <skv/common/skv_client_server_headers.hpp>
 #include <skv/client/skv_client_server_conn.hpp>
