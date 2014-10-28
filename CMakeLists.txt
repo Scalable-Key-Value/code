@@ -52,15 +52,10 @@ else()
   include(MPI/${SKV_MPI})
 endif()
 
-include_directories(${MPI_INCLUDE_PATH})
-
-
 #------------------------------------------------------------------------------
 # Options
 #------------------------------------------------------------------------------
 
-# eile: Disabled static linking. For some unfathomable reason fxlogger
-# then forces the link against gcc 4.4.7 libs which can't work
 set(COMMON_LIBRARY_TYPE STATIC SHARED)
 
 #############################################
@@ -173,8 +168,11 @@ add_definitions(
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
+# delay as late as possible. Include path includes mpi-gcc-specific (4.4)
+# headers which might clash with the headers used by the actual gcc (4.8)
+include_directories(${MPI_INCLUDE_PATH})
 
 #------------------------------------------------------------------------------
 # Create library targets
@@ -229,7 +227,8 @@ endforeach()
 foreach(_test ${TEST_MPI_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
-  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common ${IT_API_LINK_LIBRARIES} fxlogger
+  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common
+    ${IT_API_LINK_LIBRARIES} fxlogger
     ${MPI_CXX_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
