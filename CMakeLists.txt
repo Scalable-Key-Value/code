@@ -168,7 +168,8 @@ add_definitions(
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
 # Include MPI path last, as it includes mpi-gcc-specific (4.4) headers
 # which might clash with the headers used by the actual gcc (4.8)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -idirafter ${MPI_INCLUDE_PATH}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
 #------------------------------------------------------------------------------
 # Create library targets
