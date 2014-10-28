@@ -144,9 +144,7 @@ set(IT_API_PUBLIC_HEADERS
   it_api/it_api_os_specific.h
 )
 
-set(IT_API_LINK_LIBRARIES ${IT_API_LIBS} )
-
-
+set(IT_API_LINK_LIBRARIES ${IT_API_LIBS})
 
 #------------------------------------------------------------------------------
 # Compile settings
@@ -168,11 +166,9 @@ add_definitions(
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
-
-# delay as late as possible. Include path includes mpi-gcc-specific (4.4)
-# headers which might clash with the headers used by the actual gcc (4.8)
-include_directories(${MPI_INCLUDE_PATH})
+# Include MPI path last, as it includes mpi-gcc-specific (4.4) headers
+# which might clash with the headers used by the actual gcc (4.8)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -idirafter ${MPI_INCLUDE_PATH}")
 
 #------------------------------------------------------------------------------
 # Create library targets
