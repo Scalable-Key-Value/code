@@ -10,6 +10,7 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake
   ${CMAKE_SOURCE_DIR}/CMake/common)
 include(GitExternal)
 include(Common)
+set(SKV_DEPENDENT_LIBRARIES OFED)
 
 # pick up any site specific configuration that might differ from default
 set(SKV_SITE "default" CACHE STRING
