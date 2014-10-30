@@ -1524,10 +1524,10 @@ Init( int   aRank,
         my_addr.sin_family = ifent->ifa_addr->sa_family;
         my_addr.sin_addr.s_addr = tmp->sin_addr.s_addr;
         snprintf( ServerName, SKV_MAX_SERVER_ADDR_NAME_LENGTH, "%d.%d.%d.%d",
-                  (int) ((char*) &(tmp->sin_addr.s_addr))[0],
-                  (int) ((char*) &(tmp->sin_addr.s_addr))[1],
-                  (int) ((char*) &(tmp->sin_addr.s_addr))[2],
-                  (int) ((char*) &(tmp->sin_addr.s_addr))[3] );
+                  (int) ((unsigned char*) &(tmp->sin_addr.s_addr))[0],
+                  (int) ((unsigned char*) &(tmp->sin_addr.s_addr))[1],
+                  (int) ((unsigned char*) &(tmp->sin_addr.s_addr))[2],
+                  (int) ((unsigned char*) &(tmp->sin_addr.s_addr))[3] );
         BegLogLine( 1 )
           << "skv_server_t: got addr: " << (void*)(uintptr_t)my_addr.sin_addr.s_addr << "; fam: " << tmp->sin_family
           << " ServerName:" << ServerName
