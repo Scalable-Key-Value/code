@@ -10,7 +10,6 @@ list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake
   ${CMAKE_SOURCE_DIR}/CMake/common)
 include(GitExternal)
 include(Common)
-set(SKV_DEPENDENT_LIBRARIES OFED)
 
 # pick up any site specific configuration that might differ from default
 set(SKV_SITE "default" CACHE STRING
@@ -88,6 +87,7 @@ if(SKV_COMM_API_TYPE MATCHES "verbs")
     # enable workaround for missing RoQ loopback functionality
     -DSKV_ROQ_LOOPBACK_WORKAROUND
   )
+  set(SKV_DEPENDENT_LIBRARIES OFED)
 endif()
 if(SKV_COMM_API_TYPE MATCHES "sockets")
   set( IT_API_LIBS pthread rt )
