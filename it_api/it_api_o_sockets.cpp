@@ -315,7 +315,7 @@ write_to_socket( int sock, char * buff, int len, int* wlen )
 static
 inline
 iWARPEM_Status_t
-write_to_socket( int sock, struct iovec *iov, int iov_count, int* wlen )
+write_to_socket_writev( int sock, struct iovec *iov, int iov_count, int* wlen )
 {
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
     << "Writing to FD=" << sock
@@ -351,6 +351,33 @@ writev_retry:
   return IWARPEM_SUCCESS;
 }
 
+static iWARPEM_Status_t write_to_socket(int sock,struct iovec *iov, int iov_count, int* wlen)
+  {
+    if ( iov_count == 0 )
+      {
+        *wlen = 0 ;
+        return IWARPEM_SUCCESS;
+      }
+    else if ( iov_count == 1 )
+      {
+        return write_to_socket(sock,(char *)iov[0].iov_base, iov[0].iov_len,wlen) ;
+      }
+    else {
+        size_t total_len=0 ;
+        for ( int a=0;a<iov_count;a+=1)
+          {
+            total_len += iov[a].iov_len ;
+          }
+        char buffer[total_len] ;
+        size_t buffer_index=0 ;
+        for ( int b=0;b<iov_count;b+=1)
+          {
+            memcpy(buffer+buffer_index,iov[b].iov_base,iov[b].iov_len) ;
+            buffer_index += iov[b].iov_len ;
+          }
+        return write_to_socket(sock,buffer,total_len, wlen) ;
+    }
+  }
 #ifndef IT_API_READ_FROM_SOCKET_HIST 
 #define IT_API_READ_FROM_SOCKET_HIST ( 0 )
 #endif
