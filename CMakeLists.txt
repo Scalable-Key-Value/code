@@ -52,16 +52,10 @@ else()
   include(MPI/${SKV_MPI})
 endif()
 
-include_directories(${MPI_INCLUDE_PATH})
-
-
 #------------------------------------------------------------------------------
 # Options
 #------------------------------------------------------------------------------
-
-# eile: Disabled static linking. For some unfathomable reason fxlogger
-# then forces the link against gcc 4.4.7 libs which can't work
-set(COMMON_LIBRARY_TYPE STATIC SHARED)
+set(COMMON_LIBRARY_TYPE STATIC)
 
 #############################################
 # Define the local KV backend to use
@@ -93,6 +87,7 @@ if(SKV_COMM_API_TYPE MATCHES "verbs")
     # enable workaround for missing RoQ loopback functionality
     -DSKV_ROQ_LOOPBACK_WORKAROUND
   )
+  set(SKV_DEPENDENT_LIBRARIES OFED)
 endif()
 if(SKV_COMM_API_TYPE MATCHES "sockets")
   set( IT_API_LIBS pthread rt )
@@ -149,9 +144,7 @@ set(IT_API_PUBLIC_HEADERS
   it_api/it_api_os_specific.h
 )
 
-set(IT_API_LINK_LIBRARIES ${IT_API_LIBS} )
-
-
+set(IT_API_LINK_LIBRARIES ${IT_API_LIBS})
 
 #------------------------------------------------------------------------------
 # Compile settings
@@ -173,8 +166,10 @@ add_definitions(
 )
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w -std=c99")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=c++0x")
-
+# Include MPI path last, as it includes mpi-gcc-specific (4.4) headers
+# which might clash with the headers used by the actual gcc (4.8)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
 #------------------------------------------------------------------------------
 # Create library targets
@@ -229,7 +224,8 @@ endforeach()
 foreach(_test ${TEST_MPI_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
-  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common ${IT_API_LINK_LIBRARIES} fxlogger
+  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common
+    ${IT_API_LINK_LIBRARIES} fxlogger
     ${MPI_CXX_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()

@@ -11,6 +11,7 @@
 add_definitions(
 # enable logging in general
  -DPKFXLOG
+
 # all logging enabled
 # -DSKV_LOGGING_ALL=1
 

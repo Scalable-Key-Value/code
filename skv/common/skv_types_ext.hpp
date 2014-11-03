@@ -18,9 +18,9 @@
 #include <mpi.h>
 #endif
 
-#include <arpa/inet.h>
 #include <skv/common/skv_errno.hpp>
 #include <skv/c/skv.h>
+#include <arpa/inet.h>
 
 #ifdef SKV_CLIENT_FILEBASED
 // \todo: check if this is outdated
