@@ -26,6 +26,10 @@
 #define SKV_CTRL_MSG_FLAG_REQUEST_COMPLETE  0x01
 #define SKV_CTRL_MSG_FLAG_RESPONSE_COMPLETE 0x02
 
+#define SKV_MAX_COALESCED_COMMANDS ( 4 )
+#define SKV_COMMAND_PIPELINE_THRESHOLD ( 4 )   // number of outstanding post_rdma_write() to fill the pipeline
+
+
 /***************************************************
  * Header Structures
  ***************************************************/

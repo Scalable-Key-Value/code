@@ -38,9 +38,7 @@ typedef enum
 } skv_client_conn_state_t;
 
 #define ALIGNMENT ( 256 )
-#define SKV_MAX_COALESCED_COMMANDS ( 4 )
 #define SKV_MAX_UNRETIRED_CMDS ( SKV_MAX_COMMANDS_PER_EP * SKV_MAX_COALESCED_COMMANDS )
-#define SKV_COMMAND_PIPELINE_THRESHOLD ( 4 )   // number of outstanding post_rdma_write() to fill the pipeline
 
 struct skv_client_server_conn_t;
 

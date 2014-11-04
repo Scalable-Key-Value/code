@@ -177,7 +177,7 @@ GetEPStateForEPHdl( it_ep_handle_t aEP )
 }
 
 
-// This is a dump wrapper to be able to count rdma-write completions via function-ptr that is picked from the cookie
+// This is a dumb wrapper to be able to count rdma-write completions via function-ptr that is picked from the cookie
 void*
 EPSTATE_CountSendCompletionsCallback( void* Arg )
 {

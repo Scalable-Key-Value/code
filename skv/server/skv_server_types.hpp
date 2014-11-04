@@ -44,6 +44,10 @@
 #define SKV_SERVER_RDMA_RESPONSE_PLACEMENT_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_SERVER_RESPONSE_COALESCING_LOG
+#define SKV_SERVER_RESPONSE_COALESCING_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
 #ifndef SKV_SERVER_TRACE
 #define SKV_SERVER_TRACE ( 0 )
 #endif
@@ -707,6 +711,11 @@ typedef skv_array_queue_t< skv_server_event_t*, SKV_SERVER_PENDING_EVENTS_PER_EP
 
 #define CACHE_ALIGNED __attribute__((aligned (128)))
 
+struct skv_server_queued_respcommand_rep_t
+{
+  // sendseg is hold in separate array to allow post_rdma() without extra copy of segment list
+  uint64_t mSeqNo;
+};
 
 struct skv_server_ep_state_t
 {
@@ -742,6 +751,10 @@ struct skv_server_ep_state_t
   int                                                     mClientGroupOrdinal;
   skv_client_group_id_t                                   mClientGroupId;
   int                                                     mClientCurrentResponseSlot;
+
+  it_lmr_triplet_t mQueuedSegments[ SKV_SERVER_COMMAND_SLOTS ];   // hold request segments for post_rmda_write() call
+  int mInFlightWriteCount;
+  int mResponseSegsCount;
 
   int                          mCurrentCommandSlot;
 
@@ -927,6 +940,9 @@ struct skv_server_ep_state_t
 
     mClientCurrentResponseSlot = 0;
 
+    memset( mQueuedSegments, 0, sizeof( it_lmr_triplet_t ) * SKV_SERVER_COMMAND_SLOTS );
+    mInFlightWriteCount = 0;
+    mResponseSegsCount = 0;
 
 #define SAFETY_GAP 256
 #define ALIGNMENT ( 256 )
@@ -1116,6 +1132,23 @@ struct skv_server_ep_state_t
       << " dispatched: " << mDispatchedCommandBufferIndex
       << " unstalling EP"
       << EndLogLine;
+
+    mInFlightWriteCount--;
+    bool needpost = ( ( mInFlightWriteCount < 1) &&
+        ( mResponseSegsCount > 0 ) );
+
+    BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
+      << "AllSendsComplete: EP: " << (void*)this
+      << " needpost: " << needpost
+      << " SigInFlight: " << mInFlightWriteCount
+      << " mSegsCount: " << mResponseSegsCount
+      << " cmdslot: " << aSignaledCommandBufferIndex
+      << EndLogLine;
+
+    if( needpost )
+    {
+      PostResponse( );
+    }
 
     if( ( EPisStalled() ) &&
         ( mUsedCommandSlotIndex != aSignaledCommandBufferIndex ) )
@@ -1460,9 +1493,9 @@ struct skv_server_ep_state_t
     return address;
   }
   void
-  ClientResonseBufferAdvance()
+  ClientResonseBufferAdvance( int aEntries = 1 )
   {
-    mClientCurrentResponseSlot = (mClientCurrentResponseSlot + 1) % SKV_SERVER_COMMAND_SLOTS;
+    mClientCurrentResponseSlot = (mClientCurrentResponseSlot + aEntries ) % SKV_SERVER_COMMAND_SLOTS;
   }
 
 
@@ -1528,9 +1561,9 @@ struct skv_cmd_retrieve_resp_t
       << EndLogLine;
 #endif
 
-    status = PostResponse( SendLmrTriplet,
-                           aSeqNo,
-                           mDispatchedCommandBufferIndex );
+      status = PostOrStoreResponse( SendLmrTriplet,
+                                  aSeqNo,
+                                  mDispatchedCommandBufferIndex );
 
     // if posted successfully, detach CCB and sendBuff and get both back to the free lists
     if( status == SKV_SUCCESS )
@@ -1573,30 +1606,27 @@ struct skv_cmd_retrieve_resp_t
     return status;
   }
 
-  skv_status_t
-  PostResponse( skv_lmr_triplet_t*  aSendTriplet,
-                int*                 aSeqNo,
-                int                  aDispatchedIndex )
+  inline skv_status_t
+  PostResponse( )
   {
-    // if the server slot is 0 the do a signalled
     skv_server_rdma_write_cmpl_cookie_t Cookie;
     it_dto_flags_t dto_write_flags = (it_dto_flags_t) (0);
 
-    int dest_resp_slot = GetCurrentClientResponseBufferSlotOrd();   // signaling based on response slot because out-of-order commands don't progress dispatched index
-    if( (dest_resp_slot % (SKV_SIGNALED_WRITE_INTERVAL)) == 0 )   //
+    int dest_resp_slot = GetCurrentClientResponseBufferSlotOrd() + mResponseSegsCount -1;   // signaling based on response slot because out-of-order commands don't progress dispatched index
+
+    // make a signalled write whenever current slot and last slot cross the "signaled-write-interval"
+    if( (dest_resp_slot^( GetCurrentClientResponseBufferSlotOrd()-1 )) >> SKV_SIGNALED_WRITE_INTERVAL_SHIFT != 0 )
     {
-      // first attempts without notification (send still in place)
       dto_write_flags = (it_dto_flags_t) (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG);
 
       skv_server_rdma_write_cmpl_func_t cbFunc = EPSTATE_CountSendCompletionsCallback;
 
-      Cookie.Init( this, cbFunc, aDispatchedIndex, 1 );
+      Cookie.Init( this, cbFunc, mDispatchedCommandBufferIndex, 1 );
 
       BegLogLine( SKV_SERVER_PENDING_EVENTS_LOG | SKV_SERVER_COMMAND_POLLING_LOG )
         << "skv_server_ep_state_t::PostResponse():  preparing cookie"
         << " EP: " << ( void* )this
-        << " SBord: " << aDispatchedIndex << " "
-        << *aSendTriplet
+        << " SBord: " << mDispatchedCommandBufferIndex << " "
         << " SeqNo: " << (void*)cbFunc
         << EndLogLine;
 
@@ -1608,40 +1638,23 @@ struct skv_cmd_retrieve_resp_t
 
     it_rdma_addr_t dest_resp_addr = (it_rdma_addr_t) (GetClientResponseBufferAddress());
 
-    it_lmr_triplet_t seg_tx;
-    seg_tx.addr.abs = (char *) aSendTriplet->GetAddr();
-    seg_tx.length   = aSendTriplet->GetLen();
-    seg_tx.lmr      = aSendTriplet->GetLMRHandle();
-
-    skv_server_to_client_cmd_hdr_t *hdr = (skv_server_to_client_cmd_hdr_t*)seg_tx.addr.abs;
-    ((char*)seg_tx.addr.abs)[SKV_CONTROL_MESSAGE_SIZE-1] = hdr->CheckSum();
-
-    BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG )
-      << "skv_server_ep_state_t::PostResponse(): "
-      << " EP: "        << (void*)this
-      << " clientCCB: " << (void*)(hdr->mCmdCtrlBlk)
+    BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
+      << "PostResponse: EP: " << (void*)this
+      << " SigInFlight: " << mInFlightWriteCount
+      << " mSegsCount: " << mResponseSegsCount
+      << " base_clnt_slot: " << dest_resp_slot
+      << " dest_resp_addr: " << (void*)dest_resp_addr
+      << " rmr: " << mClientResponseRMR
       << EndLogLine;
-
-// #define HEXLOG( x )  (  (void*) (*((uint64_t*) &(x)) ) )
-//     uintptr_t *buffer = (uintptr_t*)seg_tx.addr.abs;
-//     BegLogLine( 1 )
-//       << "responseBuff: " << HEXLOG(buffer[ 0 ])
-//       << " " << HEXLOG(buffer[ 1 ])
-//       << " " << HEXLOG(buffer[ 2 ])
-//       << " " << HEXLOG(buffer[ 3 ])
-//       << " " << HEXLOG(buffer[ 4 ])
-//       << " TRLFLG: " << HEXLOG(buffer[ SKV_CONTROL_MESSAGE_SIZE / sizeof(uintptr_t) -1 ])
-//       << " slot@: " << (void*)buffer
-//       << EndLogLine;
 
     gSKVServerRDMAResponseStart.HitOE( SKV_SERVER_TRACE,
                                        "SKVServerRDMAResponse",
-                                       aDispatchedIndex,
+                                       mDispatchedCommandBufferIndex,
                                        gSKVServerRDMAResponseStart );
 
     it_status_t status = it_post_rdma_write( mEPHdl,
-                                             &seg_tx,
-                                             1,
+                                             mQueuedSegments,
+                                             mResponseSegsCount,
                                              Cookie.GetCookie(),
                                              dto_write_flags,
                                              dest_resp_addr,
@@ -1649,32 +1662,107 @@ struct skv_cmd_retrieve_resp_t
 
     gSKVServerRDMAResponseFinis.HitOE( SKV_SERVER_TRACE,
                                        "SKVServerRDMAResponse",
-                                       aDispatchedIndex,
+                                       mDispatchedCommandBufferIndex,
                                        gSKVServerRDMAResponseFinis );
 
-    if( status == IT_ERR_TOO_MANY_POSTS )
+    switch( status )
     {
-      BegLogLine( 1 )
-        << "skv_server_ep_state_t::PostResponse():: "
-        << " post queue exhausted"
-        << EndLogLine;
-      return SKV_ERRNO_COMMAND_LIMIT_REACHED;
+      case IT_ERR_TOO_MANY_POSTS:
+        BegLogLine( 1 )
+          << "skv_server_ep_state_t::PostResponse():: "
+          << " post queue exhausted"
+          << EndLogLine;
+        return SKV_ERRNO_COMMAND_LIMIT_REACHED;
+
+      case IT_SUCCESS:
+
+        ClientResonseBufferAdvance( mResponseSegsCount );
+
+        if( dto_write_flags != 0 )
+          mInFlightWriteCount++;
+        mResponseSegsCount = 0;
+        break;
+
+      default:
+        BegLogLine( 1 )
+          << "skv_server_ep_state_t::PostResponse():: "
+          << " status: " <<  status
+          << EndLogLine;
+
+        return SKV_ERRNO_IT_POST_SEND_FAILED;
     }
-
-    if( status != IT_SUCCESS )
-    {
-      BegLogLine( 1 )
-        << "skv_server_ep_state_t::PostResponse():: "
-        << " status: " <<  status
-        << EndLogLine;
-
-      return SKV_ERRNO_IT_POST_SEND_FAILED;
-    }
-
-    ClientResonseBufferAdvance();
-    (*aSeqNo)++;
-
     return SKV_SUCCESS;
+  }
+
+  skv_status_t
+  PostOrStoreResponse( skv_lmr_triplet_t*  aSendTriplet,
+                       int*                 aSeqNo,
+                       int                  aDispatchedIndex )
+  {
+    skv_status_t status = SKV_SUCCESS;
+
+    // requests cannot be combined when server buffer would wrap around
+    int base_clnt_slot = GetCurrentClientResponseBufferSlotOrd();   // signaling based on response slot because out-of-order commands don't progress dispatched index
+
+    AssertLogLine( base_clnt_slot + mResponseSegsCount < SKV_SERVER_COMMAND_SLOTS )
+      << "skv_server_ep_state_t:: protocol failure. client-response-slot and send segment counter out of range. "
+      << " base_slot: " << base_clnt_slot
+      << " segm. count: " << mResponseSegsCount
+      << EndLogLine;
+
+    // store the request metadata and send segments for potentially deferred post_rdma_write
+//    mQueuedSegments[ mResponseSegsCount ] = aSendTriplet->GetTriplet();
+    mQueuedSegments[ mResponseSegsCount ].addr = aSendTriplet->mLMRTriplet.addr;
+    mQueuedSegments[ mResponseSegsCount ].length = aSendTriplet->mLMRTriplet.length;
+    mQueuedSegments[ mResponseSegsCount ].lmr = aSendTriplet->mLMRTriplet.lmr;
+    mResponseSegsCount++;
+
+    skv_server_to_client_cmd_hdr_t *hdr = (skv_server_to_client_cmd_hdr_t*)aSendTriplet->GetAddr();
+    ((char*)hdr)[SKV_CONTROL_MESSAGE_SIZE-1] = hdr->CheckSum();
+
+    BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG )
+      << "skv_server_ep_state_t::PostOrStoreResponse(): "
+      << " EP: "        << (void*)this
+      << " clientCCB: " << (void*)(hdr->mCmdCtrlBlk)
+      << EndLogLine;
+
+    // #define HEXLOG( x )  (  (void*) (*((uint64_t*) &(x)) ) )
+    //     uintptr_t *buffer = (uintptr_t*)seg_tx.addr.abs;
+    //     BegLogLine( 1 )
+    //       << "responseBuff: " << HEXLOG(buffer[ 0 ])
+    //       << " " << HEXLOG(buffer[ 1 ])
+    //       << " " << HEXLOG(buffer[ 2 ])
+    //       << " " << HEXLOG(buffer[ 3 ])
+    //       << " " << HEXLOG(buffer[ 4 ])
+    //       << " TRLFLG: " << HEXLOG(buffer[ SKV_CONTROL_MESSAGE_SIZE / sizeof(uintptr_t) -1 ])
+    //       << " slot@: " << (void*)buffer
+    //       << EndLogLine;
+
+    /* post an actual rdma request if:
+     * - the pipeline isn't full yet
+     * - the max number of send-segments is reached
+     * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
+     */
+    bool needpost = ( ( mInFlightWriteCount < 2 ) ||
+        ( mResponseSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
+        (( base_clnt_slot + mResponseSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
+
+    BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
+      << "PostOrStoreResponse: EP: " << (void*)this
+      << " needpost: " << needpost
+      << " inFlight: " << mInFlightWriteCount
+      << " mSegsCount: " << mResponseSegsCount
+      << " base_clnt_slot: " << base_clnt_slot
+      << " sndtrplt: " << *aSendTriplet
+      << " aSeqNo: " << aSeqNo
+      << EndLogLine;
+
+    if( needpost )
+    {
+      status = PostResponse( );
+    }
+    (*aSeqNo)++;
+    return status;
   }
 };
 

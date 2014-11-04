@@ -55,7 +55,7 @@ extern "C"
  *  \note This must not exceed the number of WQEs that is set for the verbs QP (setting inside IT_API)
  */
 #define SKV_MAX_COMMANDS_PER_EP                     ( 32 )
-#define SKV_SIGNALED_WRITE_INTERVAL                 ( 16 )   // !!! has to be less/equal than SKV_MAX_COMMANDS_PER_EP !!!
+#define SKV_SIGNALED_WRITE_INTERVAL_SHIFT           ( 2 )   // 2^# has to be less/equal than SKV_COMMAND_PIPELINE_THRESHOLD !!!
 #define SKV_SERVER_SENDQUEUE_SIZE                   ( SKV_MAX_COMMANDS_PER_EP * 16 )
 #define SKV_SERVER_PENDING_EVENTS_PER_EP            ( SKV_MAX_COMMANDS_PER_EP + 4 )
 #define SKV_SERVER_COMMAND_SLOTS                    ( SKV_MAX_COMMANDS_PER_EP * 2 )
