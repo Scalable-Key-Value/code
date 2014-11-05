@@ -143,6 +143,7 @@ class skv_server_retrieve_command_sm
     BegLogLine( SKV_SERVER_RETRIEVE_COMMAND_SM_LOG)
       << "skv_server_retrieve_command_sm::Execute()::"
       << " completing retrieve with status: " << skv_status_to_string( aRC )
+      << " ValueSize: " << aCmpl->mValue.mValueSize
       << EndLogLine;
 
     aCmpl->mStatus = aRC;
@@ -207,7 +208,7 @@ class skv_server_retrieve_command_sm
                                                  aMyRank,
                                                  gSKVServerInsertRetrieveFromTreeFinis );
 
-    if( status == SKV_SUCCESS )
+    if(( status == SKV_SUCCESS )||( status == SKV_ERRNO_NEED_DATA_TRANSFER )||( status == SKV_ERRNO_VALUE_TOO_LARGE ))
       BegLogLine( SKV_SERVER_RETRIEVE_COMMAND_SM_LOG )
         << "skv_server_retrieve_command_sm:: "
         << " local retrieve status: " << skv_status_to_string( status )
@@ -321,6 +322,10 @@ public:
                 break;
               case SKV_ERRNO_NEED_DATA_TRANSFER:
                 status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                // update the references for the potentially new send buffer
+                Req = (skv_cmd_RIU_req_t *) Command->GetSendBuff();
+                Resp = (skv_cmd_retrieve_value_rdma_write_ack_t*) Req;
+
                 status = retrieve_post_rdma( aEPState,
                                              Req,
                                              &ValueMemRep,
@@ -328,6 +333,12 @@ public:
                                              aMyRank );
 
                 Resp->mValue.mValueSize = TotalSize;
+
+                BegLogLine( SKV_SERVER_RETRIEVE_COMMAND_SM_LOG )
+                  << "skv_server_retrieve_command_sm:: posted rdma_write()"
+                  << " SndBuf: @" << (void*)Resp
+                  << " size:" << Resp->mValue.mValueSize
+                  << EndLogLine;
 
                 Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
@@ -386,6 +397,9 @@ public:
               {
                 status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
                 skv_lmr_triplet_t *ValueMemRep = &(Command->mLocalKVData.mRDMA.mValueRDMADest);
+                // update the references for the new send buffer
+                Req = (skv_cmd_RIU_req_t *) Command->GetSendBuff();
+                Resp = (skv_cmd_retrieve_value_rdma_write_ack_t*) Req;
 
                 status = retrieve_post_rdma( aEPState,
                                              Req,
@@ -461,6 +475,12 @@ public:
         {
           case SKV_SERVER_EVENT_TYPE_IT_DTO_RDMA_WRITE_CMPL:
           {
+          BegLogLine( SKV_SERVER_RETRIEVE_COMMAND_SM_LOG )
+            << "skv_server_retrieve_command_sm:: completed rdma_write()"
+            << " SndBuf: @" << (void*)Command->GetSendBuff()
+            << " size:" << ((skv_cmd_retrieve_value_rdma_write_ack_t*)Command->GetSendBuff())->mValue.mValueSize
+            << EndLogLine;
+
             status = aLocalKV->RetrievePostProcess( Command->mLocalKVData.mRDMA.mReqCtx );
             status = command_completion( status,
                                          aEPState,

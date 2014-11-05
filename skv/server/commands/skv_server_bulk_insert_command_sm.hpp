@@ -241,11 +241,10 @@ public:
             }
 
             create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req, &NewRecordAllocRep );
-
             bulk_insert_post_rdma( aEPState,
                                    aLocalKV,
                                    aCommandOrdinal,
-                                   Req,
+                                   (skv_cmd_bulk_insert_req_t *)Command->GetSendBuff(),
                                    &NewRecordAllocRep,
                                    aSeqNo,
                                    aMyRank );
