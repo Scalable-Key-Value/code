@@ -1167,7 +1167,10 @@ skv_local_kv_asyncmem::PerformRetrieve( skv_local_kv_request_t *aReq )
       StoredValueRep.SetLenIfSmaller( Retrieve->mValueSize );
     }
 
-    if( !(Retrieve->mFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
+    int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
+    int ValueFitsInBuff = (StoredValueRep.GetLen() <= RoomForData);
+
+    if( !(Retrieve->mFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) && !(ValueFitsInBuff) )
       status = SKV_ERRNO_NEED_DATA_TRANSFER;
   }
   else

@@ -54,11 +54,8 @@ struct skv_client_command_retrieve_t
 {
   skv_cmd_RIU_flags_t   mFlags;
 
-  union
-  {
-    it_lmr_handle_t     mValueLMR;
-    void*               mValueAddr;
-  } mValueBufferRef;
+  it_lmr_handle_t     mValueLMR;
+  void*               mValueAddr;
 
   int*                  mValueRetrievedSize;
   int                   mValueRequestedSize;

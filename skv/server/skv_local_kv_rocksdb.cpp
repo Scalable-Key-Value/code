@@ -939,7 +939,10 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
                             (char*)((uintptr_t)value->data() + aReq->mRequest.mRetrieve.mValueOffset),
                             RetrieveSize );
 
-    if( !(aReq->mRequest.mRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
+    int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
+    int ValueFitsInBuff = (RetrieveSize <= RoomForData);
+
+    if( !(aReq->mRequest.mRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) && !(ValueFitsInBuff) )
     {
       status = SKV_ERRNO_NEED_DATA_TRANSFER;
     }

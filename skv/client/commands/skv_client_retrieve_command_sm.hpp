@@ -38,10 +38,11 @@ public:
 
     skv_cmd_RIU_flags_t Flags = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mFlags;
 
+    // check needs to be based on the initial flag because if value didn't fit, we have a registerd value buffer to release
     if( !( Flags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG ) )
       {
         // Release LMRs
-        it_lmr_handle_t lmrHdl = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueLMR;
+        it_lmr_handle_t lmrHdl = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueLMR;
 
         it_status_t status = it_lmr_free( lmrHdl );
 
@@ -100,24 +101,36 @@ public:
 
                 Ack->EndianConvert() ;
                 int retrievedSize = Ack->mValue.mValueSize;
+                int requestedSize = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueRequestedSize;
 
-                // if the server indicates that there's more data, then only get the amount that fits into user buffer!
-                if( Ack->mStatus == SKV_ERRNO_VALUE_TOO_LARGE )
-                  {
-                  retrievedSize = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueRequestedSize;
-                  // Ack->mStatus = SKV_SUCCESS;
-                  }
+                // make sure we copy only the min of retrievedSize and requestedSize!
+                int copySize = retrievedSize < requestedSize ? retrievedSize : requestedSize;
 
-                // get value data out of response if flags indicate that it fit
-                if( aCCB->mCommand.mCommandBundle.mCommandRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG )
+                // now we can determine the reporting size according to user flags and server status code
+
+                // the server indicates more available data via SKV_ERRNO_VALUE_TOO_LARGE
+                // we change that back to SKV_SUCCESS if the user requested only this specific size of data
+                // (i.e. is not interested in the stored size)
+                if( ( aCCB->mCommand.mCommandBundle.mCommandRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN ) &&
+                    ( Ack->mStatus == SKV_ERRNO_VALUE_TOO_LARGE ) )
+                {
+                  Ack->mStatus = SKV_SUCCESS;
+                  if( requestedSize < retrievedSize )
+                    retrievedSize = requestedSize;
+                }
+
+                // get value data out of response if the actually transferred size fits in control message
+                int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
+                if( copySize <= RoomForData )
                   {
-                    void* valueBuffer = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueAddr;
+                    void* valueBuffer = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueAddr;
 
                     BegLogLine( SKV_CLIENT_RETRIEVE_COMMAND_SM_LOG )
                       << "skv_client_retrieve_command_sm::Execute(): about to copy retrieved data"
                       << " uBuf: " << (void*)valueBuffer
                       << " rBuf: " << (void*)Ack->mValue.mData
-                      << " size: " << retrievedSize
+                      << " copySize: " << copySize
+                      << " retrievedSize:" << retrievedSize
                       << " CCB: " << (void*)aCCB
                       << " value: " << (void*)(*(uint64_t*)(Ack->mValue.mData))
 #ifdef SKV_DEBUG_MSG_MARKER
@@ -127,14 +140,14 @@ public:
 
                     memcpy( valueBuffer,
                             Ack->mValue.mData, 
-                            retrievedSize );
+                            copySize );
                   }
 
                 aCCB->mStatus = Ack->mStatus;
 
                 // user wanted to know the actual retrieved size
                 if( aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueRetrievedSize != NULL )
-                  *aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueRetrievedSize = Ack->mValue.mValueSize;
+                  *aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueRetrievedSize = retrievedSize;
 
                 status = Release( aConn, aCCB );
 

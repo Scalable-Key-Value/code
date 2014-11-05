@@ -496,11 +496,14 @@ iRetrieve( skv_pds_id_t*          aPDSId,
    *****************************************************/
   CmdCtrlBlk->mCommand.mType = SKV_COMMAND_RETRIEVE;
   CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mFlags              = aFlags;
-  // store either address or LMR depending on value to fit in ctrl-msg or not
-  if( aFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG )
-    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueAddr = aValueBuffer;
+
+  CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueAddr = aValueBuffer;
+
+  // if user request indicates a large transfer, we need to store the LMR
+  if( aFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG)
+    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueLMR  = (it_lmr_handle_t)IT_NULL_HANDLE;
   else
-    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueBufferRef.mValueLMR  = ValueLMR;
+    CmdCtrlBlk->mCommand.mCommandBundle.mCommandRetrieve.mValueLMR  = ValueLMR;
 
   // this is no longer ugly - it was just mad!!!
   // this is a little ugly but we need a temporary storage for the original buffer size in case the actual value in storage has a different size

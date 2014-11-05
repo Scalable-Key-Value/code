@@ -679,7 +679,10 @@ skv_local_kv_inmem::Retrieve( skv_pds_id_t aPDSId,
       aStoredValueRep->SetLenIfSmaller( aValueSize );
     }
 
-    if( !(aFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
+    int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
+    int ValueFitsInBuff = (aStoredValueRep->GetLen() <= RoomForData);
+
+    if( !(aFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) && !(ValueFitsInBuff) )
       status = SKV_ERRNO_NEED_DATA_TRANSFER;
   }
   else

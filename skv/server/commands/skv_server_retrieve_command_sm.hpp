@@ -291,26 +291,24 @@ public:
             switch( status )
             {
               case SKV_SUCCESS:
-                if( Req->mFlags & (SKV_COMMAND_RIU_INSERT_KEY_FITS_IN_CTL_MSG|SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
-                {
-#ifdef SKV_RETRIEVE_DATA_LOG
-                  HexDump FxString( (const void*)ValueMemRep.GetAddr(), ValueMemRep.GetLen() );
+                AssertLogLine( ValueMemRep.GetLen() <= SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1 )
+                  << "skv_server_retrieve_command_sm:: BUG: incorrect return code: data doesn't fit into Ctrl-msg."
+                  << EndLogLine;
 
-                  BegLogLine( 1 )
-                    << "skv_server_retrieve_command_sm:: "
-                    << " Size: " << ValueMemRep.GetLen()
-                    << " FxString: " << FxString
-                    << EndLogLine;
+#ifdef SKV_RETRIEVE_DATA_LOG
+                HexDump FxString( (const void*)ValueMemRep.GetAddr(), ValueMemRep.GetLen() );
+
+                BegLogLine( 1 )
+                  << "skv_server_retrieve_command_sm:: "
+                  << " Size: " << ValueMemRep.GetLen()
+                  << " FxString: " << FxString
+                  << EndLogLine;
 #endif
-                  memcpy( Resp->mValue.mData,
+                memcpy( Resp->mValue.mData,
                         (const void*) ValueMemRep.GetAddr(),
                         ValueMemRep.GetLen() );
-                  Resp->mValue.mValueSize = TotalSize;
-                }
-                else
-                  AssertLogLine( 1 )
-                    << "skv_server_retrieve_command_sm:: BUG: incorrect return code: data doesn't fit into Ctrl-msg."
-                    << EndLogLine;
+                // server always reports TotalSize, the client side determines what size is reported to the user
+                Resp->mValue.mValueSize = TotalSize;
 
                 status = command_completion( status,
                                              aEPState,
@@ -331,8 +329,12 @@ public:
                                              &ValueMemRep,
                                              aCommandOrdinal,
                                              aMyRank );
-
                 Resp->mValue.mValueSize = TotalSize;
+
+                BegLogLine( SKV_SERVER_RETRIEVE_COMMAND_SM_LOG )
+                  << "skv_server_retrieve_command_sm:: posted rdma_write()"
+                  << " size:" << Resp->mValue.mValueSize
+                  << EndLogLine;
 
                 BegLogLine( SKV_SERVER_RETRIEVE_COMMAND_SM_LOG )
                   << "skv_server_retrieve_command_sm:: posted rdma_write()"
@@ -415,26 +417,23 @@ public:
               {
                 skv_lmr_triplet_t *ValueMemRep = &(Command->mLocalKVData.mRDMA.mValueRDMADest);
 
-                if( Req->mFlags & (SKV_COMMAND_RIU_INSERT_KEY_FITS_IN_CTL_MSG|SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
-                {
-#ifdef SKV_RETRIEVE_DATA_LOG
-                  HexDump FxString( (const void*)ValueMemRep->GetAddr(), ValueMemRep->GetLen() );
+                AssertLogLine( ValueMemRep->GetLen() <= SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1 )
+                  << "skv_server_retrieve_command_sm:: BUG: incorrect return code: data doesn't fit into Ctrl-msg."
+                  << EndLogLine;
 
-                  BegLogLine( 1 )
-                    << "skv_server_retrieve_command_sm:: "
-                    << " Size: " << ValueMemRep->GetLen()
-                    << " FxString: " << FxString
-                    << EndLogLine;
+#ifdef SKV_RETRIEVE_DATA_LOG
+                HexDump FxString( (const void*)ValueMemRep->GetAddr(), ValueMemRep->GetLen() );
+
+                BegLogLine( 1 )
+                  << "skv_server_retrieve_command_sm:: "
+                  << " Size: " << ValueMemRep->GetLen()
+                  << " FxString: " << FxString
+                  << EndLogLine;
 #endif
-                  memcpy( Resp->mValue.mData,
-                          (const void*) ValueMemRep->GetAddr(),
-                          ValueMemRep->GetLen() );
-                  Resp->mValue.mValueSize = TotalSize;
-                }
-                else
-                  AssertLogLine( 1 )
-                    << "skv_server_retrieve_command_sm:: BUG: data doesn't fit into Ctrl-msg with incorrect return code."
-                    << EndLogLine;
+                memcpy( Resp->mValue.mData,
+                        (const void*) ValueMemRep->GetAddr(),
+                        ValueMemRep->GetLen() );
+                Resp->mValue.mValueSize = TotalSize;
 
                 status = aLocalKV->RetrievePostProcess( Command->mLocalKVData.mRDMA.mReqCtx );
                 if( status == SKV_ERRNO_LOCAL_KV_EVENT )
