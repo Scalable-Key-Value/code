@@ -99,6 +99,7 @@ add_definitions(
 # bulk-insert with checksum (debug option)
 # -DSKV_BULK_LOAD_CHECKSUM
 # -DSKV_RETRIEVE_DATA_LOG
+# -DSKV_CTRLMSG_DATA_LOG=1
 
 ##################################
 # logging in tests

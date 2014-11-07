@@ -35,7 +35,6 @@
 #define SKV_SERVER_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
 #endif
 
-
 /***************************************************
  * Structures for the CLIENT to SERVER communication
  ***************************************************/

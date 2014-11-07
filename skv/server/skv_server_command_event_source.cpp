@@ -20,6 +20,9 @@
 #include <skv/server/skv_server_event_source.hpp>
 #include <skv/server/skv_server_command_event_source.hpp>
 
+#ifndef SKV_CTRLMSG_DATA_LOG
+#define SKV_CTRLMSG_DATA_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
 
 #define SKV_SERVER_COMMAND_MEM_POLL_LOOPS 10
 #if (SKV_SERVER_COMMAND_POLLING_LOG != 0)
@@ -214,6 +217,14 @@ PrepareEvent( skv_server_event_t *currentEvent, skv_server_ep_state_t *aEPState 
 
   // acquire address of incomming request data
   skv_client_to_server_cmd_hdr_t* InBoundHdr = (skv_client_to_server_cmd_hdr_t *) RecvBuffTriplet->GetAddr();
+
+#if (SKV_CTRLMSG_DATA_LOG != 0)
+  HexDump CtrlMsgData( (void*)InBoundHdr, SKV_CONTROL_MESSAGE_SIZE );
+  BegLogLine( 1 )
+    << "INBMSG:@"<< (void*)InBoundHdr
+    << " Data:" << CtrlMsgData
+    << EndLogLine;
+#endif
 
   AssertLogLine( InBoundHdr != NULL )
     << "skv_server_t::GetServerCmdFromEP:: ERROR:: Hdr != NULL"

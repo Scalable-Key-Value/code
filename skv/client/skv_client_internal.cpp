@@ -474,7 +474,7 @@ iRetrieve( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t* Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
+  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - SKV_CHECKSUM_BYTES;  // -1 because of trailling msg-complete flag
 
   int ValueFitsInBuff = (aValueBufferSize <= RoomForData);
   int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
@@ -616,7 +616,7 @@ iUpdate( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t * Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;   // -1 because of trailling msg-complete flag
+  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - SKV_CHECKSUM_BYTES;   // -1 because of trailling msg-complete flag
 
   int KeyValueFitsInBuff = ((aKeyBufferSize + aValueUpdateSize) <= RoomForData);
   int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
@@ -746,7 +746,7 @@ iInsert( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t* Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1; // -1 because of trailling msg-complete flag
+  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - SKV_CHECKSUM_BYTES; // -1 because of trailling msg-complete flag
 
   int KeyValueFitsInBuff = (aKeyBufferSize+aValueBufferSize <= RoomForData);
   int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
@@ -1564,7 +1564,7 @@ iRemove( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_remove_req_t* Req = (skv_cmd_remove_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_remove_req_t ) - 1;  // -1 because of trailling msg-complete flag
+  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_remove_req_t ) - SKV_CHECKSUM_BYTES;  // -1 because of trailling msg-complete flag
 
   int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
 

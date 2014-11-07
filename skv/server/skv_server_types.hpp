@@ -48,6 +48,10 @@
 #define SKV_SERVER_RESPONSE_COALESCING_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_CTRLMSG_DATA_LOG
+#define SKV_CTRLMSG_DATA_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
 #ifndef SKV_SERVER_TRACE
 #define SKV_SERVER_TRACE ( 0 )
 #endif
@@ -1047,7 +1051,7 @@ struct skv_server_ep_state_t
 
       // since we poll on mem location, make sure the buffers are reset
       req->Reset();
-      ((char*) req)[SKV_CONTROL_MESSAGE_SIZE - 1] = SKV_CTRL_MSG_FLAG_EMPTY;
+      ((skv_header_as_cmd_buffer_t*)req)->SetCheckSum( SKV_CTRL_MSG_FLAG_EMPTY );
 
       BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG | SKV_SERVER_PENDING_EVENTS_LOG | SKV_SERVER_BUFFER_AND_COMMAND_LOG )
           << "skv_server_ep_state_t::Init()::PrimaryCmdBuffs"
@@ -1392,26 +1396,10 @@ struct skv_server_ep_state_t
 
     int Index = mCurrentCommandSlot * SKV_CONTROL_MESSAGE_SIZE;
 
-    skv_client_to_server_cmd_hdr_t* NewRequest = (skv_client_to_server_cmd_hdr_t*) ( & mCommandBuffs[ Index ] ) ;
+    skv_header_as_cmd_buffer_t* NewRequest = (skv_header_as_cmd_buffer_t*) ( & mCommandBuffs[ Index ] ) ;
 
-    bool found =( ( NewRequest->mCmdType != SKV_COMMAND_NONE ) &&
-                  ( ((char*)NewRequest)[SKV_CONTROL_MESSAGE_SIZE-1] == NewRequest->CheckSum() )
-                );
-
-    // #define HEXLOG( x )  (  (void*) (*((uint64_t*) &(x)) ) )
-
-    // if( found )
-    //   {
-    //     char* buf = (char*)NewRequest;
-    //     BegLogLine( 1 )
-    //       << "Fetch: " << mCurrentCommandSlot << " @:" << (void*)NewRequest
-    //       << " buf: " << HEXLOG(buf[0*sizeof(void*)]) << " " << HEXLOG(buf[1*sizeof(void*)]) << " " << HEXLOG(buf[2*sizeof(void*)])  << " " << HEXLOG(buf[3*sizeof(void*)])
-    //       << " " << HEXLOG(buf[4*sizeof(void*)]) << " " << HEXLOG(buf[5*sizeof(void*)]) << " " << HEXLOG(buf[6*sizeof(void*)])  << " " << HEXLOG(buf[7*sizeof(void*)])
-    //       << " " << HEXLOG(buf[8*sizeof(void*)]) << " " << HEXLOG(buf[9*sizeof(void*)]) << " " << HEXLOG(buf[10*sizeof(void*)]) << " " << HEXLOG(buf[11*sizeof(void*)])
-    //       << " last bytes: " << HEXLOG( buf[SKV_CONTROL_MESSAGE_SIZE-sizeof(void*)])
-    //       << " EP: " << (void*)this
-    //       << EndLogLine;
-    //   }
+    bool found =( ( NewRequest->mData.mCmndHdr.mCmdType != SKV_COMMAND_NONE ) &&
+                  ( (NewRequest->GetCheckSum() == NewRequest->mData.mCmndHdr.CheckSum()) ) );
 
     return found;
   }
@@ -1428,20 +1416,10 @@ struct skv_server_ep_state_t
       << "skv_server_ep_state_t::CommandSlotAdvance():: "
       << " EP: " << (void*)this
       << " CmdSlot from: " << mCurrentCommandSlot
-      << " resetting ChSum: " << (int)(((char*)NewRequest)[SKV_CONTROL_MESSAGE_SIZE-1])
+      << " resetting ChSum: " << ((skv_header_as_cmd_buffer_t*)NewRequest)->GetCheckSum()
       << EndLogLine;
 
-    ((char*)NewRequest)[SKV_CONTROL_MESSAGE_SIZE-1] = SKV_CTRL_MSG_FLAG_EMPTY;
-
-
-    // char* buf = (char*)NewRequest;
-    // BegLogLine( 1 )
-    //   << "Cleanup: " << mCurrentCommandSlot
-    //   << " " << HEXLOG(buf[0*sizeof(void*)]) << " " << HEXLOG(buf[1*sizeof(void*)]) << " " << HEXLOG(buf[2*sizeof(void*)])  << " " << HEXLOG(buf[3*sizeof(void*)])
-    //   << " " << HEXLOG(buf[4*sizeof(void*)]) << " " << HEXLOG(buf[5*sizeof(void*)]) << " " << HEXLOG(buf[6*sizeof(void*)])  << " " << HEXLOG(buf[7*sizeof(void*)])
-    //   << " " << HEXLOG(buf[8*sizeof(void*)]) << " " << HEXLOG(buf[9*sizeof(void*)]) << " " << HEXLOG(buf[10*sizeof(void*)]) << " " << HEXLOG(buf[11*sizeof(void*)])
-    //   << " last bytes: " << HEXLOG( buf[SKV_CONTROL_MESSAGE_SIZE-sizeof(void*)])
-    //   << EndLogLine;
+    ((skv_header_as_cmd_buffer_t*)NewRequest)->SetCheckSum( SKV_CTRL_MSG_FLAG_IN_PROGRESS );
 
     // advance slot
     mCurrentCommandSlot = (mCurrentCommandSlot + 1 ) % SKV_SERVER_COMMAND_SLOTS;
@@ -1450,7 +1428,7 @@ struct skv_server_ep_state_t
       << "skv_server_ep_state_t::CommandSlotAdvance():: "
       << " EP: " << (void*)this
       << " CmdSlot to: " << mCurrentCommandSlot
-      << " resetting ChSum: " << (int)(((char*)NewRequest)[SKV_CONTROL_MESSAGE_SIZE-1])
+      << " resetting ChSum: " << ((skv_header_as_cmd_buffer_t*)NewRequest)->GetCheckSum()
       << EndLogLine;
   }
 
@@ -1561,7 +1539,15 @@ struct skv_cmd_retrieve_resp_t
       << EndLogLine;
 #endif
 
-      status = PostOrStoreResponse( SendLmrTriplet,
+#if (SKV_CTRLMSG_DATA_LOG != 0)
+    HexDump CtrlMsgData( (void*)SendLmrTriplet->GetAddr(), SKV_CONTROL_MESSAGE_SIZE );
+    BegLogLine( 1 )
+      << "OUTMSG:@" << (void*)SendLmrTriplet->GetAddr()
+      << " Data: " << CtrlMsgData
+      << EndLogLine;
+#endif
+
+    status = PostOrStoreResponse( SendLmrTriplet,
                                   aSeqNo,
                                   mDispatchedCommandBufferIndex );
 
@@ -1717,13 +1703,13 @@ struct skv_cmd_retrieve_resp_t
     mQueuedSegments[ mResponseSegsCount ].lmr = aSendTriplet->mLMRTriplet.lmr;
     mResponseSegsCount++;
 
-    skv_server_to_client_cmd_hdr_t *hdr = (skv_server_to_client_cmd_hdr_t*)aSendTriplet->GetAddr();
-    ((char*)hdr)[SKV_CONTROL_MESSAGE_SIZE-1] = hdr->CheckSum();
+    skv_header_as_cmd_buffer_t *cmdbuf = (skv_header_as_cmd_buffer_t*)aSendTriplet->GetAddr();
+    cmdbuf->SetCheckSum( cmdbuf->mData.mRespHdr.CheckSum() );
 
     BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG )
       << "skv_server_ep_state_t::PostOrStoreResponse(): "
       << " EP: "        << (void*)this
-      << " clientCCB: " << (void*)(hdr->mCmdCtrlBlk)
+      << " clientCCB: " << (void*)(cmdbuf->mData.mRespHdr.mCmdCtrlBlk)
       << EndLogLine;
 
     // #define HEXLOG( x )  (  (void*) (*((uint64_t*) &(x)) ) )

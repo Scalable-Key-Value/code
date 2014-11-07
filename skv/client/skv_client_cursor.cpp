@@ -263,7 +263,7 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
    *****************************************************/
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_retrieve_n_keys_req_t );
+  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_retrieve_n_keys_req_t ) - SKV_CHECKSUM_BYTES;
 
   AssertLogLine( RoomForData >= 0 )
     << "skv_client_internal_t::RetrieveNKeys():: ERROR:: "

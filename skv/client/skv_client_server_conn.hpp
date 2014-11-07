@@ -209,15 +209,13 @@ struct skv_client_queued_command_rep_t
       {
         int Index = mCurrentResponseSlot * SKV_CONTROL_MESSAGE_SIZE;
 
-        skv_server_to_client_cmd_hdr_t* NewResponse = (skv_server_to_client_cmd_hdr_t*) (&mResponseSlotBuffer[Index]);
+        skv_header_as_cmd_buffer_t* NewResponse = (skv_header_as_cmd_buffer_t*) (&mResponseSlotBuffer[Index]);
 
-        bool found = ((NewResponse->mCmdType != SKV_COMMAND_NONE) &&
-                      (((char*) NewResponse)[SKV_CONTROL_MESSAGE_SIZE - 1] == NewResponse->CheckSum())
-            );
-
+        bool found = ((NewResponse->mData.mRespHdr.mCmdType != SKV_COMMAND_NONE) &&
+                       NewResponse->GetCheckSum() == NewResponse->mData.mRespHdr.CheckSum());
         if( found )
         {
-          return NewResponse;
+          return &NewResponse->mData.mRespHdr;
         }
 
         return NULL;
@@ -235,7 +233,7 @@ struct skv_client_queued_command_rep_t
           << " @: " << (void*)OldResponse
           << EndLogLine;
 
-        OldResponse[SKV_CONTROL_MESSAGE_SIZE - 1] = SKV_CTRL_MSG_FLAG_EMPTY;
+        ((skv_header_as_cmd_buffer_t*)OldResponse)->SetCheckSum( SKV_CTRL_MSG_FLAG_EMPTY );
 
         // advance to next slot
         mCurrentResponseSlot = (mCurrentResponseSlot + 1) % SKV_SERVER_COMMAND_SLOTS;
@@ -370,6 +368,13 @@ struct skv_client_queued_command_rep_t
         << " aSeqNo: " << aSeqNo
         << EndLogLine;
 
+#if ( SKV_CTRLMSG_DATA_LOG!=0 )
+      HexDump CtrlMsgData( aSendSeg.addr.abs, SKV_CONTROL_MESSAGE_SIZE );
+      BegLogLine( 1 )
+        << "OUTMSG:@" << aSendSeg.addr.abs
+        << " Data: " << CtrlMsgData
+        << EndLogLine;
+#endif
       if( needpost )
       {
         status = PostRequest( );
@@ -420,6 +425,12 @@ struct skv_client_queued_command_rep_t
             << "Unable to allocate aligned memory for response buffers"
             << EndLogLine;
         memset( mResponseSlotBuffer, 0, SKV_SERVER_COMMAND_SLOTS * SKV_CONTROL_MESSAGE_SIZE );
+        for( int i = 0; i < SKV_SERVER_COMMAND_SLOTS; i++ )
+        {
+          skv_server_to_client_cmd_hdr_t* resp = (skv_server_to_client_cmd_hdr_t*) (&mResponseSlotBuffer[ i * SKV_CONTROL_MESSAGE_SIZE ]);
+          resp->Reset();
+          ((skv_header_as_cmd_buffer_t*)resp)->SetCheckSum( SKV_CTRL_MSG_FLAG_EMPTY );
+        }
 
         StrongAssertLogLine( mResponseSlotBuffer != NULL )
           << "skv_client_ccb_manager_if_t::Init(): ERROR:: "

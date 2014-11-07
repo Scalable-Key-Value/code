@@ -25,10 +25,15 @@
 #define SKV_CTRL_MSG_FLAG_EMPTY             0x00
 #define SKV_CTRL_MSG_FLAG_REQUEST_COMPLETE  0x01
 #define SKV_CTRL_MSG_FLAG_RESPONSE_COMPLETE 0x02
+#define SKV_CTRL_MSG_FLAG_IN_PROGRESS       0x03
 
 #define SKV_MAX_COALESCED_COMMANDS ( 4 )
 #define SKV_COMMAND_PIPELINE_THRESHOLD ( 4 )   // number of outstanding post_rdma_write() to fill the pipeline
 
+#define SKV_CHECKSUM_BYTES ( 2 )
+#define SKV_CHECKSUM_TYPE  short
+#define SKV_CHECKSUM_CONVERSION_hton htons
+#define SKV_CHECKSUM_CONVERSION_ntoh ntohs
 
 /***************************************************
  * Header Structures
@@ -76,22 +81,22 @@ struct skv_client_to_server_cmd_hdr_t
   }
 
 #ifdef SKV_HEADER_CHECKSUM
-  inline char
+  inline SKV_CHECKSUM_TYPE
   CheckSum()
   {
-    char cs = 0;
-    char *buf = (char*)this;
-    for( unsigned int i=0; i<sizeof(skv_client_to_server_cmd_hdr_t); i++ )
-      cs += (i*buf[i]);
-    if( cs == 0 )
-    cs = -1;
-    return cs;
+    SKV_CHECKSUM_TYPE cs = 0;
+    SKV_CHECKSUM_TYPE *buf = (SKV_CHECKSUM_TYPE*)this;
+    for( unsigned int i=0; i<sizeof(skv_client_to_server_cmd_hdr_t)/SKV_CHECKSUM_BYTES; i++ )
+      cs += (i * SKV_CHECKSUM_CONVERSION_ntoh( buf[i] )+1);
+    if( (cs == SKV_CTRL_MSG_FLAG_EMPTY) || (cs == SKV_CTRL_MSG_FLAG_IN_PROGRESS) )
+      cs = 1;
+    return SKV_CHECKSUM_CONVERSION_hton(cs);
   }
 #else
-  inline char
+  inline SKV_CHECKSUM_TYPE
   CheckSum()
   {
-    return SKV_CTRL_MSG_FLAG_REQUEST_COMPLETE;
+    return SKV_CHECKSUM_CONVERSION_hton( SKV_CTRL_MSG_FLAG_REQUEST_COMPLETE );
   }
 #endif
 
@@ -104,7 +109,7 @@ struct skv_client_to_server_cmd_hdr_t
   void
   SetCmdLength( int aCmdLength )
   {
-    StrongAssertLogLine( (aCmdLength>0) && (aCmdLength<SKV_CONTROL_MESSAGE_SIZE) ) // -1 because of the trailling msg-complete flag
+    StrongAssertLogLine( (aCmdLength>0) && (aCmdLength<SKV_CONTROL_MESSAGE_SIZE-SKV_CHECKSUM_BYTES) )
       << "ERROR Invalid command length"
       << " 0 < " << aCmdLength << " < " << SKV_CONTROL_MESSAGE_SIZE
       << EndLogLine;
@@ -209,22 +214,22 @@ struct skv_server_to_client_cmd_hdr_t
 
 #ifdef SKV_HEADER_CHECKSUM
   // header checksum for server-client header differs from client-server header because of command buffer reuse for responses
-  inline char
+  inline SKV_CHECKSUM_TYPE
   CheckSum()
   {
-    char cs = 0;
-    char *buf = (char*)this;
-    for( unsigned int i=0; i<sizeof(skv_server_to_client_cmd_hdr_t); i++ )
-      cs += (i*buf[i]+1);
-    if( cs == 0 )
+    SKV_CHECKSUM_TYPE cs = 0;
+    SKV_CHECKSUM_TYPE *buf = (SKV_CHECKSUM_TYPE*)this;
+    for( unsigned int i=0; i<sizeof(skv_server_to_client_cmd_hdr_t)/SKV_CHECKSUM_BYTES; i++ )
+      cs += (i * SKV_CHECKSUM_CONVERSION_ntoh( buf[i] )+1);
+    if( (cs == SKV_CTRL_MSG_FLAG_EMPTY) || (cs == SKV_CTRL_MSG_FLAG_IN_PROGRESS) )
       cs = 1;
-    return cs;
+    return SKV_CHECKSUM_CONVERSION_hton(-cs);
   }
 #else
-  inline char
+  inline SKV_CHECKSUM_TYPE
   CheckSum()
   {
-    return SKV_CTRL_MSG_FLAG_RESPONSE_COMPLETE;
+    return SKV_CHECKSUM_CONVERSION_hton( SKV_CTRL_MSG_FLAG_RESPONSE_COMPLETE );
   }
 #endif
 
@@ -277,5 +282,28 @@ operator<<( streamclass& os, const skv_server_to_client_cmd_hdr_t& aHdr )
 
 }
 /***************************************************/
+
+// to reinterpret and work on command/repsonse buffers
+struct skv_header_as_cmd_buffer_t
+{
+  union {
+    skv_client_to_server_cmd_hdr_t mCmndHdr;
+    skv_server_to_client_cmd_hdr_t mRespHdr;
+    unsigned char mBuffer[ SKV_CONTROL_MESSAGE_SIZE ];
+  } mData;
+
+  inline SKV_CHECKSUM_TYPE GetCheckSum() const
+  {
+    return ( *((SKV_CHECKSUM_TYPE*) &mData.mBuffer[ SKV_CONTROL_MESSAGE_SIZE - SKV_CHECKSUM_BYTES ]) );
+  }
+  inline void SetCheckSum( SKV_CHECKSUM_TYPE aChkSum )
+  {
+    *((SKV_CHECKSUM_TYPE*) &mData.mBuffer[ SKV_CONTROL_MESSAGE_SIZE - SKV_CHECKSUM_BYTES ]) = aChkSum;
+  }
+  inline size_t GetRoomForData( const size_t aContentSize ) const
+  {
+    return SKV_CONTROL_MESSAGE_SIZE - aContentSize - SKV_CHECKSUM_BYTES;
+  }
+};
 
 #endif // __SKV_CLIENT_SERVER_HEADERS_HPP__

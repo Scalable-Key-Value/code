@@ -58,6 +58,10 @@
 #define SKV_CLIENT_ENDIAN_LOG ( 0 || SKV_LOGGING_ALL )
 #endif
 
+#ifndef SKV_CTRLMSG_DATA_LOG
+#define SKV_CTRLMSG_DATA_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
 #ifdef SKV_DEBUG_MSG_MARKER  // defined in client_server_protocol.hpp (or via compile flag)
 #define SKV_CLIENT_TRACK_MESSGES_LOG ( 1 )
 #else
@@ -1142,7 +1146,8 @@ Dispatch( skv_client_server_conn_t*    aConn,
       gSKVClientConnDispatch );
 
   // Set EOM-mark or real checksum to be checked by remote memory polling
-  ((char*) send_seg.addr.abs)[SKV_CONTROL_MESSAGE_SIZE - 1] = Hdr->CheckSum();
+  skv_header_as_cmd_buffer_t* cmdbuf = (skv_header_as_cmd_buffer_t*)Hdr;
+  cmdbuf->SetCheckSum( Hdr->CheckSum() );
 
   BegLogLine( SKV_CLIENT_PROCESS_CONN_LOG )
     << "skv_client_conn_manager_if_t::Dispatch(): about to write"
@@ -1519,6 +1524,14 @@ InitializeFromResponseData( skv_client_ccb_t* aCCB,
   // copy all inbound data to store for later use (reused outbound buffer)
   // memcpy( aCCB->GetRecvBuff(), aInBoundHdr, aInBoundHdr->GetCmdLength() );
   aCCB->SetRecvBuff( (char*)aInBoundHdr );
+
+#if (SKV_CTRLMSG_DATA_LOG != 0)
+  HexDump CtrlMsgData( (void*)aInBoundHdr, SKV_CONTROL_MESSAGE_SIZE );
+  BegLogLine( 1 )
+    << "INBMSG:@"<< (void*)aInBoundHdr
+    << " Data:" << CtrlMsgData
+    << EndLogLine;
+#endif
 }
 
 
