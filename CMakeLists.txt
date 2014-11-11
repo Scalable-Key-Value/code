@@ -55,7 +55,8 @@ endif()
 #------------------------------------------------------------------------------
 # Options
 #------------------------------------------------------------------------------
-set(COMMON_LIBRARY_TYPE STATIC)
+set(COMMON_LIBRARY_TYPE STATIC CACHE STRING
+  "Library type {any combination of SHARED, STATIC}")
 
 #############################################
 # Define the local KV backend to use
@@ -88,6 +89,8 @@ if(SKV_COMM_API_TYPE MATCHES "verbs")
     -DSKV_ROQ_LOOPBACK_WORKAROUND
   )
   set(SKV_DEPENDENT_LIBRARIES OFED)
+  install(FILES CMake/common/FindOFED.cmake
+    DESTINATION ${CMAKE_MODULE_INSTALL_PATH})
 endif()
 if(SKV_COMM_API_TYPE MATCHES "sockets")
   set( IT_API_LIBS pthread rt )
@@ -177,8 +180,9 @@ include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 
 common_library(fxlogger)
 common_library(it_api)
-set_target_properties(it_api PROPERTIES COMPILE_DEFINITIONS "${SKV_IT_API_LOGGING}" )
-
+set_target_properties(it_api PROPERTIES
+  COMPILE_DEFINITIONS "${SKV_IT_API_LOGGING}" )
+add_subdirectory(skv)
 
 #------------------------------------------------------------------------------
 # Define test source files
@@ -208,8 +212,6 @@ set(UNITTEST_SOURCES
 
 #------------------------------------------------------------------------------
 # tests
-
-add_subdirectory(skv)
 
 foreach(_test ${TEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
