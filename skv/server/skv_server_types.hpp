@@ -1712,18 +1712,6 @@ struct skv_cmd_retrieve_resp_t
       << " clientCCB: " << (void*)(cmdbuf->mData.mRespHdr.mCmdCtrlBlk)
       << EndLogLine;
 
-    // #define HEXLOG( x )  (  (void*) (*((uint64_t*) &(x)) ) )
-    //     uintptr_t *buffer = (uintptr_t*)seg_tx.addr.abs;
-    //     BegLogLine( 1 )
-    //       << "responseBuff: " << HEXLOG(buffer[ 0 ])
-    //       << " " << HEXLOG(buffer[ 1 ])
-    //       << " " << HEXLOG(buffer[ 2 ])
-    //       << " " << HEXLOG(buffer[ 3 ])
-    //       << " " << HEXLOG(buffer[ 4 ])
-    //       << " TRLFLG: " << HEXLOG(buffer[ SKV_CONTROL_MESSAGE_SIZE / sizeof(uintptr_t) -1 ])
-    //       << " slot@: " << (void*)buffer
-    //       << EndLogLine;
-
     /* post an actual rdma request if:
      * - the pipeline isn't full yet
      * - the max number of send-segments is reached
