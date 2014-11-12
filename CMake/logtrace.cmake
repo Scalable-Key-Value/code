@@ -95,6 +95,7 @@ add_definitions(
 # -DSKV_DEBUG_MSG_MARKER
 # bulk-insert with checksum (debug option)
 # -DSKV_BULK_LOAD_CHECKSUM
+# -DSKV_RETRIEVE_DATA_LOG
 
 ##################################
 # logging in tests
