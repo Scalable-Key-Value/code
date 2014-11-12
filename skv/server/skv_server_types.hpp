@@ -1743,7 +1743,7 @@ struct skv_cmd_retrieve_resp_t
      * - the max number of send-segments is reached
      * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
      */
-    bool needpost = ( ( mInFlightWriteCount < 2 ) ||
+    bool needpost = ( ( mInFlightWriteCount < 1 ) ||
         ( mResponseSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
         (( base_clnt_slot + mResponseSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
 
