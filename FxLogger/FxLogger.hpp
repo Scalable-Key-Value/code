@@ -737,14 +737,14 @@ class
           {
           mAddr = (unsigned char*) aAddr;
           mSize = aSize;
-          mMax  = 0x999999; // this will be caught by the overall buffer monitor
+          mMax  = PKLOG_MAXBUF >> 1;
           }
 
         HexDump( void *aAddr, int aSize, int aMax )
           {
           mAddr = (unsigned char*) aAddr;
           mSize = aSize;
-          mMax  = aMax;
+          mMax  = std::min( aMax, (PKLOG_MAXBUF >> 1) );
           }
       };
 
