@@ -47,12 +47,6 @@ extern "C"
  ****************/
 //#define SKV_RUNNING_LOCAL
 
-// DEBUG
-#ifndef SKV_BULK_LOAD_CHECKSUM
-//#define SKV_BULK_LOAD_CHECKSUM
-#undef SKV_BULK_LOAD_CHECKSUM
-#endif
-
 // Size of the control message buffers for send/recv
 #define SKV_CONTROL_MESSAGE_SIZE                    ( 256 )
 #define IT_TIMEOUT_SMALL                             ( 100 )

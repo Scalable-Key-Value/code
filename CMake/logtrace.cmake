@@ -87,7 +87,14 @@ add_definitions(
 # -DSKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG=1
 # -DSKV_CLIENT_REMOVE_LOG=1
 
+
+##################################
+# Misc Debugging options
+
+# puts a marker into the command/response message
 # -DSKV_DEBUG_MSG_MARKER
+# bulk-insert with checksum (debug option)
+# -DSKV_BULK_LOAD_CHECKSUM
 
 ##################################
 # logging in tests
