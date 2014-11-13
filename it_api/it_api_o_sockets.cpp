@@ -353,6 +353,7 @@ writev_retry:
 
 static iWARPEM_Status_t write_to_socket(int sock,struct iovec *iov, int iov_count, int* wlen)
   {
+#if defined(PK_CNK)
     if ( iov_count == 0 )
       {
         *wlen = 0 ;
@@ -377,6 +378,9 @@ static iWARPEM_Status_t write_to_socket(int sock,struct iovec *iov, int iov_coun
           }
         return write_to_socket(sock,buffer,total_len, wlen) ;
     }
+#else
+    return write_to_socket_writev(sock,iov,iov_count,wlen) ;
+#endif
   }
 #ifndef IT_API_READ_FROM_SOCKET_HIST 
 #define IT_API_READ_FROM_SOCKET_HIST ( 0 )
