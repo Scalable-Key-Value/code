@@ -762,7 +762,7 @@ struct skv_server_ep_state_t
   int                                                     mClientCurrentResponseSlot;
 
   it_lmr_triplet_t mQueuedSegments[ SKV_SERVER_COMMAND_SLOTS ];   // hold request segments for post_rmda_write() call
-  int mInFlightWriteCount;
+  uint64_t mInProgressCommands;
   int mResponseSegsCount;
 
   int                          mCurrentCommandSlot;
@@ -950,7 +950,7 @@ struct skv_server_ep_state_t
     mClientCurrentResponseSlot = 0;
 
     memset( mQueuedSegments, 0, sizeof( it_lmr_triplet_t ) * SKV_SERVER_COMMAND_SLOTS );
-    mInFlightWriteCount = 0;
+    mInProgressCommands = 0;
     mResponseSegsCount = 0;
 
 #define SAFETY_GAP 256
@@ -1127,7 +1127,7 @@ struct skv_server_ep_state_t
    ******************************************************************/
   inline void StallEP()     { mWaitForSQ = true;  }
   inline void UnstallEP()   { mWaitForSQ = false; }
-  inline bool EPisStalled() { return mWaitForSQ;  }
+  inline bool EPisStalled() const { return mWaitForSQ;  }
 
   void
   AllSendsComplete( int aSignaledCommandBufferIndex )
@@ -1141,23 +1141,6 @@ struct skv_server_ep_state_t
       << " dispatched: " << mDispatchedCommandBufferIndex
       << " unstalling EP"
       << EndLogLine;
-
-    mInFlightWriteCount--;
-    bool needpost = ( ( mInFlightWriteCount < 1) &&
-        ( mResponseSegsCount > 0 ) );
-
-    BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
-      << "AllSendsComplete: EP: " << (void*)this
-      << " needpost: " << needpost
-      << " SigInFlight: " << mInFlightWriteCount
-      << " mSegsCount: " << mResponseSegsCount
-      << " cmdslot: " << aSignaledCommandBufferIndex
-      << EndLogLine;
-
-    if( needpost )
-    {
-      PostResponse( );
-    }
 
     if( ( EPisStalled() ) &&
         ( mUsedCommandSlotIndex != aSignaledCommandBufferIndex ) )
@@ -1384,8 +1367,9 @@ struct skv_server_ep_state_t
 
   /******************************************************************/
   // Recv-Slot Polling
+  // This routine must not change any of the object's status!!!
   bool
-  CheckForNewCommands()
+  CheckForNewCommands() const
   {
     if( EPisStalled() )
     {
@@ -1396,7 +1380,6 @@ struct skv_server_ep_state_t
         << EndLogLine;
 
       return false;
-
     }
 
     int Index = mCurrentCommandSlot * SKV_CONTROL_MESSAGE_SIZE;
@@ -1425,6 +1408,14 @@ struct skv_server_ep_state_t
       << EndLogLine;
 
     ((skv_header_as_cmd_buffer_t*)NewRequest)->SetCheckSum( SKV_CTRL_MSG_FLAG_IN_PROGRESS );
+
+    mInProgressCommands++;
+    BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
+      << "New command."
+      << " EP: " << (void*)this
+      << " InFlight: " << mInProgressCommands
+      << " @:" << (void*)NewRequest
+      << EndLogLine;
 
     // advance slot
     mCurrentCommandSlot = (mCurrentCommandSlot + 1 ) % SKV_SERVER_COMMAND_SLOTS;
@@ -1631,7 +1622,7 @@ struct skv_cmd_retrieve_resp_t
 
     BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
       << "PostResponse: EP: " << (void*)this
-      << " SigInFlight: " << mInFlightWriteCount
+      << " InFlight: " << mInProgressCommands
       << " mSegsCount: " << mResponseSegsCount
       << " base_clnt_slot: " << dest_resp_slot
       << " dest_resp_addr: " << (void*)dest_resp_addr
@@ -1686,8 +1677,6 @@ struct skv_cmd_retrieve_resp_t
 
         ClientResonseBufferAdvance( mResponseSegsCount );
 
-        if( dto_write_flags != 0 )
-          mInFlightWriteCount++;
         mResponseSegsCount = 0;
         break;
 
@@ -1734,19 +1723,21 @@ struct skv_cmd_retrieve_resp_t
       << " clientCCB: " << (void*)(cmdbuf->mData.mRespHdr.mCmdCtrlBlk)
       << EndLogLine;
 
+    mInProgressCommands--;
+
     /* post an actual rdma request if:
      * - the pipeline isn't full yet
      * - the max number of send-segments is reached
      * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
      */
-    bool needpost = ( ( mInFlightWriteCount < 1 ) ||
+    bool needpost = ( (mInProgressCommands == 0) ||
         ( mResponseSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
         (( base_clnt_slot + mResponseSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
 
     BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
       << "PostOrStoreResponse: EP: " << (void*)this
       << " needpost: " << needpost
-      << " inFlight: " << mInFlightWriteCount
+      << " inFlight: " << mInProgressCommands
       << " mSegsCount: " << mResponseSegsCount
       << " base_clnt_slot: " << base_clnt_slot
       << " sndtrplt: " << *aSendTriplet
