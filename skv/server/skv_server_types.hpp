@@ -56,6 +56,11 @@
 #define SKV_SERVER_TRACE ( 0 )
 #endif
 
+#ifdef SKV_COALESCING_STATISTICS
+static uint64_t gServerCoalescCount[ SKV_MAX_COALESCED_COMMANDS + 1 ];
+static uint64_t gServerRequestCount = 0;
+#endif
+
 #include <skv/server/skv_server_event_type.hpp>
 #include <skv/server/skv_server_heap_manager.hpp>
 // !! FURTHER INCLUDES FURTHER DOWN IN THE FILE !!
@@ -1632,6 +1637,23 @@ struct skv_cmd_retrieve_resp_t
       << " dest_resp_addr: " << (void*)dest_resp_addr
       << " rmr: " << mClientResponseRMR
       << EndLogLine;
+
+#ifdef SKV_COALESCING_STATISTICS
+    gServerCoalescCount[ mResponseSegsCount ]++;
+    gServerRequestCount = (gServerRequestCount+1) & 0xFFFF;
+    if( gServerRequestCount == 0 )
+    {
+      BegLogLine( 1 )
+        << "Server Request Coalescing after " << 0xFFFF << " Requests: "
+        << " single: " << gServerCoalescCount[ 1 ]
+        << " 2: " << gServerCoalescCount[ 2 ]
+        << " 3: " << gServerCoalescCount[ 3 ]
+        << " 4: " << gServerCoalescCount[ 4 ]
+        << EndLogLine;
+      memset( gServerCoalescCount, 0, sizeof(uint64_t) * (SKV_MAX_COALESCED_COMMANDS + 1) );
+    }
+
+#endif
 
     gSKVServerRDMAResponseStart.HitOE( SKV_SERVER_TRACE,
                                        "SKVServerRDMAResponse",

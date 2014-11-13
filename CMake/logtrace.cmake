@@ -100,6 +100,7 @@ add_definitions(
 # -DSKV_BULK_LOAD_CHECKSUM
 # -DSKV_RETRIEVE_DATA_LOG
 # -DSKV_CTRLMSG_DATA_LOG=1
+# -DSKV_COALESCING_STATISTICS
 
 ##################################
 # logging in tests
