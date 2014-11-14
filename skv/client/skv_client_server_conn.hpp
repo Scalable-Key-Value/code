@@ -210,7 +210,7 @@ struct skv_client_queued_command_rep_t
     /******************************************************************/
     // Recv-Slot Polling
     skv_server_to_client_cmd_hdr_t*
-    CheckForNewResponse()
+    CheckForNewResponse() const
       {
         int Index = mCurrentResponseSlot * SKV_CONTROL_MESSAGE_SIZE;
 
@@ -268,8 +268,8 @@ struct skv_client_queued_command_rep_t
       if( aCCB->CheckRequestWithWrite() )
         mInFlightWriteCount--;
 
-      bool needpost = ( ( mInFlightWriteCount < SKV_COMMAND_PIPELINE_THRESHOLD ) &&
-          ( mSendSegsCount > 0 ) );
+      bool needpost = ( (( mSendSegsCount > 0) && ( mInFlightWriteCount < mSendSegsCount )) ||
+          ( mSendSegsCount >= SKV_MAX_COALESCED_COMMANDS ) );
 
       BegLogLine( SKV_CLIENT_REQUEST_COALESCING_LOG )
         << "RequestCompletion: EP: " << (void*)this
@@ -376,7 +376,7 @@ struct skv_client_queued_command_rep_t
        * - the max number of send-segments is reached
        * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
        */
-      bool needpost = ( ( mInFlightWriteCount < SKV_COMMAND_PIPELINE_THRESHOLD ) ||
+      bool needpost = ( (mInFlightWriteCount < mSendSegsCount) ||
           ( mSendSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
           (( base_srv_slot + mSendSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
 
