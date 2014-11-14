@@ -77,6 +77,7 @@
  */
 #define SKV_CLIENT_RQ_EVENTS_TO_DEQUEUE_COUNT ( 8 )
 #define SKV_CLIENT_RESPONSE_POLL_LOOPS ( 10 )
+#define SKV_CLIENT_RESPONSE_REAP_PER_EP ( 2 )   // number of responses fetched from one EP before checking the next EP
 
 #ifndef SKV_CLIENT_PROCESS_CONN_TRACE
 #define SKV_CLIENT_PROCESS_CONN_TRACE ( 1 )
@@ -1581,7 +1582,7 @@ ProcessConnectionsRqSq()
 
       int commandsCount = 0;
       while( ((RdmaHdr = Connection->CheckForNewResponse()) != NULL) &&
-             (commandsCount < (SKV_MAX_COMMANDS_PER_EP >> 2)) )   // run max one batch for one EP
+             (commandsCount < SKV_CLIENT_RESPONSE_REAP_PER_EP) )   // run max one batch for one EP
       {
         skv_client_ccb_t *CCB = (skv_client_ccb_t *) RdmaHdr->mCmdCtrlBlk;
 

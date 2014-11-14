@@ -32,7 +32,6 @@
 #else
 #define SKV_MAX_COALESCED_COMMANDS ( 16 )  // allow for more coalescing supported by the sockets impl of IT-API
 #endif
-#define SKV_COMMAND_PIPELINE_THRESHOLD ( 4 )   // number of outstanding post_rdma_write() to fill the pipeline
 
 #define SKV_CHECKSUM_BYTES ( 2 )
 #define SKV_CHECKSUM_TYPE  short

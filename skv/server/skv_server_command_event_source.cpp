@@ -84,7 +84,7 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
 
       // Check for commands arrived in memory region
       while( (EPState->CheckForNewCommands() == true) &&
-             (currentCommandsPerEP < (SKV_MAX_COMMANDS_PER_EP >> 1))
+             (currentCommandsPerEP < (2))
              &&
              (currentCommand < aMaxEventCount) )
       {
