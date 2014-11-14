@@ -31,6 +31,11 @@
 #define SKV_CLIENT_REQUEST_COALESCING_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
+#ifdef SKV_COALESCING_STATISTICS
+static uint64_t gClientCoalescCount[ SKV_MAX_COALESCED_COMMANDS + 1 ];
+static uint64_t gClientRequestCount = 0;
+#endif
+
 typedef enum
 {
   SKV_CLIENT_CONN_DISCONNECTED = 1,
@@ -298,6 +303,23 @@ struct skv_client_queued_command_rep_t
       it_dto_flags_t dto_write_flags = (it_dto_flags_t) (0);
       if( mCurrentServerRecvSlot == 0 )
         dto_write_flags = (it_dto_flags_t) (IT_COMPLETION_FLAG | IT_NOTIFY_FLAG);
+
+#ifdef SKV_COALESCING_STATISTICS
+      gClientCoalescCount[ mSendSegsCount ]++;
+      gClientRequestCount = (gClientRequestCount+1) & 0xFFFF;
+      if( gClientRequestCount == 0 )
+      {
+        BegLogLine( 1 )
+          << "Client Request Coalescing after " << 0xFFFF << " Requests: "
+          << " single: " << gClientCoalescCount[ 1 ]
+          << " 2: " << gClientCoalescCount[ 2 ]
+          << " 3: " << gClientCoalescCount[ 3 ]
+          << " 4: " << gClientCoalescCount[ 4 ]
+          << EndLogLine;
+        memset( gClientCoalescCount, 0, sizeof(uint64_t) * (SKV_MAX_COALESCED_COMMANDS + 1) );
+      }
+
+#endif
 
       status = it_post_rdma_write( mEP,
                                    &(mQueuedSegments[ mCurrentServerRecvSlot ]),
