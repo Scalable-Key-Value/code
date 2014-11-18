@@ -92,6 +92,8 @@ if(SKV_COMM_API_TYPE MATCHES "verbs")
   add_definitions(
     # enable workaround for missing RoQ loopback functionality
     -DSKV_ROQ_LOOPBACK_WORKAROUND
+    # enable verbs-implementation specific settings
+    -DSKV_USE_VERBS
   )
   set(SKV_DEPENDENT_LIBRARIES OFED)
   install(FILES CMake/common/FindOFED.cmake
