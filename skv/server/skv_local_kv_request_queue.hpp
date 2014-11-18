@@ -20,7 +20,7 @@
 #define SKV_LOCAL_KV_QUEUES_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#define SKV_LOCAL_KV_MAX_REQUESTS (1024 )
+#define SKV_LOCAL_KV_MAX_REQUESTS (65536 )
 
 class skv_local_kv_request_queue_t {
   skv_local_kv_request_t mRequestPool[ SKV_LOCAL_KV_MAX_REQUESTS ];
