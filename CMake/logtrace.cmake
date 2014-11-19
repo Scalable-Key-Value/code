@@ -30,6 +30,7 @@ add_definitions(
 # -DSKV_PROCESS_LOCAL_KV_EVENT_LOG=1
 # -DSKV_SERVER_ACTIVE_BCAST_COMMAND_SM_LOG=1
 # -DSKV_SERVER_BUFFER_AND_COMMAND_LOG=1
+# -DSKV_SERVER_BULK_INSERT_LOG=1
 # -DSKV_SERVER_CLEANUP_LOG=1
 # -DSKV_SERVER_CLIENT_CONN_EST_LOG=1
 # -DSKV_SERVER_COMMAND_DISPATCH_LOG=1
@@ -87,7 +88,15 @@ add_definitions(
 # -DSKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG=1
 # -DSKV_CLIENT_REMOVE_LOG=1
 
+
+##################################
+# Misc Debugging options
+
+# puts a marker into the command/response message
 # -DSKV_DEBUG_MSG_MARKER
+# bulk-insert with checksum (debug option)
+# -DSKV_BULK_LOAD_CHECKSUM
+# -DSKV_RETRIEVE_DATA_LOG
 
 ##################################
 # logging in tests

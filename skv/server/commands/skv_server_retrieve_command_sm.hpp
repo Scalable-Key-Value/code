@@ -296,13 +296,15 @@ public:
                   << EndLogLine;
 
 #ifdef SKV_RETRIEVE_DATA_LOG
-                HexDump FxString( (const void*)ValueMemRep.GetAddr(), ValueMemRep.GetLen() );
+                {
+                  HexDump FxString( (void*)ValueMemRep.GetAddr(), ValueMemRep.GetLen());
 
-                BegLogLine( 1 )
-                  << "skv_server_retrieve_command_sm:: "
-                  << " Size: " << ValueMemRep.GetLen()
-                  << " FxString: " << FxString
-                  << EndLogLine;
+                  BegLogLine( 1 )
+                    << "skv_server_retrieve_command_sm:: "
+                    << " Size: " << ValueMemRep.GetLen()
+                    << " FxString: " << FxString
+                    << EndLogLine;
+                }
 #endif
                 memcpy( Resp->mValue.mData,
                         (const void*) ValueMemRep.GetAddr(),
@@ -422,7 +424,7 @@ public:
                   << EndLogLine;
 
 #ifdef SKV_RETRIEVE_DATA_LOG
-                HexDump FxString( (const void*)ValueMemRep->GetAddr(), ValueMemRep->GetLen() );
+                HexDump FxString( (void*)ValueMemRep->GetAddr(), ValueMemRep->GetLen() );
 
                 BegLogLine( 1 )
                   << "skv_server_retrieve_command_sm:: "

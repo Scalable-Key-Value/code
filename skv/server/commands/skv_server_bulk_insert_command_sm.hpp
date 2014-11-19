@@ -56,14 +56,14 @@ public:
     aCommand->mCommandState.mCommandBulkInsert.mRemoteBufferAddr     = aReq->mBuffer;
 
 #ifdef SKV_BULK_LOAD_CHECKSUM
-            Command->mCommandState.mCommandBulkInsert.mRemoteBufferChecksum = Req->mBufferChecksum;
+            aCommand->mCommandState.mCommandBulkInsert.mRemoteBufferChecksum = aReq->mBufferChecksum;
             /******************************************************************/
 
             BegLogLine( 0 )
               << "skv_server_bulk_insert_command_sm::Execute(): "
               << " RemoteBufferChecksum: "
-              << Command->mCommandState.mCommandBulkInsert.mRemoteBufferChecksum
-              << " Req->mBufferChecksum: " << Req->mBufferChecksum
+              << aCommand->mCommandState.mCommandBulkInsert.mRemoteBufferChecksum
+              << " Req->mBufferChecksum: " << aReq->mBufferChecksum
               << EndLogLine;
 #endif
 
@@ -280,6 +280,92 @@ public:
 
             skv_local_kv_cookie_t *cookie = &Command->mLocalKVCookie;
             cookie->Set( aCommandOrdinal, aEPState );
+
+
+#ifdef SKV_BULK_LOAD_CHECKSUM
+  uint64_t  LocalBufferSize = Command->mCommandState.mCommandBulkInsert.mLocalBuffer.GetLen();
+  char* LocalBufferAddr = (char*)Command->mCommandState.mCommandBulkInsert.mLocalBuffer.GetAddr();
+  it_lmr_handle_t LocalBufferLMR = Command->mCommandState.mCommandBulkInsert.mLocalBuffer.GetLMRHandle();
+
+  uint64_t  BufferChecksum       = 0;
+  uint64_t  RemoteBufferChecksum = Command->mCommandState.mCommandBulkInsert.mRemoteBufferChecksum;
+  for( int i=0; i < LocalBufferSize; i++)
+  {
+    BufferChecksum += LocalBufferAddr[ i ];
+  }
+
+  if( BufferChecksum != RemoteBufferChecksum )
+  {
+    BegLogLine( 1 )
+      << "skv_server_bulk_insert_command_sm::Execute(): ERROR: "
+      << " BufferChecksum: " << BufferChecksum
+      << " RemoteBufferChecksum: " << RemoteBufferChecksum
+      << " PDSId: " << Command->mCommandState.mCommandBulkInsert.mPDSId
+      << " LocalBufferSize: " << LocalBufferSize
+      << " LocalBuffer: " << (void *) LocalBufferAddr
+      << " LocalBufferLMR: " << (void *) LocalBufferLMR
+//      << " RemoteBufferRMR: " << (void *) RemoteBufferRMR
+//      << " RemoteBufferAddr: " << (void *) RemoteBufferAddr
+      << EndLogLine;
+
+    int BytesProcessed = 0;
+    char* BufferToReport = LocalBufferAddr;
+    int RowsProcessed = 0;
+    while( BytesProcessed < LocalBufferSize )
+    {
+      int KeySize   = -1;
+      int ValueSize = -1;
+      char* KeyPtr    = NULL;
+      char* ValuePtr  = NULL;
+
+      int RowLen = skv_bulk_insert_get_key_value_refs( BufferToReport,
+                                                       &KeyPtr,
+                                                       KeySize,
+                                                       &ValuePtr,
+                                                       ValueSize );
+
+      int TotalSize = KeySize + ValueSize;
+
+      int BytesInRow = skv_bulk_insert_get_total_len( BufferToReport );
+
+      HexDump FxString( LocalBufferAddr, BytesInRow );
+
+      BegLogLine( 1 )
+        << "skv_server_bulk_insert_command_sm::Execute(): "
+        << " TotalSize: " << TotalSize
+        << " KeySize: " << KeySize
+        << " ValueSize: " << ValueSize
+        << " RowsProcessed: " << RowsProcessed
+        << " BytesInRow: " << BytesInRow
+        << " FxString: " << FxString
+        << EndLogLine;
+
+      RowsProcessed++;
+      BufferToReport += BytesInRow;
+      BytesProcessed += BytesInRow;
+    }
+
+    command_completion( SKV_ERRNO_CHECKSUM_MISMATCH,
+                        aEPState,
+                        (skv_cmd_insert_cmpl_t*)Command->GetSendBuff(),
+                        Command,
+                        aCommandOrdinal,
+                        aSeqNo );
+  }
+#if 0
+  StrongAssertLogLine( BufferChecksum == RemoteBufferChecksum )
+    << "skv_server_bulk_insert_command_sm::Execute(): ERROR: "
+    << " BufferChecksum: " << BufferChecksum
+    << " RemoteBufferChecksum: " << RemoteBufferChecksum
+    << " PDSId: " << Command->mCommandState.mCommandBulkInsert.mPDSId
+    << " LocalBufferSize: " << LocalBufferSize
+    << " LocalBuffer: " << (void *) LocalBufferAddr
+    << " LocalBufferLMR: " << (void *) LocalBufferLMR
+    << EndLogLine;
+#endif
+#endif
+
+
             skv_status_t status = aLocalKV->BulkInsert( Command->mCommandState.mCommandBulkInsert.mPDSId,
                                                         &Command->mCommandState.mCommandBulkInsert.mLocalBuffer,
                                                         cookie );
