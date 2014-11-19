@@ -105,9 +105,9 @@ class skv_server_heap_manager_t
 {
   static  mspace   mMspace;
   static  char*    mMspaceBase;
-  static  uint32_t mMspaceLen;
+  static  uint64_t mMspaceLen;
 
-  static  uint32_t mTotalLen;
+  static  uint64_t mTotalLen;
   static  char*    mMemoryAllocation;
 
   static  int      mFd;

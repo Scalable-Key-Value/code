@@ -83,8 +83,8 @@ server_stats_t ServerStatistics = {0,0,0,0,0};
 int    skv_server_heap_manager_t::mFd = 0;
 mspace skv_server_heap_manager_t::mMspace;
 char*  skv_server_heap_manager_t::mMspaceBase = NULL;
-uint32_t skv_server_heap_manager_t::mMspaceLen = 0;
-uint32_t skv_server_heap_manager_t::mTotalLen = 0;
+uint64_t skv_server_heap_manager_t::mMspaceLen = 0;
+uint64_t skv_server_heap_manager_t::mTotalLen = 0;
 char*  skv_server_heap_manager_t::mMemoryAllocation = NULL;
 
 #ifndef SKV_EVD_POLL_THREAD_LOG
