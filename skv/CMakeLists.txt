@@ -57,7 +57,7 @@ set(SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES})
 set(SKV_CLIENT_MPI_LINK_LIBRARIES ${SKV_CLIENT_LINK_LIBRARIES})
 
 set(SKVSERVER_SOURCES
-  server/skv_local_kv_${SKV_LOCAL_KV_BACKEND}.cpp
+  server/skv_local_kv_${LOCAL_KV_BACKEND}.cpp
   server/skv_server.cpp
   server/skv_server_IT_event_source.cpp
   server/skv_server_command_event_source.cpp
@@ -95,7 +95,7 @@ set_target_properties(skvc PROPERTIES COMPILE_DEFINITIONS
 # executables
 common_application(SKVServer)
 
-if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
+if(LOCAL_KV_BACKEND MATCHES "rocksdb")
   set_target_properties(SKVServer PROPERTIES COMPILE_DEFINITIONS
     "WITH_ROCKSDB")
   # for some reason, the rocksdb includes were not found...

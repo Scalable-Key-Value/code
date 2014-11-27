@@ -181,7 +181,9 @@ public:
   }
   rocksdb::Iterator* NewIterator( const rocksdb::Slice *aStartKey, const rocksdb::Slice *aPDSId )
   {
+#if (ROCKSDB_MAJOR < 3 )
     mIteratorOpts.prefix = NULL;
+#endif
     mIteratorOpts.tailing = true;
 
     rocksdb::Iterator *iter = mDataDBHndl->NewIterator( mIteratorOpts );

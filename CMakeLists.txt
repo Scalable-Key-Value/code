@@ -64,15 +64,20 @@ set(COMMON_LIBRARY_TYPE STATIC CACHE STRING
 # asyncmem - async in-memory version for testing
 # rocksdb  - rocksdb backend (requires rocksdb build)
 #############################################
-set(SKV_LOCAL_KV_BACKEND "inmem" CACHE STRING
+set(SKV_LOCAL_KV_BACKEND "rocksdb" CACHE STRING
   "Select a database backend {inmem, asyncmem, rocksdb}")
 set_property(CACHE SKV_LOCAL_KV_BACKEND
   PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
 
-if(SKV_LOCAL_KV_BACKEND MATCHES "rocksdb")
-  find_package(ZLIB REQUIRED)
-  find_package(BZip2 REQUIRED)
-  find_package(rocksdb REQUIRED)
+set(LOCAL_KV_BACKEND ${SKV_LOCAL_KV_BACKEND})
+if(LOCAL_KV_BACKEND MATCHES "rocksdb")
+  find_package(ZLIB)
+  find_package(BZip2)
+  find_package(rocksdb)
+  if(NOT ROCKSDB_FOUND)
+    message(STATUS "rocksdb not found, falling back to inmem backend")
+    set(LOCAL_KV_BACKEND "inmem")
+  endif()
 endif()
 
 
@@ -159,7 +164,7 @@ add_definitions(
 # enable command header checksum
   -DSKV_HEADER_CHECKSUM
 # set the local kv backend for SKV
-  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${SKV_LOCAL_KV_BACKEND}
+  -DSKV_SERVER_LOCAL_KV=skv_local_kv_${LOCAL_KV_BACKEND}
 # data checking in tests
 #  -DDO_CHECK
 
