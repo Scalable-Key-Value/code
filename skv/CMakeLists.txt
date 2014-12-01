@@ -74,10 +74,6 @@ set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES}
 #------------------------------------------------------------------------------
 # libraries
 
-# eile: Disabled static linking. For some unfathomable reason fxlogger
-# then forces the link against gcc 4.4.7 libs which can't work
-#set(COMMON_LIBRARY_TYPE STATIC)
-
 common_library(skv_common)
 common_library(skv_client)
 common_library(skv_client_mpi)

@@ -118,22 +118,6 @@ set(GLOBAL_DEFS
 include_directories(it_api FxLogger)
 
 #------------------------------------------------------------------------------
-# FxLogger library
-#------------------------------------------------------------------------------
-set(FXLOGGER_SOURCES
-  FxLogger/FxLogger.cpp
-  FxLogger/Trace.cpp
-  FxLogger/dlmalloc.c
-)
-
-set(FXLOGGER_PUBLIC_HEADERS
-  FxLogger/FxLogger.hpp
-  FxLogger/Time.hpp
-  FxLogger/Histogram.hpp
-  FxLogger/Trace.hpp
-)
-
-#------------------------------------------------------------------------------
 # IT_API library
 #------------------------------------------------------------------------------
 set(IT_API_DEFS
@@ -183,7 +167,7 @@ include_directories(SYSTEM ${MPI_INCLUDE_PATH})
 # Create library targets
 #------------------------------------------------------------------------------
 
-common_library(fxlogger)
+add_subdirectory(FxLogger)
 common_library(it_api)
 set_target_properties(it_api PROPERTIES
   COMPILE_DEFINITIONS "${SKV_IT_API_LOGGING}" )

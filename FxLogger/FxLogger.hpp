@@ -16,12 +16,14 @@
 #ifndef __PKFXLOG_HPP__
 #define __PKFXLOG_HPP__
 
+#include <FxLogger/Time.hpp>
+
 #include <errno.h>
 #include <assert.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
-#ifdef PK_LINUX
+#ifdef __linux__
 
 #ifndef NO_PK_PLATFORM
 #define NO_PK_PLATFORM ( 1 )
@@ -33,14 +35,11 @@
 
 #include <fstream>
 #include <string>
-#include <Time.hpp>
 
 extern int  FxLoggerNodeId;
 extern char FxLoggerProgramName[ 1024 ];
 using namespace std;
 #else
-
-#include <Time.hpp>
 
 #endif
 
@@ -274,7 +273,7 @@ class FxLogger_NodeName
         #else
 
           int NodeId = -1;
-	  #if ( defined(  PK_BGP ) && defined( PK_LINUX ) && !defined(PK_CNK))
+	  #if ( defined(  PK_BGP ) && defined( __linux__ ) && !defined(PK_CNK))
             NodeId = FxLoggerNodeId;
 	    // int NodeId = getpid() ;
 	    if( NodeId == -1 )
@@ -357,7 +356,7 @@ class FxLogger_NodeName
 
   };
 
-#ifdef PK_LINUX
+#ifdef __linux__
 class FxLogger_ProcessName
 {
 public:
@@ -366,7 +365,7 @@ public:
 
   FxLogger_ProcessName()
     {
-#if defined(PK_LINUX) && !defined(PK_CNK)
+#if defined(__linux__) && !defined(PK_CNK)
       pid_t pid = getpid();
       sprintf( mProcessName, "%d", pid);
 #else
@@ -383,7 +382,7 @@ public:
 
   FxLogger_ThreadName()
     {
-#if defined(PK_LINUX)
+#if defined(__linux__)
       pthread_t tid = pthread_self();
       sprintf( mThreadName, "%08X", (int) tid );
 #else
@@ -524,7 +523,7 @@ enum {pkfxlog_debug = 0};
 enum {pkfxlog_debug = 1};
 #endif
 
-#ifdef PK_LINUX
+#ifdef __linux__
     #define __PKFXLOG_BASIC_LOG_LINE(__PKFXLOG_ABORT_FLAG)                                \
             {                                                                             \
             int _pkFxLogAbortFlag = __PKFXLOG_ABORT_FLAG;                                 \
@@ -628,7 +627,7 @@ class
           // NEED TO MOVE THIS TO THE CORE CONTROL BLOCK
           // MAXBUF + 1 byte for null term + 64 bytes to keep off same L1 cache line
           // NOTE: This won't work for more than 4 cores
-	  #if ( defined( PK_LINUX ) )
+	  #if ( defined( __linux__ ) )
 	    // Handle multithreading
 
             //static char StrBufSpace[ PKLOG_MAXBUF + 1 + 64 ] ;
