@@ -5969,6 +5969,19 @@ it_status_t itx_ep_connect_with_rmr (
 
   iWARPEM_Private_Data_t PrivateDataIn;
   int rlen ;
+  BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+    << "About to pol for private data from socket " << s
+    << EndLogLine ;
+  struct pollfd pollfds[1] ;
+  pollfds[0].fd = s ;
+  pollfds[0].events = POLLIN ;
+  int rc ;
+  do {
+      rc = poll(pollfds,1,100) ;
+  } while ( rc <= 0 ) ;
+  BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+    << "About to read private data from socket " << s
+    << EndLogLine ;
   read_from_socket(s, (char *)&PrivateDataIn, sizeof(PrivateDataIn),&rlen ) ;
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
     << "PrivateDataIn.mLen=" << PrivateDataIn.mLen
