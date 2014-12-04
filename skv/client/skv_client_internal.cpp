@@ -113,10 +113,14 @@ Init( skv_client_group_id_t aCommGroupId,
                                      0,
                                      & mIA_Hdl);
 
-  StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_internal_t::Init::ERROR:: after it_ia_create()"
-    << " status: " <<  status
-    << EndLogLine;
+  if( status != IT_SUCCESS )
+  {
+      BegLogLine( SKV_CLIENT_INIT_LOG )
+          << "skv_client_internal_t::Init::ERROR:: after it_ia_create()"
+          << " status: " <<  status
+          << EndLogLine;
+      return SKV_ERRNO_CONN_FAILED;
+  }
 
   itx_init_tracing( "skv_client", mMyRank );
   /***********************************************************/
@@ -127,10 +131,15 @@ Init( skv_client_group_id_t aCommGroupId,
   status = it_pz_create(  mIA_Hdl,
                           &mPZ_Hdl );
 
-  StrongAssertLogLine( status == IT_SUCCESS )
-    << "skv_client_internal_t::Init::ERROR:: after it_pz_create()"
-    << " status: " << status
-    << EndLogLine;
+  if( status != IT_SUCCESS )
+  {
+      BegLogLine( SKV_CLIENT_INIT_LOG )
+          << "skv_client_internal_t::Init::ERROR:: after it_pz_create()"
+          << " status: " << status
+          << EndLogLine;
+      return SKV_ERRNO_CONN_FAILED;
+  }
+
   /***********************************************************/
 
   /************************************************************
@@ -222,11 +231,14 @@ Connect( const char* aConfigFile,
    * addresses
    *****************************************/
   skv_status_t status = mConnMgrIF.Connect( aConfigFile, aFlags );
-
-  StrongAssertLogLine( status == SKV_SUCCESS )
-    << "skv_client_internal_t::Connect():: ERROR:: "
-    << " status: " << skv_status_to_string( status )
-    << EndLogLine;
+  if( status != IT_SUCCESS )
+  {
+      BegLogLine( SKV_CLIENT_INIT_LOG )
+          << "skv_client_internal_t::Connect():: ERROR:: "
+          << " status: " << skv_status_to_string( status )
+          << EndLogLine;
+      return SKV_ERRNO_CONN_FAILED;
+  }
 
   mState = SKV_CLIENT_STATE_CONNECTED;
 
@@ -240,11 +252,14 @@ Connect( const char* aConfigFile,
    * Get Distribution from the Server
    *****************************************/
   status = RetrieveDistribution( & mDistribution );
-
-  StrongAssertLogLine( status == SKV_SUCCESS )
-    << "skv_client_internal_t::Connect():: ERROR:: "
-    << " status: " << skv_status_to_string( status )
-    << EndLogLine;
+  if( status != IT_SUCCESS )
+  {
+      BegLogLine( SKV_CLIENT_INIT_LOG )
+          << "skv_client_internal_t::Connect():: ERROR:: "
+          << " status: " << skv_status_to_string( status )
+          << EndLogLine;
+      return SKV_ERRNO_CONN_FAILED;
+  }
 
   BegLogLine( SKV_CLIENT_CONNECTION_LOG )
     << "skv_client_internal_t::Connect():: Retrieved distribution "
