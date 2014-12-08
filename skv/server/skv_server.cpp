@@ -529,10 +529,12 @@ ProcessEvent( skv_server_state_t  aState,
             << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
             << EndLogLine;
 
-          StrongAssertLogLine( 0 )
-            << "skv_server_t::ProcessEvent(): BROKEN CONNECTION: WARNING!!! BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES"
-            << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
-            << EndLogLine;
+          SetState( SKV_SERVER_STATE_EXIT );
+
+//          StrongAssertLogLine( 0 )
+//            << "skv_server_t::ProcessEvent(): BROKEN CONNECTION: WARNING!!! BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES"
+//            << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
+//            << EndLogLine;
 
           break;
         }
