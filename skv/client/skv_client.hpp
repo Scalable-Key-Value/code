@@ -20,12 +20,15 @@
 
 #include <skv/common/skv_types_ext.hpp>
 
+class skv_client_internal_t;
+
 class skv_client_t
 {
-  void* mSKVClientInternalPtr;
+  skv_client_internal_t* mSKVClientInternalPtr;
 
 public:
-  skv_client_t() {}
+  skv_client_t() : mSKVClientInternalPtr( 0 ) {}
+  ~skv_client_t();
 
   /**
    * Initializes clients's state

@@ -13,6 +13,7 @@
 
 #include <skv/client/skv_client.hpp>
 #include <skv/client/skv_client_internal.hpp>
+#include <skv/common/skv_init.hpp>
 
 #ifndef SKV_CLIENT_INSERT_TRACE
 #define SKV_CLIENT_INSERT_TRACE ( 1 )
@@ -20,6 +21,25 @@
 
 TraceClient SKVClientInsertStart;
 TraceClient SKVClientInsertFinis;
+
+// Used to prevent mixed mpi/non-mpi linking of the same library. This library
+// is compiled in different variants. Each variant has its own instance of
+// initialized, therefore will trip the skv_common_init which may only be called
+// once
+static bool _checkLinking()
+{
+  const bool commonInit = skv_common_init();
+  StrongAssertLogLine( commonInit )
+    << "skv_client:: ERROR:: Another client library version in use (MPI/non-MPI mix?) "
+    << EndLogLine;
+  return true;
+}
+static bool initialized = _checkLinking();
+
+skv_client_t::~skv_client_t()
+{
+  delete mSKVClientInternalPtr;
+}
 
 
 /***
@@ -31,45 +51,27 @@ TraceClient SKVClientInsertFinis;
  * returns: SKV_SUCCESS on success or error code
  ***/
 #ifdef SKV_CLIENT_UNI
-skv_status_t
-skv_client_t::
-Init( skv_client_group_id_t aCommGroupId,
-      int aFlags,
-      const char* aConfigFile )
-{
-  mSKVClientInternalPtr = malloc( sizeof( skv_client_internal_t ));
-  StrongAssertLogLine( mSKVClientInternalPtr != NULL )
-    << "skv_client_t::Init():: ERROR:: mSKVClientInternalPtr != NULL "
-    << EndLogLine;
-
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Init( aCommGroupId,
-                                                                 aFlags,
-                                                                 aConfigFile );
-}
+skv_status_t skv_client_t::Init( skv_client_group_id_t aCommGroupId,
+                                 int aFlags, const char* aConfigFile )
 #else
-skv_status_t
-skv_client_t::
-Init( skv_client_group_id_t aCommGroupId,
-      MPI_Comm aComm,
-      int aFlags,
-      const char* aConfigFile )
-{
-  mSKVClientInternalPtr = malloc( sizeof( skv_client_internal_t ));
-  StrongAssertLogLine( mSKVClientInternalPtr != NULL )
-    << "skv_client_t::Init():: ERROR:: mSKVClientInternalPtr != NULL "
-    << EndLogLine;
-
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Init( aCommGroupId,
-                                                                 aComm,
-                                                                 aFlags,
-                                                                 aConfigFile );
-}
+skv_status_t skv_client_t::Init( skv_client_group_id_t aCommGroupId,
+                                 MPI_Comm aComm, int aFlags,
+                                 const char* aConfigFile )
 #endif
+{
+  mSKVClientInternalPtr = new skv_client_internal_t;
+#ifdef SKV_CLIENT_UNI
+  return mSKVClientInternalPtr->Init( aCommGroupId, aFlags, aConfigFile );
+#else
+  return mSKVClientInternalPtr->Init( aCommGroupId, aComm, aFlags, aConfigFile );
+#endif
+}
+
 skv_status_t
 skv_client_t::
 Disconnect()
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Disconnect();
+  return mSKVClientInternalPtr->Disconnect();
 }
 
 
@@ -84,8 +86,7 @@ skv_client_t::
 Connect( const char* aConfigFile,
          int         aFlags )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Connect( aConfigFile,
-                                                                    aFlags );
+  return mSKVClientInternalPtr->Connect( aConfigFile, aFlags );
 }
 
 /***
@@ -102,11 +103,8 @@ iOpen( char*                 aPDSName,
        skv_pds_id_t*         aPDSId,
        skv_client_cmd_ext_hdl_t* aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iOpen( aPDSName,
-                                                                  aPrivs,
-                                                                  aFlags,
-                                                                  aPDSId,
-                                                                  (skv_client_cmd_hdl_t*) aCmdHdl );
+  return mSKVClientInternalPtr->iOpen( aPDSName, aPrivs, aFlags, aPDSId,
+                                       (skv_client_cmd_hdl_t*) aCmdHdl );
 }
 
 /***
@@ -127,15 +125,11 @@ iRetrieve( skv_pds_id_t*          aPDSId,
            skv_cmd_RIU_flags_t    aFlags,
            skv_client_cmd_ext_hdl_t*  aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iRetrieve( aPDSId,
-                                                                      aKeyBuffer,
-                                                                      aKeyBufferSize,
-                                                                      aValueBuffer,
-                                                                      aValueBufferSize,
-                                                                      aValueRetrievedSize,
-                                                                      aOffset,
-                                                                      aFlags,
-                                                                      (skv_client_cmd_hdl_t *) aCmdHdl );
+  return mSKVClientInternalPtr->iRetrieve( aPDSId,
+                                           aKeyBuffer, aKeyBufferSize,
+                                           aValueBuffer, aValueBufferSize,
+                                           aValueRetrievedSize, aOffset, aFlags,
+                                           (skv_client_cmd_hdl_t *) aCmdHdl );
 }
 
 /***
@@ -155,14 +149,11 @@ iUpdate( skv_pds_id_t*          aPDSId,
          skv_cmd_RIU_flags_t    aFlags,
          skv_client_cmd_ext_hdl_t*  aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iUpdate( aPDSId,
-                                                                    aKeyBuffer,
-                                                                    aKeyBufferSize,
-                                                                    aValueBuffer,
-                                                                    aValueUpdateSize,
-                                                                    aOffset,
-                                                                    aFlags,
-                                                                    (skv_client_cmd_hdl_t *) aCmdHdl );
+  return mSKVClientInternalPtr->iUpdate( aPDSId,
+                                         aKeyBuffer, aKeyBufferSize,
+                                         aValueBuffer, aValueUpdateSize,
+                                         aOffset, aFlags,
+                                         (skv_client_cmd_hdl_t *) aCmdHdl );
 }
 
 /***
@@ -182,14 +173,11 @@ iInsert( skv_pds_id_t*          aPDSId,
          skv_cmd_RIU_flags_t    aFlags,
          skv_client_cmd_ext_hdl_t*  aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iInsert( aPDSId,
-                                                                    aKeyBuffer,
-                                                                    aKeyBufferSize,
-                                                                    aValueBuffer,
-                                                                    aValueBufferSize,
-                                                                    aValueBufferOffset,
-                                                                    aFlags,
-                                                                    (skv_client_cmd_hdl_t *) aCmdHdl );
+  return mSKVClientInternalPtr->iInsert( aPDSId,
+                                         aKeyBuffer, aKeyBufferSize,
+                                         aValueBuffer, aValueBufferSize,
+                                         aValueBufferOffset, aFlags,
+                                         (skv_client_cmd_hdl_t *) aCmdHdl );
 }
 
 
@@ -207,11 +195,10 @@ iRemove( skv_pds_id_t*          aPDSId,
          skv_cmd_remove_flags_t aFlags,
          skv_client_cmd_ext_hdl_t*  aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iRemove( aPDSId,
-                                                                    aKeyBuffer,
-                                                                    aKeyBufferSize,
-                                                                    aFlags,
-                                                                    (skv_client_cmd_hdl_t *)aCmdHdl );
+  return mSKVClientInternalPtr->iRemove( aPDSId,
+                                         aKeyBuffer, aKeyBufferSize,
+                                         aFlags,
+                                         (skv_client_cmd_hdl_t *)aCmdHdl );
 }
 
 
@@ -227,8 +214,8 @@ skv_client_t::
 iClose( skv_pds_id_t*             aPDSId,
         skv_client_cmd_ext_hdl_t* aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iClose( aPDSId,
-                                                                   (skv_client_cmd_hdl_t *) aCmdHdl );
+  return mSKVClientInternalPtr->iClose( aPDSId,
+                                        (skv_client_cmd_hdl_t *) aCmdHdl );
 }
 
 
@@ -245,9 +232,8 @@ iPDScntl( skv_pdscntl_cmd_t         aCmd,
           skv_pds_attr_t           *aPDSAttr,
           skv_client_cmd_ext_hdl_t *aCmdHdl )
   {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->iPDScntl( aCmd,
-                                                                     aPDSAttr,
-                                                                     (skv_client_cmd_hdl_t *) aCmdHdl );
+  return mSKVClientInternalPtr->iPDScntl( aCmd, aPDSAttr,
+                                          (skv_client_cmd_hdl_t *) aCmdHdl );
   }
 
 /***
@@ -260,7 +246,7 @@ skv_status_t
 skv_client_t::
 TestAny( skv_client_cmd_ext_hdl_t* aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->TestAny( (skv_client_cmd_hdl_t *) aCmdHdl );
+  return mSKVClientInternalPtr->TestAny( (skv_client_cmd_hdl_t *) aCmdHdl );
 }
 
 /***
@@ -273,7 +259,7 @@ skv_status_t
 skv_client_t::
 Test( skv_client_cmd_ext_hdl_t aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Test( (skv_client_cmd_hdl_t)   aCmdHdl );
+  return mSKVClientInternalPtr->Test( (skv_client_cmd_hdl_t)   aCmdHdl );
 }
 
 /***
@@ -286,7 +272,7 @@ skv_status_t
 skv_client_t::
 WaitAny( skv_client_cmd_ext_hdl_t* aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->WaitAny( (skv_client_cmd_hdl_t *) aCmdHdl );
+  return mSKVClientInternalPtr->WaitAny( (skv_client_cmd_hdl_t *) aCmdHdl );
 }
 
 /***
@@ -299,7 +285,7 @@ skv_status_t
 skv_client_t::
 Wait( skv_client_cmd_ext_hdl_t aCmdHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Wait( (skv_client_cmd_hdl_t) aCmdHdl );
+  return mSKVClientInternalPtr->Wait( (skv_client_cmd_hdl_t) aCmdHdl );
 }
 
 /***
@@ -315,10 +301,7 @@ Open( char*                  aPDSName,
       skv_cmd_open_flags_t   aFlags,
       skv_pds_id_t*          aPDSId )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Open( aPDSName,
-                                                                  aPrivs,
-                                                                  aFlags,
-                                                                  aPDSId );
+  return mSKVClientInternalPtr->Open( aPDSName, aPrivs, aFlags, aPDSId );
 }
 
 /***
@@ -331,7 +314,7 @@ skv_status_t
 skv_client_t::
 Close( skv_pds_id_t* aPDSId )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Close( aPDSId );
+  return mSKVClientInternalPtr->Close( aPDSId );
 }
 
 /***
@@ -346,8 +329,7 @@ skv_client_t::
 PDScntl( skv_pdscntl_cmd_t  aCmd,
          skv_pds_attr_t    *aPDSAttr )
   {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->PDScntl( aCmd,
-                                                                    aPDSAttr );
+  return mSKVClientInternalPtr->PDScntl( aCmd, aPDSAttr );
   }
 
 
@@ -368,14 +350,10 @@ Retrieve( skv_pds_id_t*       aPDSId,
           int                 aOffset,
           skv_cmd_RIU_flags_t aFlags  )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Retrieve( aPDSId,
-                                                                     aKeyBuffer,
-                                                                     aKeyBufferSize,
-                                                                     aValueBuffer,
-                                                                     aValueBufferSize,
-                                                                     aValueRetrievedSize,
-                                                                     aOffset,
-                                                                     aFlags );
+  return mSKVClientInternalPtr->Retrieve( aPDSId,
+                                          aKeyBuffer, aKeyBufferSize,
+                                          aValueBuffer, aValueBufferSize,
+                                          aValueRetrievedSize, aOffset, aFlags );
 }
 
 /***
@@ -394,13 +372,10 @@ Update( skv_pds_id_t*         aPDSId,
         int                   aOffset,
         skv_cmd_RIU_flags_t   aFlags )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Update( aPDSId,
-                                                                   aKeyBuffer,
-                                                                   aKeyBufferSize,
-                                                                   aValueBuffer,
-                                                                   aValueUpdateSize,
-                                                                   aOffset,
-                                                                   aFlags );
+  return mSKVClientInternalPtr->Update( aPDSId,
+                                        aKeyBuffer, aKeyBufferSize,
+                                        aValueBuffer, aValueUpdateSize,
+                                        aOffset, aFlags );
 }
 
 /***
@@ -421,20 +396,18 @@ Insert( skv_pds_id_t*       aPDSId,
 {
   SKVClientInsertStart.HitOE( SKV_CLIENT_INSERT_TRACE,
                               "SKVClientInsert",
-                              ((skv_client_internal_t *)mSKVClientInternalPtr)->GetRank(),
+                              mSKVClientInternalPtr->GetRank(),
                               SKVClientInsertStart );
 
-  skv_status_t status  = ((skv_client_internal_t *)mSKVClientInternalPtr)->Insert( aPDSId,
-                                                                                   aKeyBuffer,
-                                                                                   aKeyBufferSize,
-                                                                                   aValueBuffer,
-                                                                                   aValueBufferSize,
-                                                                                   aValueBufferOffset,
-                                                                                   aFlags );
+  skv_status_t status  = mSKVClientInternalPtr->Insert( aPDSId,
+                                                        aKeyBuffer, aKeyBufferSize,
+                                                        aValueBuffer, aValueBufferSize,
+                                                        aValueBufferOffset,
+                                                        aFlags );
 
   SKVClientInsertFinis.HitOE( SKV_CLIENT_INSERT_TRACE,
                               "SKVClientInsert",
-                              ((skv_client_internal_t *)mSKVClientInternalPtr)->GetRank(),
+                              mSKVClientInternalPtr->GetRank(),
                               SKVClientInsertFinis );
 
   return status;
@@ -448,7 +421,7 @@ skv_status_t
 skv_client_t::
 GetLocalServerRanks( int **aLocalServers, int *aCount )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->GetLocalServerRanks( aLocalServers, aCount );
+  return mSKVClientInternalPtr->GetLocalServerRanks( aLocalServers, aCount );
 }
 
 /***
@@ -462,9 +435,8 @@ OpenLocalCursor( int                          aNodeId,
                  skv_pds_id_t*                aPDSId,
                  skv_client_cursor_ext_hdl_t* aCursorHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->OpenLocalCursor( aNodeId,
-                                                                            aPDSId,
-                                                                            (skv_client_cursor_handle_t *) aCursorHdl );
+  return mSKVClientInternalPtr->OpenLocalCursor( aNodeId, aPDSId,
+                                                 (skv_client_cursor_handle_t *) aCursorHdl );
 }
 
 /***
@@ -476,7 +448,7 @@ skv_status_t
 skv_client_t::
 CloseLocalCursor( skv_client_cursor_ext_hdl_t  aCursorHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->CloseLocalCursor( (skv_client_cursor_handle_t) aCursorHdl );
+  return mSKVClientInternalPtr->CloseLocalCursor( (skv_client_cursor_handle_t) aCursorHdl );
 }
 
 
@@ -496,14 +468,11 @@ GetFirstLocalElement( skv_client_cursor_ext_hdl_t aCursorHdl,
                       int                         aRetrievedValueMaxSize,
                       skv_cursor_flags_t          aFlags )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->GetFirstLocalElement( (skv_client_cursor_handle_t) aCursorHdl,
-                                                                                 aRetrievedKeyBuffer,
-                                                                                 aRetrievedKeySize,
-                                                                                 aRetrievedKeyMaxSize,
-                                                                                 aRetrievedValueBuffer,
-                                                                                 aRetrievedValueSize,
-                                                                                 aRetrievedValueMaxSize,
-                                                                                 aFlags );
+  return mSKVClientInternalPtr->GetFirstLocalElement(
+      (skv_client_cursor_handle_t) aCursorHdl,
+      aRetrievedKeyBuffer, aRetrievedKeySize, aRetrievedKeyMaxSize,
+      aRetrievedValueBuffer, aRetrievedValueSize, aRetrievedValueMaxSize,
+      aFlags );
 }
 
 /***
@@ -522,7 +491,7 @@ GetNextLocalElement(  skv_client_cursor_ext_hdl_t   aCursorHdl,
                       int                           aRetrievedValueMaxSize,
                       skv_cursor_flags_t            aFlags )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->GetNextLocalElement( (skv_client_cursor_handle_t) aCursorHdl,
+  return mSKVClientInternalPtr->GetNextLocalElement( (skv_client_cursor_handle_t) aCursorHdl,
                                                                                 aRetrievedKeyBuffer,
                                                                                 aRetrievedKeySize,
                                                                                 aRetrievedKeyMaxSize,
@@ -546,8 +515,8 @@ skv_client_t::
 OpenCursor( skv_pds_id_t*                aPDSId,
             skv_client_cursor_ext_hdl_t* aCursorHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->OpenCursor( aPDSId,
-                                                                       (skv_client_cursor_handle_t * ) aCursorHdl);
+  return mSKVClientInternalPtr->OpenCursor( aPDSId,
+                                            (skv_client_cursor_handle_t * ) aCursorHdl);
 }
 #endif
 
@@ -560,7 +529,7 @@ skv_status_t
 skv_client_t::
 CloseCursor( skv_client_cursor_ext_hdl_t aCursorHdl )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->CloseCursor( (skv_client_cursor_handle_t) aCursorHdl);
+  return mSKVClientInternalPtr->CloseCursor( (skv_client_cursor_handle_t) aCursorHdl);
 }
 
 
@@ -571,11 +540,10 @@ Remove( skv_pds_id_t*          aPDSId,
         int                    aKeyBufferSize,
         skv_cmd_remove_flags_t aFlags )
 {
-  skv_status_t status  = ((skv_client_internal_t *)mSKVClientInternalPtr)->Remove( aPDSId,
-                                                                                   aKeyBuffer,
-                                                                                   aKeyBufferSize,
-                                                                                   aFlags );
-
+  skv_status_t status  = mSKVClientInternalPtr->Remove( aPDSId,
+                                                        aKeyBuffer,
+                                                        aKeyBufferSize,
+                                                        aFlags );
   return status;
 }
 
@@ -583,7 +551,7 @@ skv_status_t
 skv_client_t::
 Finalize()
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Finalize();
+  return mSKVClientInternalPtr->Finalize();
 }
 
 
@@ -603,7 +571,7 @@ GetFirstElement( skv_client_cursor_ext_hdl_t  aCursorHdl,
                  int                          aRetrievedValueMaxSize,
                  skv_cursor_flags_t           aFlags )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->GetFirstElement( (skv_client_cursor_handle_t) aCursorHdl,
+  return mSKVClientInternalPtr->GetFirstElement( (skv_client_cursor_handle_t) aCursorHdl,
                                                                             aRetrievedKeyBuffer,
                                                                             aRetrievedKeySize,
                                                                             aRetrievedKeyMaxSize,
@@ -629,7 +597,7 @@ GetNextElement( skv_client_cursor_ext_hdl_t  aCursorHdl,
                 int                          aRetrievedValueMaxSize,
                 skv_cursor_flags_t           aFlags )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->GetNextElement( (skv_client_cursor_handle_t) aCursorHdl,
+  return mSKVClientInternalPtr->GetNextElement( (skv_client_cursor_handle_t) aCursorHdl,
                                                                            aRetrievedKeyBuffer,
                                                                            aRetrievedKeySize,
                                                                            aRetrievedKeyMaxSize,
@@ -650,9 +618,7 @@ DumpPDS( skv_pds_id_t aPDSId,
          int          aMaxKeySize,
          int          aMaxValueSize )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->DumpPDS( aPDSId,
-                                                                    aMaxKeySize,
-                                                                    aMaxValueSize );
+  return mSKVClientInternalPtr->DumpPDS( aPDSId, aMaxKeySize, aMaxValueSize );
 }
 
 
@@ -665,9 +631,9 @@ CreateBulkInserter( skv_pds_id_t*                           aPDSId,
                     skv_bulk_inserter_flags_t               aFlags,
                     skv_client_bulk_inserter_ext_hdl_t*     aBulkInserterHandle )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->CreateBulkInserter( aPDSId,
-                                                                               aFlags,
-                                                                               (skv_client_bulk_inserter_hdl_t *) aBulkInserterHandle );
+  return mSKVClientInternalPtr->CreateBulkInserter( aPDSId,
+                                                    aFlags,
+                                                    (skv_client_bulk_inserter_hdl_t *) aBulkInserterHandle );
 }
 
 skv_status_t
@@ -680,32 +646,30 @@ Insert( skv_client_bulk_inserter_ext_hdl_t  aBulkInserterHandle,
         // int                              aValueBufferOffset ??? This can be supported later
         skv_bulk_inserter_flags_t           aFlags )
 {
-  return ((skv_client_internal_t *)mSKVClientInternalPtr)->Insert( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle,
-                                                                   aKeyBuffer,
-                                                                   aKeyBufferSize,
-                                                                   aValueBuffer,
-                                                                   aValueBufferSize,
-                                                                   aFlags );
+  return mSKVClientInternalPtr->Insert( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle,
+                                        aKeyBuffer, aKeyBufferSize,
+                                        aValueBuffer, aValueBufferSize,
+                                        aFlags );
 }
 
 skv_status_t
 skv_client_t::
 Flush( skv_client_bulk_inserter_ext_hdl_t aBulkInserterHandle )
 {
-  return ((skv_client_internal_t *) mSKVClientInternalPtr)->Flush( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle );
+  return mSKVClientInternalPtr->Flush( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle );
 }
 
 skv_status_t
 skv_client_t::
 CloseBulkInserter( skv_client_bulk_inserter_ext_hdl_t aBulkInserterHandle )
 {
-  return ((skv_client_internal_t *) mSKVClientInternalPtr)->CloseBulkInserter( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle );
+  return mSKVClientInternalPtr->CloseBulkInserter( (skv_client_bulk_inserter_hdl_t) aBulkInserterHandle );
 }
 
 skv_status_t
 skv_client_t::
 DumpPersistentImage( char* aPath )
 {
-  return ((skv_client_internal_t *) mSKVClientInternalPtr)->DumpPersistentImage( aPath );
+  return mSKVClientInternalPtr->DumpPersistentImage( aPath );
 }
 /*****************************************************************************/

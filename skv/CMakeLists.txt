@@ -6,20 +6,22 @@ set(SKVC_MPI_SOURCES ${SKVC_SOURCES})
 set(SKV_COMMON_SOURCES
   common/skv_config.cpp
   common/skv_distribution_manager.cpp
+  common/skv_init.cpp
   common/skv_utils.cpp
 )
 set(SKV_COMMON_PUBLIC_HEADERS
-  common/skv_distribution_manager.hpp
-  common/skv_utils.hpp
+  common/skv_array_queue.hpp
   common/skv_array_stack.hpp
   common/skv_client_server_headers.hpp
-  common/skv_array_queue.hpp
-  common/skv_errno.hpp
-  common/skv_config.hpp
   common/skv_client_server_protocol.hpp
+  common/skv_config.hpp
+  common/skv_distribution_manager.hpp
+  common/skv_errno.hpp
+  common/skv_init.hpp
+  common/skv_mutex.hpp
   common/skv_types.hpp
   common/skv_types_ext.hpp
-  common/skv_mutex.hpp
+  common/skv_utils.hpp
 )
 
 set(SKV_CLIENT_SOURCES
