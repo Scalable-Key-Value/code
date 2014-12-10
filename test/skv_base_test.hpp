@@ -373,7 +373,7 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
   {
     *Key = htobe64( aRndSeed+i );
 
-    int DataSize = random() % aMaxDataSize;
+    int DataSize = random() % aMaxDataSize + 1;
     char value[ 65536 ];
     generate_data( value, DataSize, *Key, 0 );
 
@@ -405,7 +405,7 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
   for( int i=0; ( test_level >= 1 ) && ( ( status == SKV_SUCCESS ) && ( i < aKeyCount ) ); i++ )
   {
     *Key = htobe64( aRndSeed+i );
-    int DataSize = random() % aMaxDataSize;
+    int DataSize = random() % aMaxDataSize + 1;
     int Retrieved;
     char value[ 65536 ];
     status = gdata.Client.Retrieve( &PDSId, pureKey, aKeySize,
