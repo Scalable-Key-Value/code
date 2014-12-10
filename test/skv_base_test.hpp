@@ -330,13 +330,11 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
                                        int aMaxDataSize,
                                        int aRndSeed )
 {
-  if( aKeySize > 8 )
-  {
-    BegLogLine( 1 )
-      << "bulkinsert Configuration ERROR: KeySize > 8 : " << aKeySize
-      << EndLogLine;
-    return SKV_ERRNO_KEY_TOO_LARGE;
-  }
+  int KeyBufferSize = std::max( aKeySize, (int)sizeof(uint64_t) );
+  char KeyBuffer[ KeyBufferSize ];
+  uint64_t *Key = (uint64_t*)&(KeyBuffer[ KeyBufferSize - sizeof(uint64_t) ]);
+  char* pureKey = &(KeyBuffer[ KeyBufferSize - aKeySize ]);
+
   skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
   skv_pds_id_t PDSId;
   int test_level = 0;
@@ -364,15 +362,23 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
   if( status == SKV_SUCCESS )
     test_level = 2;
 
+  // fill larger keys with constant random data and update only lower portion
+  if( aKeySize > sizeof(uint64_t) )
+  {
+    for (int n=0; n<aKeySize; n++)
+      KeyBuffer[n] = random() & 0xFF;
+  }
+
   for( int i=0; ( test_level >= 2 ) && ( ( status == SKV_SUCCESS ) && ( i < aKeyCount ) ); i++ )
   {
-    uint64_t Key = htole64( aRndSeed+i );
+    *Key = htobe64( aRndSeed+i );
+
     int DataSize = random() % aMaxDataSize;
     char value[ 65536 ];
-    generate_data( value, DataSize, Key, 0 );
+    generate_data( value, DataSize, *Key, 0 );
 
     status = gdata.Client.Insert( BulkLoaderHandle,
-                                  (char *) &Key,
+                                  pureKey,
                                   aKeySize,
                                   value,
                                   DataSize,
@@ -398,15 +404,15 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
 
   for( int i=0; ( test_level >= 1 ) && ( ( status == SKV_SUCCESS ) && ( i < aKeyCount ) ); i++ )
   {
-    uint64_t Key = htole64( aRndSeed+i );
+    *Key = htobe64( aRndSeed+i );
     int DataSize = random() % aMaxDataSize;
     int Retrieved;
     char value[ 65536 ];
-    status = gdata.Client.Retrieve( &PDSId, (char *) &Key, aKeySize,
+    status = gdata.Client.Retrieve( &PDSId, pureKey, aKeySize,
                                     value, aMaxDataSize, &Retrieved, 0,
                                     SKV_COMMAND_RIU_FLAGS_NONE );
 
-    if( (status == SKV_SUCCESS) && (!verify_data( value, Retrieved, Key, 0)) )
+    if( (status == SKV_SUCCESS) && (!verify_data( value, Retrieved, *Key, 0)) )
     {
       status = SKV_ERRNO_CHECKSUM_MISMATCH;
       break;
@@ -468,14 +474,26 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
 
     if( test_level >= 2)
     {
-      uint64_t Key = 0;
+      int KeyBufferSize = std::max( aKeySize, (int)sizeof(uint64_t) );
+      char KeyBuffer[ KeyBufferSize ];
+      uint64_t *Key = (uint64_t*)&(KeyBuffer[ KeyBufferSize - sizeof(uint64_t) ]);
+      char* pureKey = &(KeyBuffer[ KeyBufferSize - aKeySize ]);
+
       int KeySize = 0;
       char value[65536];
       int valueSize;
 
+      // fill larger keys with constant random data and update only lower portion
+      if( aKeySize > sizeof(uint64_t) )
+      {
+        for (int n=0; n<aKeySize; n++)
+          KeyBuffer[n] = random() & 0xFF;
+      }
+
+
       if( local )
         status = gdata.Client.GetFirstLocalElement( CursorHdl,
-                                                    (char*)&Key,
+                                                    pureKey,
                                                     &KeySize,
                                                     aKeySize,
                                                     value,
@@ -484,7 +502,7 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
                                                     SKV_CURSOR_NONE_FLAG );
       else
         status = gdata.Client.GetFirstElement( CursorHdl,
-                                               (char*)&Key,
+                                               pureKey,
                                                &KeySize,
                                                aKeySize,
                                                value,
@@ -496,7 +514,7 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
       {
         case SKV_SUCCESS:
           KeyCount++;
-          if (!verify_data( value, valueSize, Key, 0))
+          if (!verify_data( value, valueSize, *Key, 0))
             status = SKV_ERRNO_CHECKSUM_MISMATCH;
           break;
         case SKV_ERRNO_END_OF_RECORDS:
@@ -509,10 +527,10 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
 
       while( status == SKV_SUCCESS )
       {
-        Key = 0;
+        *Key = 0;
         if( local )
           status = gdata.Client.GetNextLocalElement( CursorHdl,
-                                                     (char*)&Key,
+                                                     pureKey,
                                                      &KeySize,
                                                      aKeySize,
                                                      value,
@@ -521,7 +539,7 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
                                                      SKV_CURSOR_NONE_FLAG );
         else
           status = gdata.Client.GetNextElement( CursorHdl,
-                                                (char*)&Key,
+                                                pureKey,
                                                 &KeySize,
                                                 aKeySize,
                                                 value,
@@ -537,7 +555,7 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
             << " rc: " << skv_status_to_string( status )
             << EndLogLine;
 
-        if( (status == SKV_SUCCESS) && (!verify_data( value, valueSize, Key, 0)) )
+        if( (status == SKV_SUCCESS) && (!verify_data( value, valueSize, *Key, 0)) )
           status = SKV_ERRNO_CHECKSUM_MISMATCH;
       }
 
