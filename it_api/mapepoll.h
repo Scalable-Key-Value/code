@@ -91,6 +91,29 @@ static int mapepoll_ctl(mapepfd_t epfd, int op, int fd, struct epoll_event *even
       }
     return 0 ;
   }
+/*
+ * Issue the poll in groups of 50 file descriptors at a time. Note the timeout is set to zero to support this
+ */
+enum
+{
+  k_pollgroupsize = 50
+};
+static int poll_by_group(struct pollfd *pollfds,int pollfd_count, int timeout)
+  {
+    int rc=0 ;
+    int pollfd_index=0 ;
+    while ( pollfd_index < pollfd_count-k_pollgroupsize)
+      {
+        int rc1=poll(pollfds+pollfd_index,k_pollgroupsize,0) ;
+        if ( rc1 < 0 ) return rc1 ;
+        rc += rc1 ;
+        pollfd_index += k_pollgroupsize ;
+      }
+    int rc2=poll(pollfds+pollfd_index,pollfd_count-pollfd_index,0) ;
+    if ( rc2 < 0 ) return rc2 ;
+    rc += rc2 ;
+    return rc ;
+  }
 static int mapepoll_wait(mapepfd_t epfd, struct epoll_event *events, int maxevents, int timeout)
   {
     struct pollfd pollfds[mapepoll_event_count] ;
@@ -106,7 +129,11 @@ static int mapepoll_wait(mapepfd_t epfd, struct epoll_event *events, int maxeven
         pollfds[a].fd = mapepoll_event[a].fd ;
         pollfds[a].events = POLLIN ;
       }
+#ifdef PK_CNK
+    int rc=poll_by_group(pollfds,mapepoll_event_count,timeout) ;
+#else
     int rc=poll(pollfds,mapepoll_event_count,timeout) ;
+#endif
     if ( rc <= 0 ) return rc ;
     BegLogLine(FXLOG_MAPEPOLL)
       << "poll rc=" << rc
