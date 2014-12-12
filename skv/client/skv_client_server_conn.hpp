@@ -268,7 +268,7 @@ struct skv_client_queued_command_rep_t
       if( aCCB->CheckRequestWithWrite() )
         mInFlightWriteCount--;
 
-      bool needpost = ( (( mSendSegsCount > 0) && ( mInFlightWriteCount < mSendSegsCount )) ||
+      bool needpost = ( (( mSendSegsCount > 0) && ( (mInFlightWriteCount-1)*4 < mSendSegsCount )) ||
           ( mSendSegsCount >= SKV_MAX_COALESCED_COMMANDS ) );
 
       BegLogLine( SKV_CLIENT_REQUEST_COALESCING_LOG )
@@ -376,7 +376,7 @@ struct skv_client_queued_command_rep_t
        * - the max number of send-segments is reached
        * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
        */
-      bool needpost = ( (mInFlightWriteCount < mSendSegsCount) ||
+      bool needpost = ( ((mInFlightWriteCount-1) * 4 < mSendSegsCount) ||
           ( mSendSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
           (( base_srv_slot + mSendSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
 
