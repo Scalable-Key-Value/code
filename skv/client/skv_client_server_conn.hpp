@@ -32,8 +32,10 @@
 #endif
 
 #ifdef SKV_COALESCING_STATISTICS
+#include <sstream>
 static uint64_t gClientCoalescCount[ SKV_MAX_COALESCED_COMMANDS + 1 ];
 static uint64_t gClientRequestCount = 0;
+static uint64_t gClientCoalescSum = 0;
 #endif
 
 typedef enum
@@ -313,16 +315,22 @@ struct skv_client_queued_command_rep_t
 #ifdef SKV_COALESCING_STATISTICS
       gClientCoalescCount[ mSendSegsCount ]++;
       gClientRequestCount = (gClientRequestCount+1) & 0xFFFF;
+      gClientCoalescSum += mSendSegsCount;
       if( gClientRequestCount == 0 )
       {
+//        std::string buckets;
+        std::stringstream buckets;
+        for ( int i=1; i<SKV_MAX_COALESCED_COMMANDS+1; i++ )
+        {
+           buckets << "["<< i << ":" << gClientCoalescCount[ i ] << "] ";
+        }
         BegLogLine( 1 )
           << "Client Request Coalescing after " << 0xFFFF << " Requests: "
-          << " single: " << gClientCoalescCount[ 1 ]
-          << " 2: " << gClientCoalescCount[ 2 ]
-          << " 3: " << gClientCoalescCount[ 3 ]
-          << " 4: " << gClientCoalescCount[ 4 ]
+          << buckets.str().c_str()
+          << " Avg: " << (double)gClientCoalescSum/(double)0xFFFF
           << EndLogLine;
         memset( gClientCoalescCount, 0, sizeof(uint64_t) * (SKV_MAX_COALESCED_COMMANDS + 1) );
+        gClientCoalescSum = 0;
       }
 
 #endif
