@@ -262,7 +262,7 @@ struct skv_client_queued_command_rep_t
     inline
     bool DynamicCoalescingCondition()
     {
-      return ( mInFlightWriteCount < mSendSegsCount );
+      return ( mInFlightWriteCount*mInFlightWriteCount < mSendSegsCount );
     }
 
     skv_server_to_client_cmd_hdr_t*
