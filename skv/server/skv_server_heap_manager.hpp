@@ -45,7 +45,7 @@
 #define MY_HOSTNAME_SIZE 128
 
 //#define PERSISTENT_IMAGE_MAX_LEN                ( 2u * 1024u * 1024u * 1024u )
-#define PERSISTENT_IMAGE_MAX_LEN                ( 2u * 1024u * 1024u * 1024u )
+#define PERSISTENT_IMAGE_MAX_LEN                ( 2ull * 1024ull * 1024ull * 1024ull )
 //#define PERSISTENT_IMAGE_MAX_LEN                ( 1024u * 1024u * 1024u )
 //#define PERSISTENT_IMAGE_MAX_LEN                ( 1724u * 1024u * 1024u )
 
