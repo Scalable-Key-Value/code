@@ -14,29 +14,46 @@
 #ifndef __SKV_SERVER_COMMAND_EVENT_SOURCE_HPP__
 #define __SKV_SERVER_COMMAND_EVENT_SOURCE_HPP__
 
-#ifndef SKV_SERVER_GET_COMMAND_LOG
-#define SKV_SERVER_GET_COMMAND_LOG ( 0 | SKV_LOGGING_ALL )
-#endif
+class skv_server_command_event_source_t;
 
-#ifndef SKV_SERVER_COMMAND_POLLING_LOG
-#define SKV_SERVER_COMMAND_POLLING_LOG ( 0 | SKV_LOGGING_ALL )
-#endif
+struct skv_server_command_thread_args_t
+{
+  skv_server_command_event_source_t *mEventSource;
+  skv_server_command_event_buffer_list_t *mBufferList;
+  pthread_mutex_t mMutex;
+  int mMaxEventCount;
+  volatile bool mKeepRunning;
+};
 
 class skv_server_command_event_source_t :
     public skv_server_event_source_t<EPStateMap_T>
 {
+  skv_server_command_event_buffer_list_t mBufferList;
+  pthread_t mPollThread;
+  skv_server_command_thread_args_t mCommandFetchArgs;
+
 public:
+  skv_server_command_event_source_t()
+  {
+    mCommandFetchArgs.mBufferList = &mBufferList;
+    mCommandFetchArgs.mEventSource = this;
+    mCommandFetchArgs.mKeepRunning = true;
+    mCommandFetchArgs.mMaxEventCount = SKV_SERVER_EVENTS_MAX_COUNT;
+
+    pthread_create( &mPollThread, NULL, CommandFetchThread, (void*)&mCommandFetchArgs );
+  }
+  virtual ~skv_server_command_event_source_t()
+  {
+    mCommandFetchArgs.mKeepRunning = false;
+    void *ThreadReturn;
+    pthread_join( mPollThread, &ThreadReturn);
+  }
   virtual skv_status_t
   GetEvent( skv_server_event_t* aEvents,
             int* aEventCount,
             int aMaxEventCount );
 
-  virtual ~skv_server_command_event_source_t() {}
-
-private:
-  skv_status_t PrepareEvent( skv_server_event_t *currentEvent,
-                             skv_server_ep_state_t *aEPState );
-
+  static void* CommandFetchThread( void *aArgs );
 };
 
 #endif // __SKV_SERVER_COMMAND_EVENT_SOURCE_HPP__

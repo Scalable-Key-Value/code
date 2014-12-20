@@ -32,6 +32,7 @@
 #include <skv/server/skv_local_kv_interface.hpp>
 
 // include the various event sources
+#include <skv/server/skv_server_command_event_buffer.hpp>
 #include <skv/server/skv_server_event_source.hpp>
 #include <skv/server/skv_server_IT_event_source.hpp>
 #include <skv/server/skv_server_internal_event_source.hpp>

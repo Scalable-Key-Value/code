@@ -30,7 +30,7 @@
 #if SKV_USE_VERBS
 #define SKV_MAX_COALESCED_COMMANDS ( 4 )   // some verbs providers don't allow more than 4 SGEs
 #else
-#define SKV_MAX_COALESCED_COMMANDS ( 32 )  // allow for more coalescing supported by the sockets impl of IT-API
+#define SKV_MAX_COALESCED_COMMANDS ( 64 )  // allow for more coalescing supported by the sockets impl of IT-API
 #endif
 
 #define SKV_CHECKSUM_BYTES ( 2 )

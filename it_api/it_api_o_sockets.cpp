@@ -3817,6 +3817,13 @@ iWARPEM_AcceptThread( void* args )
       
       // Accept going here
       int ConnFd = accept( ListenSockFd, (struct sockaddr *) &cliaddr, &cliaddrlen );
+      if( ConnFd < 0 )
+        {
+        BegLogLine( 1 )
+          << "Failure during accept(). Errno: " << errno
+          << EndLogLine;
+        continue;
+        }
 #if defined(SPINNING_RECEIVE)
       socket_nonblock_on(ConnFd) ;
 #endif

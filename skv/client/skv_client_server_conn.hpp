@@ -38,6 +38,8 @@ static uint64_t gClientRequestCount = 0;
 static uint64_t gClientCoalescSum = 0;
 #endif
 
+//#define DISABLE_CLIENT_COALESCING
+
 typedef enum
 {
   SKV_CLIENT_CONN_DISCONNECTED = 1,
@@ -262,7 +264,7 @@ struct skv_client_queued_command_rep_t
     inline
     bool DynamicCoalescingCondition()
     {
-      return ( mInFlightWriteCount*mInFlightWriteCount < mSendSegsCount );
+      return ( mInFlightWriteCount * mInFlightWriteCount < mSendSegsCount );
     }
 
     skv_server_to_client_cmd_hdr_t*
@@ -314,7 +316,7 @@ struct skv_client_queued_command_rep_t
 
 #ifdef SKV_COALESCING_STATISTICS
       gClientCoalescCount[ mSendSegsCount ]++;
-      gClientRequestCount = (gClientRequestCount+1) & 0xFFFF;
+      gClientRequestCount = (gClientRequestCount+1) & 0xFFF;
       gClientCoalescSum += mSendSegsCount;
       if( gClientRequestCount == 0 )
       {
@@ -325,9 +327,9 @@ struct skv_client_queued_command_rep_t
            buckets << "["<< i << ":" << gClientCoalescCount[ i ] << "] ";
         }
         BegLogLine( 1 )
-          << "Client Request Coalescing after " << 0xFFFF << " Requests: "
+          << "Client Request Coalescing after " << 0xFFF << " Requests: "
           << buckets.str().c_str()
-          << " Avg: " << (double)gClientCoalescSum/(double)0xFFFF
+          << " Avg: " << (double)gClientCoalescSum/(double)0x1000
           << EndLogLine;
         memset( gClientCoalescCount, 0, sizeof(uint64_t) * (SKV_MAX_COALESCED_COMMANDS + 1) );
         gClientCoalescSum = 0;
@@ -390,9 +392,13 @@ struct skv_client_queued_command_rep_t
        * - the max number of send-segments is reached
        * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
        */
+#ifdef DISABLE_CLIENT_COALESCING
+      bool needpost = true;
+#else
       bool needpost = ( DynamicCoalescingCondition() ||
           ( mSendSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
           (( base_srv_slot + mSendSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
+#endif
 
       BegLogLine( SKV_CLIENT_REQUEST_COALESCING_LOG )
         << "PostOrStoreRdmaWrite: EP: " << (void*)this

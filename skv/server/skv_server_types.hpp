@@ -57,10 +57,15 @@
 #endif
 
 #ifdef SKV_COALESCING_STATISTICS
+#include <sstream>
 static uint64_t gServerCoalescCount[ SKV_MAX_COALESCED_COMMANDS + 1 ];
 static uint64_t gServerRequestCount = 0;
+static uint64_t gServerCoalescSum = 0;
 #endif
 
+//#define DISABLE_SERVER_COALESCING
+
+#include <skv/common/skv_mutex.hpp>
 #include <skv/server/skv_server_event_type.hpp>
 #include <skv/server/skv_server_heap_manager.hpp>
 // !! FURTHER INCLUDES FURTHER DOWN IN THE FILE !!
@@ -611,7 +616,7 @@ struct skv_server_event_t
 
     skv_server_rdma_write_cmpl_cookie_t mRdmaWriteCmplCookie;
 
-  } skv_server_event_metadata_t ;
+  } skv_server_event_metadata_t __attribute__ ((aligned (64)));
 
   skv_server_event_metadata_t mEventMetadata;
   skv_server_event_type_t   mCmdEventType;
@@ -750,22 +755,23 @@ struct skv_server_ep_state_t
   it_lmr_handle_t              mCommandBuffLMR;
 
   int                          mLastPending; //! index to last pending event
-  int                          mWaitForSQ;
+  volatile int                 mWaitForSQ;
 
-  int                          mUsedCommandSlotIndex; // indicate the first used/occupied/uncompleted command buffer
-  int                          mUnusedCommandSlotIndex;  // indicate the next free usable command buffers
-  int                          mDispatchedCommandBufferIndex;  // indicate the latest command buffer that was dispatched
+  int mUsedCommandSlotIndex; // indicate the first used/occupied/uncompleted command buffer
+  int mUnusedCommandSlotIndex;  // indicate the next free usable command buffers
+  int mDispatchedCommandBufferIndex;  // indicate the latest command buffer that was dispatched
 
   // skv client group info
   int                                                     mClientGroupOrdinal;
   skv_client_group_id_t                                   mClientGroupId;
   int                                                     mClientCurrentResponseSlot;
 
+  skv_mutex_t mResourceLock;
   it_lmr_triplet_t mQueuedSegments[ SKV_SERVER_COMMAND_SLOTS ];   // hold request segments for post_rmda_write() call
-  uint64_t mInProgressCommands;
+  volatile uint64_t mInProgressCommands;
   int mResponseSegsCount;
 
-  int                          mCurrentCommandSlot;
+  volatile int mCurrentCommandSlot;
 
   void
   SetClientInfo( int aClientOrdInGroup, skv_client_group_id_t aClientGroupId, it_rmr_triplet_t *aResponseRMR )
@@ -888,7 +894,7 @@ struct skv_server_ep_state_t
   }
 
   skv_server_ccb_t*
-  GetCommandForOrdinal( int aOrdinal )
+  GetCommandForOrdinal( int aOrdinal ) const
   {
     AssertLogLine( (aOrdinal >= 0) && (aOrdinal < SKV_COMMAND_TABLE_LEN) )
       << "skv_server_ep_state_t::GetCommandForOrdinal:: ERROR:: "
@@ -896,7 +902,7 @@ struct skv_server_ep_state_t
       << " SKV_COMMAND_TABLE_LEN: " << SKV_COMMAND_TABLE_LEN
       << EndLogLine;
 
-    return (& mCCBTable[ aOrdinal ]);
+    return (skv_server_ccb_t*)(& mCCBTable[ aOrdinal ]);
   }
 
   // ??? Possibly need a special command for
@@ -1125,9 +1131,32 @@ struct skv_server_ep_state_t
   /******************************************************************
    * Managing send counters
    ******************************************************************/
-  inline void StallEP()     { mWaitForSQ = true;  }
-  inline void UnstallEP()   { mWaitForSQ = false; }
-  inline bool EPisStalled() const { return mWaitForSQ;  }
+  inline void StallEP()     
+  {
+    BegLogLine( 0 )
+      << "skv_server_ep_state_t::StallEP()"
+      << EndLogLine;
+    mWaitForSQ = 10000; 
+  }
+  inline void UnstallEP()
+  {
+    BegLogLine( 0 )
+      << "skv_server_ep_state_t::UnstallEP()"
+      << EndLogLine;
+    mWaitForSQ = 0;
+  }
+  inline bool EPisStalled() 
+  {
+  if( mWaitForSQ > 0 )
+    {
+    --mWaitForSQ;
+    if( mWaitForSQ == 0 )
+      BegLogLine( 1 )
+        << "Unstalling after try-out..."
+        << EndLogLine;
+    }
+  return mWaitForSQ;
+  }
 
   void
   AllSendsComplete( int aSignaledCommandBufferIndex )
@@ -1142,12 +1171,19 @@ struct skv_server_ep_state_t
       << " unstalling EP"
       << EndLogLine;
 
+    mResourceLock.lock();
+    BegLogLine( ( ( EPisStalled() ) &&
+                  ( mUsedCommandSlotIndex == aSignaledCommandBufferIndex ) ) )
+      << " stalled but not unstalling..."
+      << EndLogLine;
+
     if( ( EPisStalled() ) &&
         ( mUsedCommandSlotIndex != aSignaledCommandBufferIndex ) )
     {
       UnstallEP();
     }
     mUsedCommandSlotIndex = aSignaledCommandBufferIndex;
+    mResourceLock.unlock();
   }
   /******************************************************************
    * Managing list of pending events for this EP
@@ -1166,6 +1202,7 @@ struct skv_server_ep_state_t
   {
     skv_status_t status = SKV_SUCCESS;
 
+    mResourceLock.lock();
     while( mPendingEvents[ mLastPending ].mCmdEventType != 0 )
     {
       mLastPending = ( mLastPending + 1 ) % SKV_SERVER_PENDING_EVENTS_PER_EP;
@@ -1181,6 +1218,8 @@ struct skv_server_ep_state_t
     memcpy( newEvent, oldEvent, sizeof( skv_server_event_t ) );    // copy
 
     mPendingEventsList->push( newEvent );
+
+    mResourceLock.unlock();
 
     BegLogLine( SKV_SERVER_COMMAND_DISPATCH_LOG | SKV_SERVER_PENDING_EVENTS_LOG )
       << "skv_server_ep_state_t::AddToPendingEventsList()::"
@@ -1201,8 +1240,12 @@ struct skv_server_ep_state_t
   skv_server_event_t*
   GetNextPendingEvent( )
   {
+    mResourceLock.lock();
     if( mPendingEventsList->empty() )
+    {
+      mResourceLock.unlock();
       return NULL;
+    }
 
     skv_server_event_t* event = mPendingEventsList->front();
 
@@ -1213,11 +1256,13 @@ struct skv_server_ep_state_t
       << " remaining: " << mPendingEventsList->size()
       << EndLogLine;
 
+    mResourceLock.unlock();
     return event;
   }
   skv_status_t
   FreeFirstPendingEvent( )
   {
+    mResourceLock.lock();
     skv_server_event_t* event = mPendingEventsList->front();
     mPendingEventsList->pop();  // remove from queue
 
@@ -1228,6 +1273,7 @@ struct skv_server_ep_state_t
       << " remaining: " << mPendingEventsList->size()
       << EndLogLine;
 
+    mResourceLock.unlock();
     return SKV_SUCCESS;
   }
 
@@ -1236,8 +1282,9 @@ struct skv_server_ep_state_t
    * Managing list of free command slots for this EP
    ******************************************************************/
   bool
-  ResourceCheck()
+  ResourceCheck() const
   {
+    // no locking since we should be able to afford a false negative here
     if( mFreeCommandSlotList->size() < 1 )
     {
       BegLogLine( 0 )
@@ -1289,6 +1336,8 @@ struct skv_server_ep_state_t
   skv_status_t
   AddToFreeCommandSlots( skv_server_ccb_t *aCCB, int ord )
   {
+    mResourceLock.lock();
+
     // detach the command buffer from the CCB
     aCCB->DetachPrimaryCmdBuffer( );
 
@@ -1300,6 +1349,7 @@ struct skv_server_ep_state_t
       << " #free slots: " << mFreeCommandSlotList->size()
       << EndLogLine;
 
+    mResourceLock.unlock();
     return SKV_SUCCESS;
   }
 
@@ -1336,21 +1386,6 @@ struct skv_server_ep_state_t
   }
 
   skv_status_t
-  AddToUnusedCommandBuffers( )
-  {
-    mUsedCommandSlotIndex = (mUsedCommandSlotIndex + 1) % SKV_SERVER_COMMAND_SLOTS;
-
-    BegLogLine( SKV_SERVER_BUFFER_AND_COMMAND_LOG )
-      << "skv_server_ep_state_t::AddToUnusedCommandBuffers():: "
-      << " first used: " << mUsedCommandSlotIndex
-      << " dispatched: " << mDispatchedCommandBufferIndex
-      << " next unused: " << mUnusedCommandSlotIndex
-      << EndLogLine;
-
-    return SKV_SUCCESS;
-  }
-
-  skv_status_t
   AdvanceDispatched( )
   {
     mDispatchedCommandBufferIndex = ( mDispatchedCommandBufferIndex + 1 ) % SKV_SERVER_COMMAND_SLOTS;
@@ -1369,7 +1404,7 @@ struct skv_server_ep_state_t
   // Recv-Slot Polling
   // This routine must not change any of the object's status!!!
   bool
-  CheckForNewCommands() const
+  CheckForNewCommands()
   {
     if( EPisStalled() )
     {
@@ -1396,6 +1431,7 @@ struct skv_server_ep_state_t
   void
   CommandSlotAdvance()
   {
+    mResourceLock.lock();
     // reset trailling flag of current command slot (implicitly marked consumed although it isn't yet consumed)
     int Index = mCurrentCommandSlot * SKV_CONTROL_MESSAGE_SIZE;
     skv_client_to_server_cmd_hdr_t* NewRequest = (skv_client_to_server_cmd_hdr_t*) ( & mCommandBuffs[ Index ] ) ;
@@ -1410,6 +1446,7 @@ struct skv_server_ep_state_t
     ((skv_header_as_cmd_buffer_t*)NewRequest)->SetCheckSum( SKV_CTRL_MSG_FLAG_IN_PROGRESS );
 
     mInProgressCommands++;
+
     BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
       << "New command."
       << " EP: " << (void*)this
@@ -1426,16 +1463,17 @@ struct skv_server_ep_state_t
       << " CmdSlot to: " << mCurrentCommandSlot
       << " resetting ChSum: " << ((skv_header_as_cmd_buffer_t*)NewRequest)->GetCheckSum()
       << EndLogLine;
+    mResourceLock.unlock();
   }
 
-  int
-  GetCurrentCommandSlot()
+  inline int
+  GetCurrentCommandSlot() const
   {
     return mCurrentCommandSlot;
   }
 
   skv_lmr_triplet_t*
-  GetCommandTriplet( int aSlotOrd )
+  GetCommandTriplet( int aSlotOrd ) const
   {
     AssertLogLine( (aSlotOrd >= 0) && (aSlotOrd < SKV_SERVER_COMMAND_SLOTS) )
       << "skv_server_ep_state_t::GetCommandTriplet(): ERROR"
@@ -1445,7 +1483,7 @@ struct skv_server_ep_state_t
     return (skv_lmr_triplet_t*) &(mPrimaryCmdBuffers[ aSlotOrd ]);
   }
 
-  int GetCurrentClientResponseBufferSlotOrd()
+  int GetCurrentClientResponseBufferSlotOrd() const
   {
     return mClientCurrentResponseSlot;
   }
@@ -1470,6 +1508,64 @@ struct skv_server_ep_state_t
   ClientResonseBufferAdvance( int aEntries = 1 )
   {
     mClientCurrentResponseSlot = (mClientCurrentResponseSlot + aEntries ) % SKV_SERVER_COMMAND_SLOTS;
+  }
+
+  skv_server_ccb_t*
+  AcquireCCB( skv_client_to_server_cmd_hdr_t **aInboundHeader,
+              int *aCmdOrd )
+  {
+    mResourceLock.lock();
+    skv_server_ccb_t* CCB = NULL;
+    if( !ResourceCheck() )
+    {
+      BegLogLine( 0 )
+        << "out of cmd resources. deferring..."
+        << EndLogLine;
+
+      // ServerStatistics.reqDeferCount++;
+
+      // stop fetching commands from this EP because of limited resources
+      StallEP();
+
+      // aEPState->AddToPendingEventsList( currentEvent );
+      mResourceLock.unlock();
+      return NULL;
+    }
+
+    int CmdBuffOrdinal = GetNextUnusedCommandBufferOrd();
+    int CmdOrd         = GetNextFreeCommandSlotOrdinal();
+
+    mResourceLock.unlock();
+
+    // retrieve the actual CCB handle from Cmd-ordinal
+    CCB = (skv_server_ccb_t*)GetCommandForOrdinal( CmdOrd );
+
+    AssertLogLine( CCB != NULL )
+      << "skv_server_t::GetServerCmdFromEP:: ERROR:: CCB != NULL"
+      << EndLogLine;
+
+    int RecvBuffOrdinal = GetCurrentCommandSlot();
+
+    StrongAssertLogLine( RecvBuffOrdinal == CmdBuffOrdinal )
+      << " Command Ordinal Mismatch"
+      << " current: " << RecvBuffOrdinal
+      << " unposted: " << CmdBuffOrdinal
+      << EndLogLine;
+
+    skv_lmr_triplet_t* RecvBuffTriplet = GetCommandTriplet( RecvBuffOrdinal );
+
+    AssertLogLine( RecvBuffTriplet != NULL )
+      << "skv_server_t::GetServerCmdFromEP:: ERROR:: RecvBuffTriplet != NULL"
+      << EndLogLine;
+
+    // This initializes the reponse data based on the incoming request
+    CCB->SetSendBuffInfo( RecvBuffTriplet, RecvBuffOrdinal);
+
+    // acquire address of incomming request data
+    *aInboundHeader = (skv_client_to_server_cmd_hdr_t *) RecvBuffTriplet->GetAddr();
+
+    *aCmdOrd = CmdOrd;
+    return CCB;
   }
 
 
@@ -1631,20 +1727,33 @@ struct skv_cmd_retrieve_resp_t
 
 #ifdef SKV_COALESCING_STATISTICS
     gServerCoalescCount[ mResponseSegsCount ]++;
-    gServerRequestCount = (gServerRequestCount+1) & 0xFFFF;
+    gServerRequestCount = (gServerRequestCount+1) & 0xFFF;
+    gServerCoalescSum += mResponseSegsCount;
     if( gServerRequestCount == 0 )
     {
+      std::stringstream buckets;
+      for ( int i=1; i<SKV_MAX_COALESCED_COMMANDS+1; i++ )
+      {
+        buckets << "["<< i << ":" << gServerCoalescCount[ i ] << "] ";
+      }
+
       BegLogLine( 1 )
-        << "Server Request Coalescing after " << 0xFFFF << " Requests: "
-        << " single: " << gServerCoalescCount[ 1 ]
-        << " 2: " << gServerCoalescCount[ 2 ]
-        << " 3: " << gServerCoalescCount[ 3 ]
-        << " 4: " << gServerCoalescCount[ 4 ]
+        << "Server Request Coalescing after " << 0xFFF << " Requests: "
+        << buckets.str().c_str()
+        << " Avg: " << (double)gServerCoalescSum/(double)0x1000
         << EndLogLine;
       memset( gServerCoalescCount, 0, sizeof(uint64_t) * (SKV_MAX_COALESCED_COMMANDS + 1) );
+      gServerCoalescSum = 0;
     }
-
 #endif
+
+    static uint64_t gTotalResponses = 0;
+    gTotalResponses += mResponseSegsCount;
+    BegLogLine( 0 )
+      << "skv_server_ep_state_t::PostResponse():: "
+      << " total: " <<  gTotalResponses
+      << " pending: " << mInProgressCommands
+      << EndLogLine;
 
     gSKVServerRDMAResponseStart.HitOE( SKV_SERVER_TRACE,
                                        "SKVServerRDMAResponse",
@@ -1678,6 +1787,7 @@ struct skv_cmd_retrieve_resp_t
         ClientResonseBufferAdvance( mResponseSegsCount );
 
         mResponseSegsCount = 0;
+        UnstallEP();
         break;
 
       default:
@@ -1723,6 +1833,7 @@ struct skv_cmd_retrieve_resp_t
       << " clientCCB: " << (void*)(cmdbuf->mData.mRespHdr.mCmdCtrlBlk)
       << EndLogLine;
 
+    mResourceLock.lock();
     mInProgressCommands--;
 
     /* post an actual rdma request if:
@@ -1730,9 +1841,14 @@ struct skv_cmd_retrieve_resp_t
      * - the max number of send-segments is reached
      * - we hit the last server mem slot - the remote data placement can't wrap the circular buffer
      */
+#ifdef DISABLE_SERVER_COALESCING
+    bool needpost = true;
+#else
     bool needpost = ( (mInProgressCommands == 0) ||
         ( mResponseSegsCount >= SKV_MAX_COALESCED_COMMANDS ) ||
         (( base_clnt_slot + mResponseSegsCount ) == SKV_SERVER_COMMAND_SLOTS ) );
+#endif
+    mResourceLock.unlock();
 
     BegLogLine( SKV_SERVER_RESPONSE_COALESCING_LOG )
       << "PostOrStoreResponse: EP: " << (void*)this

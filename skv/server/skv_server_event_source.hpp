@@ -69,7 +69,7 @@ public:
   }
 
   inline
-  event_manager_t
+  event_manager_t*
   GetEventManager() { return mEventManager; }
 
   // since the check for new content depends on the chunk-class, we force users to overload this routine

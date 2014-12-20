@@ -199,6 +199,7 @@ set(TEST_MPI_SOURCES
 set(UNITTEST_SOURCES
   unittest/test_skv_rdma_data_buffer.cpp
   unittest/test_skv_ringbuffer_ptr.cpp
+  unittest/test_skv_server_command_buffer.cpp
 )
 
 #------------------------------------------------------------------------------
