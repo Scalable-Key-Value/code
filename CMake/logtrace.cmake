@@ -107,7 +107,8 @@ add_definitions(
 # activate inner-loop logging for test programm
 # -DSKV_TEST_LOG=1
 
-
+# activate MPI_Barrier logging in skv_bench to help find which node loses activation 
+#-DSKV_BENCH_LOG_LW=1
 
 
 )
@@ -136,14 +137,20 @@ add_definitions(
 set(SKV_IT_API_LOGGING
 # enable extensive logging
 #FXLOG_IT_API_O_VERBS=1
-#FXLOG_IT_API_O_SOCKETS=1
+FXLOG_IT_API_O_SOCKETS=1
+FXLOG_IT_API_O_SOCKETS_LW=1
+FXLOG_ITAPI_ROUTER=1
+FXLOG_ITAPI_ROUTER_LW=1
+#FXLOG_ITAPI_ROUTER_SPIN=1
+#FXLOG_ITAPI_ROUTER_EPOLL_SPIN=1
+#FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG=1
 
 # enable evd thread logging
 #IT_API_O_VERBS_THREAD_LOG=1
 
 # enable connection-related logging only (incomplete coverage)
 #FXLOG_IT_API_O_VERBS_CONNECT=1
-#FXLOG_IT_API_O_SOCKETS_CONNECT=1
+FXLOG_IT_API_O_SOCKETS_CONNECT=1
 
 # enable logging for memory registration (incomplete coverage)
 #FXLOG_IT_API_O_VERBS_MEMREG=1
