@@ -124,7 +124,7 @@ include_directories(it_api FxLogger)
 #------------------------------------------------------------------------------
 set(IT_API_DEFS
   # use event-based CQ reaping, if undefined it uses polling
-  -DDIT_API_USE_EVENT_CQ
+  -DIT_API_USE_EVENT_CQ
   # enable SIW workaround
   -DIT_API_USE_SIW_HACK
 )
