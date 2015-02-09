@@ -41,14 +41,14 @@
 
 #include <spi/include/kernel/rdma.h>
 
-#include <it_api_o_sockets_router.h>
+//#include <it_api_o_sockets_router.h>
 
 #ifndef FXLOG_IT_API_O_SOCKETS
-#define FXLOG_IT_API_O_SOCKETS ( 1 )
+#define FXLOG_IT_API_O_SOCKETS ( 0 )
 #endif
 
 #ifndef FXLOG_IT_API_O_SOCKETS_CONNECT
-#define FXLOG_IT_API_O_SOCKETS_CONNECT ( 1 )
+#define FXLOG_IT_API_O_SOCKETS_CONNECT ( 0 )
 #endif
 
 #ifndef FXLOG_IT_API_O_SOCKETS_LOOP
@@ -73,8 +73,9 @@ pthread_mutex_t gITAPIFunctionMutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gITAPI_INITMutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t gAcceptThreadStartedMutex  = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t gSendThreadStartedMutex    = PTHREAD_MUTEX_INITIALIZER;
+//pthread_mutex_t gSendThreadStartedMutex    = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t gReceiveThreadStartedMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t gSendUpstreamLock = PTHREAD_MUTEX_INITIALIZER;
 
 int             gITAPI_Initialized = 0;
 
@@ -1128,10 +1129,486 @@ enum {
 //static Kernel_RDMARegion_t recvmemreg;
 //static Kernel_RDMARegion_t rpcmemreg ;
 
-static volatile struct routerBuffer routerBuffer __attribute__((aligned(32)));
-static Kernel_RDMARegion_t routermemreg ;
+//static volatile struct routerBuffer routerBuffer __attribute__((aligned(32)));
+//static Kernel_RDMARegion_t routermemreg ;
 
-static int rdmaSocket ;
+//static int rdmaSocket ;
+#include <it_api_o_sockets_cn_ion.hpp>
+static int my_rank(void)
+  {
+    int id = -1;
+    uint32_t rc;
+    Personality_t pers;
+    rc = Kernel_GetPersonality(&pers, sizeof(pers));
+    if (rc == 0)
+    {
+      Personality_Networks_t *net = &pers.Network_Config;
+      id = ((((((((net->Acoord
+          * net->Bnodes) + net->Bcoord)
+          * net->Cnodes) + net->Ccoord)
+          * net->Dnodes) + net->Dcoord)
+          * net->Enodes) + net->Ecoord);
+    }
+    return id ;
+  }
+
+static void *rdma_responder(void *voidVC) ;
+
+class VerbsChannel
+  {
+public:
+  int mRdmaSocket ;
+  unsigned long mRdmaSendBlocks ;
+  enum {
+    k_RdmaSendReapModulo=8
+  };
+  class ion_cn_all_buffer mBuffer;
+  bool mEven ;
+  void Init(void) ;
+  void Respond(void) ;
+  bool Receive(void) { return mBuffer.Receive() ; }
+  void HandleBuffer(void) { mBuffer.HandleBuffer() ; }
+  void Terminate(void) ;
+  // QueueForTransmit returns 'true' if it flushed the transmit buffer
+  bool QueueForTransmit(unsigned int LocalEndpointIndex,
+                        const struct iWARPEM_Message_Hdr_t& Hdr,
+                        const struct iovec * iov = NULL,
+                        unsigned int iovec_length = 0) ;
+  bool FlushTransmit(void) ;
+  bool ReapSendCompletions(void) ;
+  void ReapSendCompletionsConditional(void) ;
+  void ReapSendCompletionsForce(void) ;
+  bool DataSender_OnePass(bool *aProgressed) ;
+  };
+
+static void *rdma_responder(void *voidVC)
+  {
+    class VerbsChannel *VC = (class VerbsChannel *)voidVC ;
+    VC->Respond() ;
+    return voidVC ;
+  }
+
+void VerbsChannel::Init(void)
+   {
+     mBuffer.Init() ;
+     mEven = false ;
+     mRdmaSendBlocks = 0 ;
+     int rc_open = Kernel_RDMAOpen(&mRdmaSocket) ;
+     BegLogLine(FXLOG_IONCN_BUFFER)
+       << "Kernel_RDMAOpen rc=" << rc_open
+       << EndLogLine ;
+     int rc_connect = Kernel_RDMAConnect(mRdmaSocket,k_IONPort) ;
+     BegLogLine(FXLOG_IONCN_BUFFER)
+       << "Kernel_RDMAConnect rc=" << rc_connect
+       << EndLogLine ;
+     Kernel_RDMARegion_t routermemreg ;
+     routermemreg.address = ( void *) &mBuffer ;
+     routermemreg.length = sizeof(mBuffer) ;
+     int rc_register = Kernel_RDMARegisterMem(mRdmaSocket,& routermemreg) ;
+     BegLogLine(FXLOG_IONCN_BUFFER)
+       << "Kernel_RDMARegisterMem routermemreg rc=" << rc_register
+       << EndLogLine ;
+     mBuffer.mLkey = routermemreg.lkey ;
+     unsigned int LocalEndPoint = 0 ;
+     mBuffer.AppendToBuffer(&LocalEndPoint,sizeof(LocalEndPoint)) ;
+     iWARPEM_Message_Hdr_t Hdr ;
+     memset(&Hdr,0xff,sizeof(Hdr)) ;
+     Hdr.mMsg_Type=iWARPEM_KERNEL_CONNECT_TYPE ;
+     Hdr.mTotalDataLen=0;
+     Hdr.mOpType.mKernelConnect.mRouterBuffer_addr=(uint64_t)&mBuffer ;
+     Hdr.mOpType.mKernelConnect.mRoutermemreg_lkey=routermemreg.lkey ;
+     Hdr.mOpType.mKernelConnect.mClientRank=my_rank() ;
+     mBuffer.AppendToBuffer(&Hdr,sizeof(Hdr)) ;
+     mBuffer.Transmit() ;
+     pthread_t rdma_responder_thread ;
+     BegLogLine(FXLOG_IONCN_BUFFER)
+       << "Creating the RDMA responder thread"
+       << EndLogLine ;
+     int rc=pthread_create(&rdma_responder_thread,NULL, rdma_responder, this) ;
+     StrongAssertLogLine(rc == 0)
+       << "pthread_create failed, rc=" << rc
+       << EndLogLine ;
+   }
+
+bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
+                      const struct iWARPEM_Message_Hdr_t& Hdr,
+                      const struct iovec * iov,
+                      unsigned int iovec_length)
+  {
+    BegLogLine(FXLOG_IONCN_BUFFER)
+        << "LocalEndpointIndex=" << LocalEndpointIndex
+        << " Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+        << " iov=0x" << (void *) iov
+        << " iovec_length=" << iovec_length
+        << EndLogLine ;
+    unsigned int TotalDataLen = Hdr.mTotalDataLen ;
+    unsigned long RequiredSpace=sizeof(LocalEndpointIndex) + sizeof(Hdr) + TotalDataLen ;
+    AssertLogLine(RequiredSpace < k_ApplicationBufferSize-1 )
+      << "Message does not fit in buffer, TotalDataLen=" << TotalDataLen
+      << " RequiredSpace=" << RequiredSpace
+      << EndLogLine ;
+    bool RequireFlush=RequiredSpace > mBuffer.SpaceInBuffer() ;
+    if(RequireFlush)
+      {
+        bool rc_flush=FlushTransmit() ;
+        if ( ! rc_flush)
+          {
+            BegLogLine(FXLOG_IONCN_BUFFER)
+                << "No upstream acked space, trying to receive until we get some"
+                << EndLogLine ;
+            do
+              {
+                bool rc_receive=Receive() ;
+                if ( rc_receive )
+                  {
+                    BegLogLine(FXLOG_IONCN_BUFFER)
+                      << "Block received"
+                      << EndLogLine ;
+                    HandleBuffer() ;
+                    rc_flush=FlushTransmit() ;
+                  }
+              } while (! rc_flush) ;
+            BegLogLine(FXLOG_IONCN_BUFFER)
+                << "We have upstream space now, continuing"
+                << EndLogLine ;
+          }
+
+//        StrongAssertLogLine(rc_flush)
+//          << "No acked space upstream, not handled yet"
+//          << EndLogLine ;
+      }
+    mBuffer.AppendToBuffer(&LocalEndpointIndex,sizeof(LocalEndpointIndex)) ;
+    mBuffer.AppendToBuffer(&Hdr,sizeof(Hdr)) ;
+    unsigned long ActualDataLength = 0 ;
+    for(unsigned int x=0;x<iovec_length;x+=1)
+      {
+        unsigned int iov_len = iov[x].iov_len ;
+        ActualDataLength += iov_len ;
+        BegLogLine(FXLOG_IONCN_BUFFER)
+          << " iov[" << x
+          << "].iov_len=" << iov_len
+          << EndLogLine ;
+        AssertLogLine(ActualDataLength <= TotalDataLen)
+          << "More data in iovec than described in header, x=" << x
+          << " iovec_length=" << iovec_length
+          << " ActualDataLength=" << ActualDataLength
+          << " TotalDataLen=" << TotalDataLen
+          << EndLogLine ;
+        mBuffer.AppendToBuffer(iov[x].iov_base,iov_len) ;
+      }
+    StrongAssertLogLine(ActualDataLength == TotalDataLen)
+      << "Header data length=" << TotalDataLen
+      << " does not match iovec data length=" << ActualDataLength
+      << EndLogLine ;
+    return RequireFlush ;
+  }
+bool VerbsChannel::FlushTransmit(void)
+  {
+    BegLogLine(FXLOG_IONCN_BUFFER)
+            << EndLogLine ;
+    // May need to hold here until the upstream buffer is available
+    if ( mBuffer.mSentBytes < mBuffer.mAckedSentBytes)
+      {
+        BegLogLine(FXLOG_IONCN_BUFFER)
+            << "May be no upstream space, mBuffer.mSentBytes=" << mBuffer.mSentBytes
+            << " mBuffer.mAckedSentBytes=" << mBuffer.mAckedSentBytes
+            << EndLogLine ;
+        return false ;
+      }
+//    mBuffer.HoldForUpstreamSpace() ;
+    return mBuffer.Transmit() ;
+  }
+
+static bool
+iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR ) ;
+
+// DataSender_OnePass returns 'true' if it flushed the buffer upstream
+bool VerbsChannel::DataSender_OnePass(bool *aProgressed)
+  {
+    bool rc=false ;
+    *aProgressed=false ;
+    iWARPEM_Object_WorkRequest_t* SendWR = NULL;
+    int dstat_0 = -1;
+    int dstat_1 = -1;
+
+    if( mEven )
+      {
+        dstat_0 = gRecvToSendWrQueue->mQueue.Dequeue( &SendWR );
+
+        if( ( dstat_0 != -1 ) && ( SendWR != NULL ) )
+          {
+            *aProgressed=true ;
+            rc |= iWARPEM_ProcessSendWR( SendWR );
+          }
+
+        dstat_1 = gSendWrQueue->mQueue.Dequeue( &SendWR );
+
+        if( ( dstat_1 != -1 ) && ( SendWR != NULL ) )
+          {
+            *aProgressed=true ;
+            rc |= iWARPEM_ProcessSendWR( SendWR );
+          }
+
+      }
+    else
+      {
+        dstat_1 = gSendWrQueue->mQueue.Dequeue( &SendWR );
+
+        if( ( dstat_1 != -1 ) && ( SendWR != NULL ) )
+          {
+            *aProgressed=true ;
+            rc |= iWARPEM_ProcessSendWR( SendWR );
+          }
+
+        dstat_0 = gRecvToSendWrQueue->mQueue.Dequeue( &SendWR );
+
+        if( ( dstat_0 != -1 ) && ( SendWR != NULL ) )
+          {
+            *aProgressed=true ;
+            rc |= iWARPEM_ProcessSendWR( SendWR );
+          }
+
+      }
+
+    mEven = !mEven ;
+
+    BegLogLine(FXLOG_IONCN_BUFFER && *aProgressed)
+      << "Sender made progress, rc=" << rc
+      << EndLogLine ;
+    return rc ;
+  }
+void VerbsChannel::Respond(void)
+  {
+    BegLogLine(FXLOG_IONCN_BUFFER)
+      << "RDMA responder thread"
+      << EndLogLine ;
+    for(;;)
+      {
+          bool rc_receive=Receive() ;
+          if ( rc_receive )
+            {
+              BegLogLine(FXLOG_IONCN_BUFFER)
+                << "Block received"
+                << EndLogLine ;
+              HandleBuffer() ;
+            }
+          bool Progressed ;
+          pthread_mutex_lock(&gSendUpstreamLock) ;
+          bool rc_sender=DataSender_OnePass(&Progressed) ;
+          while (Progressed)
+            {
+              rc_sender != DataSender_OnePass(&Progressed) ;
+            }
+          pthread_mutex_unlock(&gSendUpstreamLock) ;
+          // See if we need to flush the transmit buffer. This is either if we received something and
+          // haven't flushed in the sender (to give upstream the free buffer index), or if there have
+          // been data send requests.
+          if ( (rc_receive && mBuffer.mReceiveBufferLength > 0 && !rc_sender) || mBuffer.mTransmitBufferIndex > 0)
+            {
+              BegLogLine(FXLOG_IONCN_BUFFER)
+                  << "Flushing transmit buffer, rc_receive=" << rc_receive
+                  << " mBuffer.mReceiveBufferLength=" << mBuffer.mReceiveBufferLength
+                  << " rc_sender=" << rc_sender
+                  << " mBuffer.mTransmitBufferIndex=" << mBuffer.mTransmitBufferIndex
+                  << " mBuffer.mAckedSentBytes=" << mBuffer.mAckedSentBytes
+//                  << " mBuffer.mReceiveBufferIndex=" << mBuffer.mReceiveBufferIndex
+//                  << " mBuffer.mReceiveBuffer.mAckedReceiveBytes=" << mBuffer.mReceiveBuffer.mAckedReceiveBytes
+//                  << " mBuffer.mTransmitBuffer.mAckedReceiveBytes=" << mBuffer.mTransmitBuffer.mAckedReceiveBytes
+                  << EndLogLine ;
+              FlushTransmit() ;
+            }
+      }
+
+  }
+
+void VerbsChannel::Terminate(void)
+  {
+    int rc_close=close(mRdmaSocket) ;
+    BegLogLine(FXLOG_IONCN_BUFFER)
+      << "close rc=" << rc_close
+      << EndLogLine ;
+  }
+
+static VerbsChannel VC ;
+
+bool VerbsChannel::ReapSendCompletions(void)
+  {
+    enum {
+      k_ReapBufferSize=2*k_RdmaSendReapModulo
+    };
+    Kernel_RDMAWorkCompletion_t compList[k_ReapBufferSize];
+    int entries=k_ReapBufferSize ;
+    Kernel_RDMAPollCQ(mRdmaSocket, &entries, compList);
+    for(unsigned int x=0;x<entries;x+=1)
+      {
+        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+          << "Work completion[" << x
+          << "] buf=0x" << compList[x].buf
+          << " len=" << compList[x].len
+          << " opcode=" << compList[x].opcode
+          << " status=" << compList[x].status
+          << " flags=0x" << (void *) compList[x].flags
+          << " reserved=0x"<< (void *) compList[x].reserved
+          << EndLogLine ;
+      }
+    return entries>0 ;
+  }
+void VerbsChannel::ReapSendCompletionsConditional(void)
+  {
+    if (0 == (mRdmaSendBlocks & (k_RdmaSendReapModulo-1)))
+      {
+        ReapSendCompletions();
+      }
+    mRdmaSendBlocks += 1 ;
+  }
+void VerbsChannel::ReapSendCompletionsForce(void)
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        << "Spinning until we reap some RDMA send completions"
+        << EndLogLine ;
+    while ( ! ReapSendCompletions() )
+      {
+
+      }
+    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        << "Spin complete"
+        << EndLogLine ;
+  }
+
+
+bool ion_cn_buffer::rawTransmit(unsigned long aTransmitCount, uint32_t aLkey)
+  {
+    unsigned int RDMASendCount = (aTransmitCount > k_LargestRDMASend-(sizeof(class ion_cn_buffer) - k_ApplicationBufferSize))
+        ? k_InitialRDMASend : aTransmitCount+(sizeof(class ion_cn_buffer) - k_ApplicationBufferSize) ;
+    BegLogLine(FXLOG_IONCN_BUFFER)
+      << "aTransmitCount=" << aTransmitCount
+      << " aLkey=0x" << (void *) aLkey
+      << " RDMASendCount=" << RDMASendCount
+      << " mSentBytes=" << mSentBytes
+      << " mReceivedBytes=" << mReceivedBytes
+      << EndLogLine ;
+    BegLogLine(FXLOG_IONCN_BUFFER)
+      << "this=0x" << (void *) this
+      << " TX-FRAME {" << mSentBytes
+      << "," << mReceivedBytes
+      << "," << aTransmitCount
+      << "}"
+      << EndLogLine ;
+    int RDMASendRC=Kernel_RDMASend(VC.mRdmaSocket, this, RDMASendCount,aLkey) ;
+    BegLogLine(FXLOG_IONCN_BUFFER)
+      << "Kernel_RDMASend(" << VC.mRdmaSocket
+      << ",0x" << this
+      << "," << RDMASendCount
+      << ",0x" << (void *) aLkey
+      << ") rc=" << RDMASendRC
+      << EndLogLine ;
+    if ( RDMASendRC == ENOMEM )
+      {
+        // Not expected here, under normal circumstances the completions will be reaped by ReapSendCompletionsConditional
+        // before the queue gets full. Put in a spin and recovery anyway.
+        VC.ReapSendCompletionsForce() ;
+        RDMASendRC=Kernel_RDMASend(VC.mRdmaSocket, this, RDMASendCount,aLkey) ;
+        BegLogLine(FXLOG_IONCN_BUFFER)
+          << "Kernel_RDMASend(" << VC.mRdmaSocket
+          << ",0x" << this
+          << "," << RDMASendCount
+          << ",0x" << (void *) aLkey
+          << ") rc=" << RDMASendRC
+          << EndLogLine ;
+      }
+    AssertLogLine(0 == RDMASendRC)
+      << "RDMASendRC=" << RDMASendRC
+      << EndLogLine ;
+    VC.ReapSendCompletionsConditional() ;
+//    // Spin here until the RDMA send is complete. This can be optimised by deferring the spin until we
+//    // need the buffer again.
+//    int entries ;
+//    Kernel_RDMAWorkCompletion_t compList[1];
+//    do
+//    {
+//        entries = 1;  // needs to be set for some reason before the poll
+//        Kernel_RDMAPollCQ(VC.mRdmaSocket, &entries, compList);
+//    } while ( entries == 0 ) ;
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+//      << "Kernel_RDMAPollCQ returns with entries=" << entries
+//      << EndLogLine ;
+//    for(unsigned int x=0;x<entries;x+=1)
+//      {
+//        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+//          << "Work completion[" << x
+//          << "] buf=0x" << compList[x].buf
+//          << " len=" << compList[x].len
+//          << " opcode=" << compList[x].opcode
+//          << " status=" << compList[x].status
+//          << " flags=0x" << (void *) compList[x].flags
+//          << " reserved=0x"<< (void *) compList[x].reserved
+//          << EndLogLine ;
+//      }
+
+//    // We seem to get ENOMEM here if the host hasn't posted a receive buffer
+//    if ( RDMASendRC == ENOMEM)
+//      {
+//        BegLogLine(FXLOG_IONCN_BUFFER)
+//          << "Kernel_RDMASend(" << VC.mRdmaSocket
+//          << ",0x" << this
+//          << "," << RDMASendCount
+//          << ",0x" << (void *) aLkey
+//          << ") returned ENOMEM"
+//          << EndLogLine ;
+//        do {
+//            RDMASendRC=Kernel_RDMASend(VC.mRdmaSocket, this, RDMASendCount,aLkey) ;
+//        } while  (RDMASendRC == ENOMEM ) ;
+//      }
+//    BegLogLine(FXLOG_IONCN_BUFFER)
+//      << "Kernel_RDMASend(" << VC.mRdmaSocket
+//      << ",0x" << this
+//      << "," << RDMASendCount
+//      << ",0x" << (void *) aLkey
+//      << ") rc=" << RDMASendRC
+//      << EndLogLine ;
+    return true ;
+  }
+
+static void process_response_buffer_element(unsigned int LocalEndpointIndex, const struct iWARPEM_Message_Hdr_t &Hdr, const char *buffer) ;
+void ion_cn_buffer::HandleBuffer(unsigned long aLength)
+  {
+    BegLogLine(FXLOG_IONCN_BUFFER)
+        << "Handling buffer at this=0x" << (void *) this
+        << " for aLength=" << aLength
+        << EndLogLine ;
+    unsigned long bufferIndex = 0 ;
+    while (bufferIndex < aLength )
+      {
+        unsigned int LocalEndpointIndex=
+            *(unsigned int *) (mApplicationBuffer+bufferIndex) ;
+        bufferIndex += sizeof(unsigned int) ;
+        struct iWARPEM_Message_Hdr_t *Hdr=
+            (struct iWARPEM_Message_Hdr_t *)(mApplicationBuffer+bufferIndex) ;
+        unsigned long totalDataLength=Hdr->mTotalDataLen ;
+        bufferIndex += sizeof(struct iWARPEM_Message_Hdr_t) ;
+        unsigned long nextBufferIndex = bufferIndex + totalDataLength ;
+        StrongAssertLogLine(nextBufferIndex <= aLength)
+          << "nextBufferIndex=" << nextBufferIndex
+          << " disagrees with aLength=" << aLength
+          << " bufferIndex=" << bufferIndex
+          << " totalDataLength=" << totalDataLength
+          << EndLogLine ;
+        BegLogLine(FXLOG_IONCN_BUFFER)
+          << "bufferIndex=" << bufferIndex
+          << " totalDataLength=" << totalDataLength
+          << " nextBufferIndex=" << nextBufferIndex
+          << EndLogLine ;
+        process_response_buffer_element(LocalEndpointIndex,*Hdr,mApplicationBuffer+bufferIndex) ;
+        bufferIndex = nextBufferIndex ;
+      }
+    StrongAssertLogLine(bufferIndex == aLength)
+      << "bufferIndex="<< bufferIndex
+      << " disagrees with aLength=" << aLength
+      << EndLogLine ;
+    SetSentinels() ; // Prep the buffer for the next 'receive'
+
+  }
+
 static volatile iWARPEM_Private_Data_t *expectedPrivateDataPtr ;
 static void process_disconnect_response(unsigned int LocalEndpointIndex)
   {
@@ -1635,23 +2112,23 @@ static void process_close_request(unsigned int LocalEndpointIndex, const struct 
         << EndLogLine ;
   }
 
-static int my_rank(void)
-  {
-    int id = -1;
-    uint32_t rc;
-    Personality_t pers;
-    rc = Kernel_GetPersonality(&pers, sizeof(pers));
-    if (rc == 0)
-    {
-      Personality_Networks_t *net = &pers.Network_Config;
-      id = ((((((((net->Acoord
-          * net->Bnodes) + net->Bcoord)
-          * net->Cnodes) + net->Ccoord)
-          * net->Dnodes) + net->Dcoord)
-          * net->Enodes) + net->Ecoord);
-    }
-    return id ;
-  }
+//static int my_rank(void)
+//  {
+//    int id = -1;
+//    uint32_t rc;
+//    Personality_t pers;
+//    rc = Kernel_GetPersonality(&pers, sizeof(pers));
+//    if (rc == 0)
+//    {
+//      Personality_Networks_t *net = &pers.Network_Config;
+//      id = ((((((((net->Acoord
+//          * net->Bnodes) + net->Bcoord)
+//          * net->Cnodes) + net->Ccoord)
+//          * net->Dnodes) + net->Dcoord)
+//          * net->Enodes) + net->Ecoord);
+//    }
+//    return id ;
+//  }
 
 static void process_response_buffer_element(unsigned int LocalEndpointIndex, const struct iWARPEM_Message_Hdr_t &Hdr, const char *buffer)
   {
@@ -1710,6 +2187,7 @@ static void process_response_buffer_element(unsigned int LocalEndpointIndex, con
         << EndLogLine ;
       }
   }
+#if 0
 static void process_response_buffer(const char * downstreamBuffer, size_t length, unsigned long sequence)
   {
     static unsigned long expected_sequence=1 ;
@@ -1787,120 +2265,123 @@ static void process_response_buffer(const char * downstreamBuffer, size_t length
       << " disagrees with length=" << length
       << EndLogLine ;
   }
-static void * rdma_responder ( void * arg )
-  {
-    volatile unsigned long * sequencePtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->sequence) ;
-    volatile size_t * lengthPtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->length) ;
-    volatile unsigned long * sequenceOutPtr = (volatile unsigned long *)&(((struct downstreamSequence *)(routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement))->sequence) ;
-// These now done before the pthread_create
-//    *sequenceOutPtr = 0xfffffffffffffffeUL ;
-//    * sequencePtr = 0 ;
-    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-        << "Starting, sequencePtr=0x" << (void *) sequencePtr
-        << " lengthPtr=0x" << (void *) lengthPtr
-        << " sequenceOutPtr=" << (void *) sequenceOutPtr
-        << EndLogLine ;
-    unsigned long expected_sequence = 1 ;
-    for(;;)
-      {
-        BegLogLine(FXLOG_IT_API_O_SOCKETS_LW)
-          << "Response buffer cleared, setting sequenceOut to 0x" << (void *) expected_sequence
-          << EndLogLine ;
-        * sequenceOutPtr = expected_sequence ;
-        unsigned long sequence=*sequencePtr ;
-        BegLogLine(FXLOG_IT_API_O_SOCKETS)
-          << "Sequence is 0x" << (void *) sequence
-          << EndLogLine ;
-        AssertLogLine(sequence == expected_sequence || sequence+1 == expected_sequence)
-          << "Sequence is wrong, sequence=" << sequence
-          << " expected_sequence=" << expected_sequence
-          << EndLogLine ;
-        while ( sequence != expected_sequence )
-          {
-            unsigned long next_sequence = *sequencePtr ;
-            if ( next_sequence != sequence )
-              {
-                BegLogLine(FXLOG_IT_API_O_SOCKETS)
-                    << "Sequence changes from 0x" << (void *) sequence
-                    << " to 0x" << (void *) next_sequence
-                    << EndLogLine ;
-                sequence=next_sequence ;
-                AssertLogLine(sequence == expected_sequence)
-                  << "Sequence is wrong after change, sequence=" << sequence
-                  << " expected_sequence=" << expected_sequence
-                  << EndLogLine ;
-              }
-          } ;
-        bgq_msync() ; // Make sure we don't load anything from the downstream buffer until after we see the sequence
-        size_t length = *lengthPtr ;
-        BegLogLine(FXLOG_IT_API_O_SOCKETS_LW)
-          << "Response buffer sequence=" << sequence
-          << " length=" << length
-          << EndLogLine ;
-        process_response_buffer((const char *) routerBuffer.downstreamBuffer.downstreamBufferElement, length, sequence) ;
-//        BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//          << "Setting *lengthPtr=0, was " << *lengthPtr
+#endif
+//static void * rdma_responder ( void * arg )
+//  {
+//    volatile unsigned long * sequencePtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->sequence) ;
+//    volatile size_t * lengthPtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->length) ;
+//    volatile unsigned long * sequenceOutPtr = (volatile unsigned long *)&(((struct downstreamSequence *)(routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement))->sequence) ;
+//// These now done before the pthread_create
+////    *sequenceOutPtr = 0xfffffffffffffffeUL ;
+////    * sequencePtr = 0 ;
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+//        << "Starting, sequencePtr=0x" << (void *) sequencePtr
+//        << " lengthPtr=0x" << (void *) lengthPtr
+//        << " sequenceOutPtr=" << (void *) sequenceOutPtr
+//        << EndLogLine ;
+//    unsigned long expected_sequence = 1 ;
+//    for(;;)
+//      {
+//        BegLogLine(FXLOG_IT_API_O_SOCKETS_LW)
+//          << "Response buffer cleared, setting sequenceOut to 0x" << (void *) expected_sequence
 //          << EndLogLine ;
-/////        for(;;) { }
-//        *lengthPtr = 0 ;
-        expected_sequence += 1 ;
-        BegLogLine(FXLOG_IT_API_O_SOCKETS_LW)
-          << "Incrementing expected_sequence to " << expected_sequence
-          << EndLogLine ;
-      }
-    return NULL ;
-  }
+//        * sequenceOutPtr = expected_sequence ;
+//        unsigned long sequence=*sequencePtr ;
+//        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+//          << "Sequence is 0x" << (void *) sequence
+//          << EndLogLine ;
+//        AssertLogLine(sequence == expected_sequence || sequence+1 == expected_sequence)
+//          << "Sequence is wrong, sequence=" << sequence
+//          << " expected_sequence=" << expected_sequence
+//          << EndLogLine ;
+//        while ( sequence != expected_sequence )
+//          {
+//            unsigned long next_sequence = *sequencePtr ;
+//            if ( next_sequence != sequence )
+//              {
+//                BegLogLine(FXLOG_IT_API_O_SOCKETS)
+//                    << "Sequence changes from 0x" << (void *) sequence
+//                    << " to 0x" << (void *) next_sequence
+//                    << EndLogLine ;
+//                sequence=next_sequence ;
+//                AssertLogLine(sequence == expected_sequence)
+//                  << "Sequence is wrong after change, sequence=" << sequence
+//                  << " expected_sequence=" << expected_sequence
+//                  << EndLogLine ;
+//              }
+//          } ;
+//        bgq_msync() ; // Make sure we don't load anything from the downstream buffer until after we see the sequence
+//        size_t length = *lengthPtr ;
+//        BegLogLine(FXLOG_IT_API_O_SOCKETS_LW)
+//          << "Response buffer sequence=" << sequence
+//          << " length=" << length
+//          << EndLogLine ;
+//        process_response_buffer((const char *) routerBuffer.downstreamBuffer.downstreamBufferElement, length, sequence) ;
+////        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+////          << "Setting *lengthPtr=0, was " << *lengthPtr
+////          << EndLogLine ;
+///////        for(;;) { }
+////        *lengthPtr = 0 ;
+//        expected_sequence += 1 ;
+//        BegLogLine(FXLOG_IT_API_O_SOCKETS_LW)
+//          << "Incrementing expected_sequence to " << expected_sequence
+//          << EndLogLine ;
+//      }
+//    return NULL ;
+//  }
 
 static void iWARPEM_rdmaInit(void)
   {
-    memset((void *)&routerBuffer, 0xfe, sizeof(routerBuffer)) ;
-    ((struct rpcAckBuffer *)&routerBuffer.ackBuffer)->upstreamSequence = 0 ;
-    int rc_open = Kernel_RDMAOpen(&rdmaSocket) ;
-    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-      << "Kernel_RDMAOpen rc=" << rc_open
-      << EndLogLine ;
-    int rc_connect = Kernel_RDMAConnect(rdmaSocket,k_IONPort) ;
-    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-      << "Kernel_RDMAConnect rc=" << rc_connect
-      << EndLogLine ;
-    routermemreg.address = ( void *) &routerBuffer ;
-    routermemreg.length = sizeof(routerBuffer) ;
-    int rc_register = Kernel_RDMARegisterMem(rdmaSocket,& routermemreg) ;
-    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-      << "Kernel_RDMARegisterMem routermemreg rc=" << rc_register
-      << EndLogLine ;
-    ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routerBuffer_addr = (uint64_t) &routerBuffer ;
-    ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routermemreg_lkey = routermemreg.lkey ;
-    ((struct rpcBuffer *) &routerBuffer.callBuffer) -> clientRank = my_rank() ;
-
-    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-      << "rpcBuffer.routerBuffer_addr=0x" << (void *) ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routerBuffer_addr
-      << " rpcBuffer.routermemreg_lkey=0x" << (void *) ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routermemreg_lkey
-      << " rpcBuffer.clientRank=" << ((struct rpcBuffer *) &routerBuffer.callBuffer) -> clientRank
-      << EndLogLine ;
-
-    pthread_t rdma_responder_thread ;
-    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-      << "Creating the RDMA responder thread"
-      << EndLogLine ;
-    volatile unsigned long * sequencePtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->sequence) ;
-//    volatile size_t * lengthPtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->length) ;
-    volatile unsigned long * sequenceOutPtr = (volatile unsigned long *)&(((struct downstreamSequence *)(routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement))->sequence) ;
-    *sequenceOutPtr = 0xfffffffffffffffeUL ;
-    * sequencePtr = 0 ;
-    int rc=pthread_create(&rdma_responder_thread,NULL, rdma_responder, NULL) ;
-    StrongAssertLogLine(rc == 0)
-      << "pthread_create failed, rc=" << rc
-      << EndLogLine ;
+    VC.Init() ;
+//    memset((void *)&routerBuffer, 0xfe, sizeof(routerBuffer)) ;
+//    ((struct rpcAckBuffer *)&routerBuffer.ackBuffer)->upstreamSequence = 0 ;
+//    int rc_open = Kernel_RDMAOpen(&rdmaSocket) ;
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+//      << "Kernel_RDMAOpen rc=" << rc_open
+//      << EndLogLine ;
+//    int rc_connect = Kernel_RDMAConnect(rdmaSocket,k_IONPort) ;
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+//      << "Kernel_RDMAConnect rc=" << rc_connect
+//      << EndLogLine ;
+//    routermemreg.address = ( void *) &routerBuffer ;
+//    routermemreg.length = sizeof(routerBuffer) ;
+//    int rc_register = Kernel_RDMARegisterMem(rdmaSocket,& routermemreg) ;
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+//      << "Kernel_RDMARegisterMem routermemreg rc=" << rc_register
+//      << EndLogLine ;
+//    ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routerBuffer_addr = (uint64_t) &routerBuffer ;
+//    ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routermemreg_lkey = routermemreg.lkey ;
+//    ((struct rpcBuffer *) &routerBuffer.callBuffer) -> clientRank = my_rank() ;
+//
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+//      << "rpcBuffer.routerBuffer_addr=0x" << (void *) ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routerBuffer_addr
+//      << " rpcBuffer.routermemreg_lkey=0x" << (void *) ((struct rpcBuffer *) &routerBuffer.callBuffer) -> routermemreg_lkey
+//      << " rpcBuffer.clientRank=" << ((struct rpcBuffer *) &routerBuffer.callBuffer) -> clientRank
+//      << EndLogLine ;
+//
+//    pthread_t rdma_responder_thread ;
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+//      << "Creating the RDMA responder thread"
+//      << EndLogLine ;
+//    volatile unsigned long * sequencePtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->sequence) ;
+////    volatile size_t * lengthPtr = (volatile unsigned long *)&(((struct downstreamLength *)(routerBuffer.downstreamLengthBuffer.downstreamLengthBufferElement))->length) ;
+//    volatile unsigned long * sequenceOutPtr = (volatile unsigned long *)&(((struct downstreamSequence *)(routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement))->sequence) ;
+//    *sequenceOutPtr = 0xfffffffffffffffeUL ;
+//    * sequencePtr = 0 ;
+//    int rc=pthread_create(&rdma_responder_thread,NULL, rdma_responder, NULL) ;
+//    StrongAssertLogLine(rc == 0)
+//      << "pthread_create failed, rc=" << rc
+//      << EndLogLine ;
 
   }
 
 static void iWARPEM_rdmaTerminate(void)
   {
-    int rc = close(rdmaSocket) ;
-    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-      << "close rc=" << rc
-      << EndLogLine ;
+    VC.Terminate() ;
+//    int rc = close(rdmaSocket) ;
+//    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+//      << "close rc=" << rc
+//      << EndLogLine ;
   }
 
 static void spin_for_rpc_ready(volatile unsigned long * upstreamSequenceP, unsigned long requestedSequence) __attribute((noinline)) ;
@@ -1947,6 +2428,7 @@ static unsigned long upstreamSequence ;
 static size_t BufferIndex = sizeof(unsigned long);
 static void iWARPEM_FlushBuffer(void)
   {
+#if 0
     if ( BufferIndex > sizeof(unsigned long))
       {
         BegLogLine(FXLOG_IT_API_O_SOCKETS)
@@ -1986,10 +2468,10 @@ static void iWARPEM_FlushBuffer(void)
           << "Kernel_RDMAPollCQ returns with entries=" << entries
           << EndLogLine ;
       }
-
+#endif
   }
 
-static iWARPEM_Status_t iWARPEM_SendUpstream(unsigned int LocalEndpointIndex,
+static bool iWARPEM_SendUpstream(unsigned int LocalEndpointIndex,
                                              struct iWARPEM_Message_Hdr_t & Hdr,
                                              struct iovec * iov = NULL,
                                              unsigned int iovec_length = 0
@@ -2002,7 +2484,12 @@ static iWARPEM_Status_t iWARPEM_SendUpstream(unsigned int LocalEndpointIndex,
         << " iov=" << (void *) iov
         << " iovec_length=" << iovec_length
       << EndLogLine ;
-
+    bool rc=VC.QueueForTransmit(LocalEndpointIndex,Hdr,iov, iovec_length) ;
+//    bool rc_transmit=VC.FlushTransmit() ;
+    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+      << "VC.QueueForTransmit returns " << rc
+      << EndLogLine ;
+#if 0
     size_t LocalBufferIndex = BufferIndex ;
     unsigned int TotalDataLen = Hdr.mTotalDataLen ;
     StrongAssertLogLine(sizeof(unsigned long)+sizeof(unsigned int) + sizeof(struct iWARPEM_Message_Hdr_t) + TotalDataLen <= k_UpstreamBufferSize)
@@ -2055,8 +2542,8 @@ static iWARPEM_Status_t iWARPEM_SendUpstream(unsigned int LocalEndpointIndex,
       << EndLogLine ;
 
     BufferIndex = LocalBufferIndex ;
-
-    return IWARPEM_SUCCESS ;
+#endif
+    return rc ;
   }
 
 static void routed_close(unsigned int LocalEndpointIndex)
@@ -2064,7 +2551,9 @@ static void routed_close(unsigned int LocalEndpointIndex)
     struct iWARPEM_Message_Hdr_t Hdr ;
     Hdr.mMsg_Type = iWARPEM_SOCKET_CLOSE_REQ_TYPE ;
     Hdr.mTotalDataLen= 0 ;
+    pthread_mutex_lock(&gSendUpstreamLock) ;
     iWARPEM_SendUpstream(LocalEndpointIndex,Hdr) ;
+    pthread_mutex_unlock(&gSendUpstreamLock) ;
   }
 
 void 
@@ -3270,9 +3759,11 @@ iWARPEM_DataReceiverThread( void* args )
 }
 #endif
 
-static void
+// iWARPEM_ProcessSendWR returns 'true' if it flushed the data upstream
+static bool
 iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 {
+    bool rc=false ;
   /**********************************************
    * Send Header to destination
    *********************************************/
@@ -3357,18 +3848,18 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
         {
         case iWARPEM_DISCONNECT_REQ_TYPE:
           {
-            iWARPEM_Status_t istatus = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
+            rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
 //            int wlen = 0;
 //            SendWR->mMessageHdr.EndianConvert() ;
 //            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
 //                                                        (char *) & SendWR->mMessageHdr,
 //                                                        LenToSend,
 //                                                        & wlen );
-            if( istatus != IWARPEM_SUCCESS )
-              {
-                iwarpem_generate_conn_termination_event( SocketFD );
-                return;
-              }
+//            if( istatus != IWARPEM_SUCCESS )
+//              {
+//                iwarpem_generate_conn_termination_event( SocketFD );
+//                return;
+//              }
 
 //            AssertLogLine( wlen == LenToSend )
 //              << "iWARPEM_ProcessSendWR(): ERROR: "
@@ -3389,18 +3880,18 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
           }
         case iWARPEM_DISCONNECT_RESP_TYPE:
           {		
-            iWARPEM_Status_t istatus = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
+            rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
 //            int wlen = 0;
 //            SendWR->mMessageHdr.EndianConvert() ;
 //            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
 //                                                        (char *) & SendWR->mMessageHdr,
 //                                                        LenToSend,
 //                                                        & wlen );
-            if( istatus != IWARPEM_SUCCESS )
-              {
-                iwarpem_generate_conn_termination_event( SocketFD );
-                return;
-              }
+//            if( istatus != IWARPEM_SUCCESS )
+//              {
+//                iwarpem_generate_conn_termination_event( SocketFD );
+//                return;
+//              }
 
 //            AssertLogLine( wlen == LenToSend )
 //              << "iWARPEM_ProcessSendWR(): ERROR: "
@@ -3423,18 +3914,18 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
           }
         case iWARPEM_DTO_RDMA_READ_REQ_TYPE:
           {
-            iWARPEM_Status_t istatus = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
+            rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
 //            int wlen = 0;
 //            SendWR->mMessageHdr.EndianConvert() ;
 //            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
 //                                                        (char *) & SendWR->mMessageHdr,
 //                                                        LenToSend,
 //                                                        & wlen );
-            if( istatus != IWARPEM_SUCCESS )
-              {
-                iwarpem_generate_conn_termination_event( SocketFD );
-                return;
-              }
+//            if( istatus != IWARPEM_SUCCESS )
+//              {
+//                iwarpem_generate_conn_termination_event( SocketFD );
+//                return;
+//              }
 
 //            AssertLogLine( wlen == LenToSend )
 //              << "iWARPEM_ProcessSendWR(): ERROR: "
@@ -3532,13 +4023,13 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 //                                       iov,
 //                                       SendWR->num_segments+1,
 //                                       & wlen );
-            iWARPEM_Status_t istatus = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr,iov,SendWR->num_segments) ;
-            if( istatus != IWARPEM_SUCCESS )
-              {
-                iwarpem_generate_conn_termination_event( SocketFD );
-                error = 1;
-                break;
-              }
+            rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr,iov,SendWR->num_segments) ;
+//            if( istatus != IWARPEM_SUCCESS )
+//              {
+//                iwarpem_generate_conn_termination_event( SocketFD );
+//                error = 1;
+//                break;
+//              }
 #if IT_API_CHECKSUM
             StrongAssertLogLine( Checksum == SendWR->mMessageHdr.mChecksum )
               << "ERROR: "
@@ -3654,8 +4145,11 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
           }
         }
     }
+  return rc ;
 }
 
+// This now done by the RDMA responder thread
+#if 0
 void*
 iWARPEM_DataSenderThread( void* args )
 {
@@ -3714,6 +4208,7 @@ iWARPEM_DataSenderThread( void* args )
 
   return NULL;
 }
+#endif
 
 pthread_mutex_t         gDataReceiverControlSockMutex;
 //int gDataReceiverControlSockFd = -1;
@@ -3801,7 +4296,6 @@ it_status_t it_ia_create (
 
   if( gITAPI_Initialized == 0 )
     {
-      iWARPEM_rdmaInit() ;
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
     << "it_ia_create(): Entering about to call   gSendWRLocalEndPointList.Init();"
     << " IN name "          << name
@@ -4105,32 +4599,33 @@ it_status_t it_ia_create (
 //
 //
 
-  /***********************************************
-   * Start the data sender thread
-   ***********************************************/
-  pthread_mutex_lock( & gSendThreadStartedMutex );
-
-  pthread_t DataSenderTID;
-
-  int rc = pthread_create( & DataSenderTID,
-		       NULL,
-		       iWARPEM_DataSenderThread,
-		       (void *) NULL );   
-
-  StrongAssertLogLine( rc == 0 )
-    << "it_ia_create(): ERROR: "
-    << " Failed to create a sender thread "
-    << " Errno " << errno    
-    << EndLogLine;
-
-  pthread_mutex_lock( & gSendThreadStartedMutex );
-  pthread_mutex_unlock( & gSendThreadStartedMutex );
+//  /***********************************************
+//   * Start the data sender thread
+//   ***********************************************/
+//  pthread_mutex_lock( & gSendThreadStartedMutex );
+//
+//  pthread_t DataSenderTID;
+//
+//  int rc = pthread_create( & DataSenderTID,
+//		       NULL,
+//		       iWARPEM_DataSenderThread,
+//		       (void *) NULL );
+//
+//  StrongAssertLogLine( rc == 0 )
+//    << "it_ia_create(): ERROR: "
+//    << " Failed to create a sender thread "
+//    << " Errno " << errno
+//    << EndLogLine;
+//
+//  pthread_mutex_lock( & gSendThreadStartedMutex );
+//  pthread_mutex_unlock( & gSendThreadStartedMutex );
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
     << "it_ia_create(): After pthread_create of the sender thread by the main thread"
     << EndLogLine;
 
   /***********************************************/
+    iWARPEM_rdmaInit() ;
     gITAPI_Initialized = 1;
     }
 
@@ -5273,7 +5768,9 @@ it_status_t it_ep_connect (
   iov[0].iov_base = (void *) & PrivateData ;
   iov[0].iov_len = sizeof( iWARPEM_Private_Data_t );
 
-  iWARPEM_Status_t istatus = iWARPEM_SendUpstream(s,Hdr,iov,1) ;
+  pthread_mutex_lock(&gSendUpstreamLock) ;
+  iWARPEM_SendUpstream(s,Hdr,iov,1) ;
+  pthread_mutex_unlock(&gSendUpstreamLock) ;
 
   LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_CONNECTED;
   LocalEndPoint->ConnFd        = s;
@@ -6929,7 +7426,9 @@ it_status_t itx_ep_connect_with_rmr (
 
   iWARPEM_Private_Data_t PrivateDataIn;
   expectedPrivateDataPtr = &PrivateDataIn ;
-  iWARPEM_Status_t istatus = iWARPEM_SendUpstream(s,Hdr,iov,1) ;
+  pthread_mutex_lock(&gSendUpstreamLock) ;
+  iWARPEM_SendUpstream(s,Hdr,iov,1) ;
+  pthread_mutex_unlock(&gSendUpstreamLock) ;
 
   LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_CONNECTED;
   LocalEndPoint->ConnFd        = s;
@@ -6938,10 +7437,16 @@ it_status_t itx_ep_connect_with_rmr (
     << "it_ep_connect(): ERROR: private_data must be set to the other EP Node Id (needed for debugging)"
     << EndLogLine;
 
+  BegLogLine(FXLOG_IT_API_O_SOCKETS)
+    << "Spinning for private data reply"
+    << EndLogLine ;
   while ( expectedPrivateDataPtr == &PrivateDataIn)
     {
       /* Spin for response from upstream */
     }
+  BegLogLine(FXLOG_IT_API_O_SOCKETS)
+    << "Private data reply has arrived, continuing"
+    << EndLogLine ;
 // tjcw: We will need some way of fetching the private data from the receive thread
 //  int Dummy;
 //  sscanf( (const char *) private_data, "%d %d", &Dummy, &(LocalEndPoint->OtherEPNodeId) );

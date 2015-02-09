@@ -373,6 +373,8 @@ typedef enum
     iWARPEM_SOCKET_CONNECT_RESP_TYPE ,
     iWARPEM_SOCKET_CLOSE_REQ_TYPE,
     iWARPEM_SOCKET_CLOSE_TYPE,
+
+    iWARPEM_KERNEL_CONNECT_TYPE
   } iWARPEM_Msg_Type_t;
 
 static
@@ -392,6 +394,7 @@ const char* iWARPEM_Msg_Type_to_string( int /* iWARPEM_Msg_Type_t */ aType )
     case iWARPEM_SOCKET_CONNECT_RESP_TYPE:{ return "iWARPEM_SOCKET_CONNECT_RESP_TYPE"; }
     case iWARPEM_SOCKET_CLOSE_REQ_TYPE:   { return "iWARPEM_SOCKET_CLOSE_REQ_TYPE"; }
     case iWARPEM_SOCKET_CLOSE_TYPE:       { return "iWARPEM_SOCKET_CLOSE_TYPE"; }
+    case iWARPEM_KERNEL_CONNECT_TYPE:     { return "iWARPEM_KERNEL_CONNECT_TYPE"; }
     default:
       {
         BegLogLine(1)
@@ -463,6 +466,12 @@ struct iWARPEM_SocketClose_t
 {
   // place holder
 };
+struct iWARPEM_KernelConnect_t
+  {
+  uint64_t mRouterBuffer_addr ;
+  uint32_t mRoutermemreg_lkey ;
+  unsigned int mClientRank ;
+  };
 
 struct iWARPEM_Message_Hdr_t
 {
@@ -483,6 +492,7 @@ struct iWARPEM_Message_Hdr_t
     iWARPEM_SocketConnect_t   mSocketConnect;
     iWARPEM_SocketConnect_Resp_t   mSocketConnectResp;
     iWARPEM_SocketClose_t     mSocketClose;
+    iWARPEM_KernelConnect_t   mKernelConnect ;
   } mOpType;
   void EndianConvert(void)
     {
@@ -545,10 +555,31 @@ static void report_Disconnect_Resp(void)
   {
 
   }
-static void report_Connect_Resp(void)
+static void report_Socket_Connect(void)
   {
 
   }
+static void report_Socket_Connect_Resp(void)
+  {
+
+  }
+static void report_Socket_Close_Req(void)
+  {
+
+  }
+static void report_Socket_Close(void)
+  {
+
+  }
+static void report_Kernel_Connect(const iWARPEM_KernelConnect_t& aKernelConnect)
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+          << "mRouterBuffer_addr=0x" << (void *) aKernelConnect.mRouterBuffer_addr
+          << " mRoutermemreg_lkey=0x" << (void *) aKernelConnect.mRoutermemreg_lkey
+          << " mClientRank=" << aKernelConnect.mClientRank
+          << EndLogLine ;
+  }
+
 static void report_hdr(const iWARPEM_Message_Hdr_t& Hdr)
   {
     BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
@@ -595,11 +626,35 @@ static void report_hdr(const iWARPEM_Message_Hdr_t& Hdr)
       << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
       << EndLogLine ;
       break ;
-    case iWARPEM_SOCKET_CONNECT_RESP_TYPE: report_Connect_Resp() ;
+    case iWARPEM_SOCKET_CONNECT_REQ_TYPE: report_Socket_Connect() ;
     StrongAssertLogLine(Hdr.mTotalDataLen == sizeof( iWARPEM_Private_Data_t ) )
       << "Message length was " << Hdr.mTotalDataLen
       << " should be " << sizeof( iWARPEM_Private_Data_t )
       << " . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+    case iWARPEM_SOCKET_CONNECT_RESP_TYPE: report_Socket_Connect_Resp() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == sizeof( iWARPEM_Private_Data_t ) )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be " << sizeof( iWARPEM_Private_Data_t )
+      << " . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_SOCKET_CLOSE_REQ_TYPE: report_Socket_Close_Req() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0 . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_SOCKET_CLOSE_TYPE: report_Socket_Close() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0 . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_KERNEL_CONNECT_TYPE: report_Kernel_Connect(Hdr.mOpType.mKernelConnect) ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
       << EndLogLine ;
       break ;
     default:
