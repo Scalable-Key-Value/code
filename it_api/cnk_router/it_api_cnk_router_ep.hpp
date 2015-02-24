@@ -21,6 +21,7 @@
 
 #include <stddef.h>
 #include <cnk_router/it_api_cnk_router_types.hpp>
+#include <cnk_router/it_api_cnk_router_ep_buffer.hpp>
 
 #define MULTIPLEX_STATISTICS
 
@@ -29,7 +30,7 @@ inline
 iWARPEM_Status_t
 SendMsg( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const bool aFlush = false );
 
-template <class MultiplexedConnectionType>
+template <class MultiplexedConnectionType, class SocketBufferType = iWARPEM_Memory_Socket_Buffer_t>
 class iWARPEM_Multiplexed_Endpoint_t
 {
   // todo: allow user to create and provide send/recv buffers to maybe prevent some memcpy
@@ -41,9 +42,7 @@ class iWARPEM_Multiplexed_Endpoint_t
   MultiplexedConnectionType **mClientEPs;
   iWARPEM_Object_Accept_t *mListenerContext;
 
-  char* mSendBuffer;
-  char* mCurrentSendPtr;
-  size_t mSendDataLen;
+  SocketBufferType *mSendBuffer;
   char* mReceiveBuffer;
   char* mCurrentRecvPtr;
   size_t mReceiveDataLen;
@@ -104,12 +103,8 @@ class iWARPEM_Multiplexed_Endpoint_t
 
   inline void ResetSendBuffer()
   {
-    it_api_multiplexed_socket_message_header_t *hdr = (it_api_multiplexed_socket_message_header_t*)mSendBuffer;
-    hdr->DataLen = 0;
-    hdr->ProtocolVersion = IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION;
-    hdr->MsgType = MULTIPLEXED_SOCKET_MSG_TYPE_DATA;
-    mCurrentSendPtr = mSendBuffer + sizeof( it_api_multiplexed_socket_message_header_t );
-    mSendDataLen = 0;
+    mSendBuffer->Reset();
+    mSendBuffer->SetHeader( IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION, MULTIPLEXED_SOCKET_MSG_TYPE_DATA );
 #ifdef MULTIPLEX_STATISTICS
     mMsgCount = 0;
 #endif
@@ -117,10 +112,7 @@ class iWARPEM_Multiplexed_Endpoint_t
 
   inline size_t GetSendSpace() const
   {
-    if( (intptr_t)IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE > ((intptr_t)mCurrentSendPtr - (intptr_t)mSendBuffer) )
-      return (size_t)( (intptr_t)IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE - ((intptr_t)mCurrentSendPtr - (intptr_t)mSendBuffer) );
-    else
-      return 0;
+    return mSendBuffer->GetRemainingSize();
   }
 
 public:
@@ -128,7 +120,7 @@ public:
                              int aMaxClientCount = IT_API_MULTIPLEX_MAX_PER_SOCKET,
                              iWARPEM_Object_Accept_t *aListenerCtx = NULL )
   : mClientCount(0), mRouterConnFd( aRouterFd ), mMaxClientCount( aMaxClientCount ),
-    mSendDataLen( 0 ), mReceiveDataLen( 0 ), mPendingRequests( 0 ), mNeedsBufferFlush( false )
+    mReceiveDataLen( 0 ), mPendingRequests( 0 ), mNeedsBufferFlush( false )
   {
     bzero( &mRouterInfo, sizeof( iWARPEM_Router_Info_t ));
 
@@ -136,9 +128,14 @@ public:
     bzero( mClientEPs, sizeof( MultiplexedConnectionType*) * aMaxClientCount );
 
     mListenerContext = aListenerCtx;
-    mSendBuffer = new char[ IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE ];
-    mCurrentSendPtr = mSendBuffer;
-    mReceiveBuffer = new char[ IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE ];
+    mSendBuffer = new SocketBufferType();
+    mReceiveBuffer = (char*)new uintptr_t[ IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE / sizeof( uintptr_t ) ];
+
+    AssertLogLine( ( (uintptr_t)mReceiveBuffer & IWARPEM_SOCKET_BUFFER_ALIGNMENT_MASK ) == 0 )
+      << "Receive buffer is not aligned to " << IWARPEM_SOCKET_BUFFER_ALIGNMENT << " Bytes."
+      << " @:" << (void*)mReceiveBuffer
+      << EndLogLine;
+
     mCurrentRecvPtr = mReceiveBuffer;
 
     ResetSendBuffer();
@@ -188,7 +185,6 @@ public:
   inline void SetRouterFd( int aRouterFd = 0 ) { mRouterConnFd = aRouterFd; }
   inline iWARPEM_Router_Info_t* GetRouterInfoPtr() const { return (iWARPEM_Router_Info_t*)&mRouterInfo; }
   inline iWARPEM_Object_Accept_t* GetListenerContext() const { return mListenerContext; }
-  inline char* GetSendPtr() const { return mCurrentSendPtr; }
   inline void IncreasePendingRequest() { mPendingRequests++; };
   inline void DecreasePendingRequests() { mPendingRequests--; if( !mPendingRequests ) FlushSendBuffer(); }
 
@@ -293,6 +289,11 @@ public:
       return IT_ERR_INVALID_EP_STATE;
     }
 
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Refilling recv buffer for socket: " << mRouterConnFd
+      << " expecting datalen: " << mReceiveDataLen
+      << EndLogLine;
+
     int len;
     iWARPEM_Status_t istatus = read_from_socket( mRouterConnFd,
                                                  mReceiveBuffer,
@@ -377,15 +378,18 @@ public:
           return iWARPEM_UNKNOWN_REQ_TYPE;
       }
     }
-    iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mCurrentRecvPtr;
+    iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mSendBuffer->AlignedPosition( mCurrentRecvPtr );
     MultHdr->ClientID = ntohs( MultHdr->ClientID );
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Extracting new client message hdr @offset: " << (uintptr_t)(mCurrentRecvPtr - mReceiveBuffer)
+      << EndLogLine;
 
     *aClient = MultHdr->ClientID;
 
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
       << "Retrieving msg_type: " << MultHdr->ClientMsg.mMsg_Type
       << " from client: " << *aClient
-      << " readptr@: " << (void*)mCurrentRecvPtr
+      << " readptr@: " << (void*)mSendBuffer->AlignedPosition( mCurrentRecvPtr )
       << EndLogLine;
 
     return MultHdr->ClientMsg.mMsg_Type;
@@ -412,14 +416,19 @@ public:
       }
     }
 
+    iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mSendBuffer->AlignedPosition( mCurrentRecvPtr );
+    mCurrentRecvPtr = (char*)MultHdr;
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
-      << "Extracting new client message @offset: " << (uintptr_t)(mCurrentRecvPtr - mReceiveBuffer)
+      << "Extracting new client message hdr @offset: " << (uintptr_t)(mCurrentRecvPtr - mReceiveBuffer)
       << EndLogLine;
 
-    iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mCurrentRecvPtr;
     MultHdr->ClientID = ntohs( MultHdr->ClientID );
     *aClientId = MultHdr->ClientID;
     mCurrentRecvPtr += offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg );
+
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Extracting new client message hdr @offset: " << (uintptr_t)(mCurrentRecvPtr - mReceiveBuffer)
+      << EndLogLine;
 
     *aHdr = (iWARPEM_Message_Hdr_t*)mCurrentRecvPtr;
     (*aHdr)->EndianConvert();
@@ -443,28 +452,18 @@ public:
   {
     int wlen = 0;
     mNeedsBufferFlush = false;
-    if( mSendDataLen == 0)
+    size_t DataLen = mSendBuffer->GetDataLen();
+    if( DataLen == 0)
     {
       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
         << "Buffer is empty. Nothing to send."
         << EndLogLine;
       return IWARPEM_SUCCESS;
     }
-    // set length of data message
-    ((it_api_multiplexed_socket_message_header_t*)mSendBuffer)->DataLen = mSendDataLen;
-
-    iWARPEM_Status_t status = IWARPEM_SUCCESS;
-    char *data = mSendBuffer;
-    while( data < mCurrentSendPtr )
-    {
-      int wlen;
-      status = write_to_socket( mRouterConnFd, mSendBuffer, mCurrentSendPtr-data, &wlen );
-      if( status == IWARPEM_SUCCESS )
-        data += wlen;
-    }
+    iWARPEM_Status_t status = mSendBuffer->FlushToSocket( mRouterConnFd, &wlen );
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
-      << "Sent " << (int)(data - mSendBuffer)
-      << " payload: " << mSendDataLen
+      << "Sent " << (int)(wlen)
+      << " payload: " << mSendBuffer->GetDataLen()
       << EndLogLine;
 
 #ifdef MULTIPLEX_STATISTICS
@@ -480,7 +479,7 @@ public:
     return status;
   }
 
-  iWARPEM_Status_t InsertMessage( uint16_t aClientID, char* aData, int aSize, bool aForceNoFlush = false )
+  iWARPEM_Status_t InsertMessage( uint16_t aClientID, const char* aData, int aSize, bool aForceNoFlush = false )
   {
     if( aSize > IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE - sizeof( it_api_multiplexed_socket_message_header_t ) )
     {
@@ -503,21 +502,15 @@ public:
     }
 
     // create the multiplex header from the client id
-    iWARPEM_Multiplexed_Msg_Hdr_t *MPM = (iWARPEM_Multiplexed_Msg_Hdr_t*)mCurrentSendPtr;
-    MPM->ClientID = aClientID;
-
-    memcpy( &(MPM->ClientMsg), aData, aSize );
-
-    mCurrentSendPtr += offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg ) + aSize;
-    mSendDataLen += offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg ) + aSize;
-
-//    uintptr_t offset = AdjustPtrForNextMessage( mCurrentSendPtr );
+    mSendBuffer->AddClientHdr( aClientID );
+    mSendBuffer->AddData( aData, aSize );
 
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
       << "Inserted Message to send buffer: "
-      << " ClientId: " << MPM->ClientID
+      << " ClientId: " << aClientID
       << " msg_size: " << aSize
-      << " bytes in buffer: " << mSendDataLen
+      << " msg_type: " << ((iWARPEM_Message_Hdr_t*)aData)->mMsg_Type
+      << " bytes in buffer: " << mSendBuffer->GetDataLen()
       << EndLogLine;
 
 #ifdef MULTIPLEX_STATISTICS
@@ -550,9 +543,7 @@ public:
         << " already inserted: " << *aLen
         << EndLogLine;
 
-      memcpy( mCurrentSendPtr, aIOV[ i ].iov_base, send_size );
-      mCurrentSendPtr += send_size;
-      mSendDataLen += send_size;
+      mSendBuffer->AddData( aIOV[ i ] );
       *aLen += send_size;
     }
 
@@ -561,7 +552,7 @@ public:
     << " ClientId: " << aClientId
     << " entries: " << aIOV_Count
     << " msg_size: " << *aLen
-    << " bytes in buffer: " << mSendDataLen
+    << " bytes in buffer: " << mSendBuffer->GetDataLen()
     << EndLogLine;
 
     // initiate a send of data once we've filled up the buffer beyond 15/16ths

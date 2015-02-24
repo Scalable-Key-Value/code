@@ -78,7 +78,7 @@ SendVec( iWARPEM_Object_EndPoint_t *aEP, struct iovec *iov, int iov_count, int* 
       rEP->FlushSendBuffer();
   }
   else
-    status = write_to_socket_writev( sock, iov, iov_count, wlen );
+    status = write_to_socket( sock, iov, iov_count, wlen );
   return status;
 }
 

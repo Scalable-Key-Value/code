@@ -132,6 +132,63 @@ public:
   }
 };
 
+
+
+it_status_t
+socket_nonblock_on( int fd )
+{
+  int flags = fcntl( fd, F_GETFL);
+  int rc = fcntl( fd, F_SETFL, flags | O_NONBLOCK);
+  if (rc < 0)
+    {
+      BegLogLine( 1 )
+        << "socket_nonblock_on(" << fd
+        << "): ERROR: "
+        << " errno: " << errno
+        << EndLogLine;
+
+      return IT_ERR_ABORT;
+    }
+
+  return IT_SUCCESS;
+}
+
+it_status_t
+socket_nonblock_off( int fd )
+{
+  int flags = fcntl( fd, F_GETFL);
+  int rc = fcntl( fd, F_SETFL, flags & ~O_NONBLOCK);
+  if (rc < 0)
+    {
+      BegLogLine( 1 )
+        << "socket_nonblock_off(" << fd
+        << "): ERROR: "
+        << " errno: " << errno
+        << EndLogLine;
+
+      return IT_ERR_ABORT;
+    }
+
+  return IT_SUCCESS;
+}
+it_status_t
+socket_nodelay_on( int fd )
+  {
+    int one = 1 ;
+    BegLogLine(FXLOG_IT_API_O_SOCKETS)
+      << "Setting NODELAY for socket " << fd
+      << EndLogLine ;
+    int rc=setsockopt(fd, SOL_TCP, TCP_NODELAY, &one, sizeof(one)) ;
+    if ( rc != 0 )
+      {
+        BegLogLine(1)
+            << "Bad return from setsockopt fd=" << fd
+            << " errno=" << errno
+            << EndLogLine ;
+      }
+    return IT_SUCCESS ;
+  }
+
 iWARPEM_Bandwidth_Stats_t gBandInStat;
 iWARPEM_Bandwidth_Stats_t gBandOutStat;
 

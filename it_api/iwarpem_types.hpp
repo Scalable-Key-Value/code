@@ -182,7 +182,7 @@ struct iWARPEM_Object_Accept_t
 static
 inline
 iWARPEM_Status_t
-RecvRaw( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen )
+RecvRaw( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const bool aWithClientHdr = false )
 {
   return read_from_socket( aEP->ConnFd, buff, len, wlen );
 }
@@ -190,7 +190,7 @@ RecvRaw( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen )
 static
 inline
 iWARPEM_Status_t
-SendMsg( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const bool aFlush = false );
+SendMsg( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const bool aFlush = false )
 {
   return write_to_socket( aEP->ConnFd, buff, len, wlen );
 }
@@ -200,9 +200,8 @@ inline
 iWARPEM_Status_t
 SendVec( iWARPEM_Object_EndPoint_t *aEP, struct iovec *iov, int iov_count, int* wlen, const bool aFlush = false )
 {
-  return write_to_socket_writev( aEP->ConnFd, iov, iov_count, wlen );
+  return write_to_socket( aEP->ConnFd, iov, iov_count, wlen );
 }
-
 #endif
 
 

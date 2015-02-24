@@ -59,6 +59,10 @@
 #define FXLOG_IT_API_O_SOCKETS_QUEUE_LENGTHS_LOG ( 0 )
 #endif
 
+#ifndef FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG
+#define FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG ( 0 )
+#endif
+
 #include <it_api_o_sockets_thread.h>
 #include <iwarpem_socket_access.hpp>
 #include <iwarpem_types.hpp>
@@ -87,62 +91,6 @@ static itov_event_queue_t *gRecvCmplQueue ;
 int itov_aevd_defined = 0;
 static void it_api_o_sockets_signal_accept(void) ;
 /*******************************************************************/
-
-
-it_status_t
-socket_nonblock_on( int fd )
-{
-  int flags = fcntl( fd, F_GETFL);
-  int rc = fcntl( fd, F_SETFL, flags | O_NONBLOCK);
-  if (rc < 0)
-    {
-      BegLogLine( 1 )
-        << "socket_nonblock_on(" << fd
-        << "): ERROR: "
-        << " errno: " << errno
-        << EndLogLine;
-
-      return IT_ERR_ABORT;
-    }
-
-  return IT_SUCCESS;
-}
-
-it_status_t
-socket_nonblock_off( int fd )
-{
-  int flags = fcntl( fd, F_GETFL);
-  int rc = fcntl( fd, F_SETFL, flags & ~O_NONBLOCK);
-  if (rc < 0)
-    {
-      BegLogLine( 1 )
-        << "socket_nonblock_off(" << fd
-        << "): ERROR: "
-        << " errno: " << errno
-        << EndLogLine;
-
-      return IT_ERR_ABORT;
-    }
-
-  return IT_SUCCESS;
-}
-it_status_t
-socket_nodelay_on( int fd )
-  {
-    int one = 1 ;
-    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-      << "Setting NODELAY for socket " << fd
-      << EndLogLine ;
-    int rc=setsockopt(fd, SOL_TCP, TCP_NODELAY, &one, sizeof(one)) ;
-    if ( rc != 0 )
-      {
-        BegLogLine(1)
-            << "Bad return from setsockopt fd=" << fd
-            << " errno=" << errno
-            << EndLogLine ;
-      }
-    return IT_SUCCESS ;
-  }
 
 /***************************************
  * To enable IT_API over unix domain sockets
@@ -2207,8 +2155,10 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                 return;
               }
 
+#ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
               gActiveSocketsQueue.push( EP );
+#endif
 
             AssertLogLine( wlen == LenToSend )
               << "iWARPEM_ProcessSendWR(): ERROR: "
@@ -2242,8 +2192,10 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                 return;
               }
 
+#ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
               gActiveSocketsQueue.push( EP );
+#endif
 
             AssertLogLine( wlen == LenToSend )
               << "iWARPEM_ProcessSendWR(): ERROR: "
@@ -2279,8 +2231,10 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                 return;
               }
 
+#ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
               gActiveSocketsQueue.push( EP );
+#endif
 
             AssertLogLine( wlen == LenToSend )
               << "iWARPEM_ProcessSendWR(): ERROR: "
@@ -2389,9 +2343,10 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                 break;
               }
 
+#ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
               gActiveSocketsQueue.push( EP );
-
+#endif
             StrongAssertLogLine(wlen == SendWR->mMessageHdr.mTotalDataLen + sizeof(SendWR->mMessageHdr))
               << "Wrong length write, wlen=" << wlen
               << " SendWR->mMessageHdr.mTotalDataLen=" << SendWR->mMessageHdr.mTotalDataLen
@@ -2516,6 +2471,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
     }
 }
 
+#ifdef WITH_CNK_ROUTER
 iWARPEM_Status_t
 iWARPEM_FlushActiveSockets( ActiveSocketsQueue_t &aASQ )
 {
@@ -2540,7 +2496,7 @@ iWARPEM_FlushActiveSockets( ActiveSocketsQueue_t &aASQ )
   }
   return status;
 }
-
+#endif
 
 void*
 iWARPEM_DataSenderThread( void* args )
@@ -2594,9 +2550,10 @@ iWARPEM_DataSenderThread( void* args )
 
         }
       
+#ifdef WITH_CNK_ROUTER
       if( ( gSendWrQueue->GetSize() == 0 ) && !(loopcnt & 0xfff) )
         iWARPEM_FlushActiveSockets( gActiveSocketsQueue );
-
+#endif
       Even = ! Even;
     }
 

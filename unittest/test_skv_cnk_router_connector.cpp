@@ -15,6 +15,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 
 #define ITAPI_ENABLE_V21_BINDINGS
 

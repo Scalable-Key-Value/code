@@ -273,6 +273,7 @@ struct connection {
 //  unsigned long stuck_epoll_count ;
   int will_flush_this_connection ;
   int flushed_downstream ;
+  int upstream_buffer_busy;
   struct connection * next_conn_to_flush ;
   bool mSendAck ;
   struct connection * mNextConnToAck ;
@@ -699,6 +700,7 @@ int main(int argc, char **argv)
   rdma_destroy_id(listener);
   rdma_destroy_event_channel(ec);
 
+  MPI_Barrier( MPI_COMM_WORLD );
   MPI_Finalize() ;
 
   return 0;
@@ -884,173 +886,6 @@ static void issue_ack(struct connection *conn)
 //#endif
 //  }
 
-unsigned int
-socket_nodelay_on( int fd )
-  {
-    int one = 1 ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "Setting NODELAY for socket " << fd
-      << EndLogLine ;
-    int rc=setsockopt(fd, SOL_TCP, TCP_NODELAY, &one, sizeof(one)) ;
-    if ( rc != 0 )
-      {
-        BegLogLine(1)
-            << "Bad return from setsockopt fd=" << fd
-            << " errno=" << errno
-            << EndLogLine ;
-      }
-    return 0 ;
-  }
-#if 0
-static
-inline
-unsigned int
-write_to_socket( int sock, char * buff, int len, int* wlen )
-  {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "Writing to FD=" << sock
-        << " buff=" << (void *) buff
-        << " length=" << len
-        << EndLogLine ;
-    int BytesWritten = 0;
-    for( ; BytesWritten < len; )
-    {
-    int write_rc = write(   sock,
-                            (((char *) buff) + BytesWritten ),
-                            len - BytesWritten );
-    if( write_rc < 0 )
-      {
-  // printf( "errno: %d\n", errno );
-  if( errno == EAGAIN )
-    continue;
-  else if ( errno == ECONNRESET )
-    {
-      return 1;
-    }
-  else
-    StrongAssertLogLine( 0 )
-      << "write_to_socket:: ERROR:: "
-      << "failed to write to file: " << sock
-            << " buff: " << (void *) buff
-            << " len: " << len
-      << " errno: " << errno
-      << EndLogLine;
-      }
-
-    BytesWritten += write_rc;
-    }
-
-  *wlen = BytesWritten;
-
-#if IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL
-  gBandOutStat.AddBytes( BytesWritten );
-#endif
-
-  return 0;
-  }
-static
-inline
-unsigned int
-write_to_socket_writev( int sock, struct iovec *iov, int iov_count, int* wlen )
-{
-  BegLogLine(FXLOG_ITAPI_ROUTER)
-    << "Writing to FD=" << sock
-    << " iovec=" << (void *) iov
-    << " iov_count=" << iov_count
-    << EndLogLine ;
-writev_retry:
-  int write_rc = writev(sock,iov,iov_count) ;
-  if( write_rc < 0 )
-  {
-    switch( errno )
-    {
-      case EAGAIN:
-        goto writev_retry;
-      case ECONNRESET:
-      case EPIPE: // This is likely to be that upstream has already closed the socket
-        *wlen = write_rc ;
-        return 1;
-      default:
-        StrongAssertLogLine( 0 )
-          << "write_to_socket:: ERROR:: "
-          << "failed to write to file: " << sock
-          << " iovec: " << (void *) iov
-          << " iov_count: " << iov_count
-          << " errno: " << errno
-          << EndLogLine;
-    }
-  }
-  *wlen = write_rc ;
-
-#if IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL
-  gBandOutStat.AddBytes( write_rc );
-#endif
-
-  return 0;
-}
-static
-inline
-unsigned int
-read_from_socket( int sock, char * buff, int len, int* rlen )
-  {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "Reading from FD=" << sock
-        << " buff=" << (void *) buff
-        << " length=" << len
-        << EndLogLine ;
-    int BytesRead = 0;
-    int ReadCount = 0;
-
-    for(; BytesRead < len; )
-      {
-  int read_rc = read(   sock,
-            (((char *) buff) + BytesRead ),
-            len - BytesRead );
-  if( read_rc < 0 )
-    {
-      // printf( "errno: %d\n", errno );
-      if( errno == EAGAIN || errno == EINTR )
-        continue;
-      else if ( errno == ECONNRESET )
-        {
-          BegLogLine(FXLOG_ITAPI_ROUTER)
-              << "ECONNRESET, BytesRead=" << BytesRead
-              << EndLogLine ;
-          *rlen = BytesRead;
-          return 1;
-        }
-      else
-        StrongAssertLogLine( 0 )
-          << "ERROR:: failed to read from file: " << sock
-          << " errno: " << errno
-          << " buff=" << (void *) buff
-          << " " << (long) buff
-          << " length=" << len
-          << EndLogLine;
-    }
-  else if( read_rc == 0 )
-    {
-      BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "Connection closed, BytesRead=" << BytesRead
-          << EndLogLine ;
-      *rlen = BytesRead;
-      return 1;
-    }
-
-  ReadCount++;
-
-  BytesRead += read_rc;
-  }
-
-  *rlen = BytesRead;
-
-
-  BegLogLine(FXLOG_ITAPI_ROUTER)
-    << "Read completes, BytesRead=" << BytesRead
-    << EndLogLine ;
-  return 0;
-}
-#endif
 struct epoll_record
   {
   iWARPEM_Router_Endpoint_t *conn ;
@@ -2235,7 +2070,14 @@ void FlushMarkedUplinks()
     {
       (*ServerEP)->FlushSendBuffer();
       flushedEPs++;
-      drain_cq() ;
+      for( int n=0; n<IT_API_MULTIPLEX_MAX_PER_SOCKET; n++ )
+      {
+        if( (*ServerEP)->IsValidClient( n ) )
+        {
+          Crossbar_Entry_t *cb = (*ServerEP)->GetClientEP( n );
+          ((struct connection*)cb->getDownLink())->upstream_buffer_busy = 0;
+        }
+      }
     }
     ServerEP++;
   }
@@ -2439,6 +2281,8 @@ int ConnectToServers( int aMyRank )
 
     if( connected )
     {
+      socket_nonblock_on( connections[ conn_count ].socket );
+      socket_nodelay_on( connections[ conn_count ].socket );
       connections[ conn_count ].ServerEP = new iWARPEM_Router_Endpoint_t( connections[ conn_count ].socket );
 
       // set up the router info
@@ -2578,12 +2422,13 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
           << " k_wc_uplink"
           << EndLogLine ;
         buffer->ProcessReceiveBuffer(conn) ;
-        buffer->PostReceive(conn) ;
+        buffer_pair->PostReceive(conn) ;
       }
       BegLogLine(FXLOG_ITAPI_ROUTER)
         << "Setting requireFlushUplinks=1"
         << EndLogLine ;
       * requireFlushUplinks = 1 ;
+      conn->upstream_buffer_busy = 1;
       issue_ack(conn) ;
       break ;
     default:
@@ -3137,6 +2982,8 @@ static void post_call_buffer(struct connection *conn, volatile struct callBuffer
 //    conn->sequence_out += 1 ;
 //    pthread_mutex_lock((pthread_mutex_t *) &conn->qp_write_mutex) ;
 //    pthread_mutex_lock(&allConnectionMutex) ;
+    if( conn->upstream_buffer_busy )
+      FlushMarkedUplinks();
     rc=ibv_post_recv(conn->qp, &wr, &bad_wr);
 //    pthread_mutex_unlock(&allConnectionMutex) ;
 //    pthread_mutex_unlock((pthread_mutex_t *) &conn->qp_write_mutex) ;
@@ -3288,6 +3135,7 @@ int on_connect_request(struct rdma_cm_id *id)
   conn->sequence_in = 0 ;
 //  conn->sequence_out = 0 ;
   conn->upstreamSequence = 0 ;
+  conn->upstream_buffer_busy = 0;
 
 //  conn->downstreamBufferFree = 1 ;
   conn->downstream_sequence = 0 ;
