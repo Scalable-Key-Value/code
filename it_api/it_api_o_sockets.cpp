@@ -1736,7 +1736,8 @@ iWARPEM_DataReceiverThread( void* args )
 	    << EndLogLine ;
 
 	  if( ( InEvents[ i ].events & EPOLLERR ) ||
-	      ( InEvents[ i ].events & EPOLLHUP ) )
+	      ( InEvents[ i ].events & EPOLLHUP ) ||
+	      ( InEvents[ i ].events & EPOLLRDHUP ) )
 	    {
 	      BegLogLine(FXLOG_IT_API_O_SOCKETS)
 	          << "Error or hangup"
@@ -1779,7 +1780,7 @@ iWARPEM_DataReceiverThread( void* args )
 	      int SockFd = ControlHdr.mSockFd;
 
 	      struct epoll_event EP_Event;
-	      EP_Event.events = EPOLLIN;
+	      EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
 	      EP_Event.data.fd = SockFd;
 
 	      BegLogLine( FXLOG_IT_API_O_SOCKETS )
@@ -1847,10 +1848,10 @@ iWARPEM_DataReceiverThread( void* args )
 	      {
                 iWARPEM_Router_Endpoint_t *RouterEP = (iWARPEM_Router_Endpoint_t*)LocalEndPoint->connect_sevd_handle;
 
+                iWARPEM_Status_t status = IWARPEM_SUCCESS;
                 uint16_t Client;
                 do
                 {
-                  iWARPEM_Status_t status = IWARPEM_SUCCESS;
                   iWARPEM_Msg_Type_t msg_type = RouterEP->GetNextMessageType( &Client );
 
                   // handle connects and disconnects of clients here
@@ -1877,12 +1878,6 @@ iWARPEM_DataReceiverThread( void* args )
                     case iWARPEM_DISCONNECT_REQ_TYPE:
                       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
                         << "Received DISCONNECT_REQ_TYPE on socket " << SocketFd
-                        << EndLogLine;
-                      break;
-
-                    case iWARPEM_DISCONNECT_RESP_TYPE:
-                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
-                        << "Received DISCONNECT_RESP_TYPE on socket " << SocketFd
                         << EndLogLine;
                       break;
 
@@ -1914,8 +1909,6 @@ iWARPEM_DataReceiverThread( void* args )
                             << "iWARPEM_DataReceiverThread:: mapepoll_ctl() failed"
                             << " errno: " << errno
                             << EndLogLine;
-
-                          //iwarpem_generate_conn_termination_event( SocketFd );
                         }
                       }
 
@@ -1991,9 +1984,81 @@ iWARPEM_DataReceiverThread( void* args )
                       continue;
                     }
                     case iWARPEM_SOCKET_CLOSE_REQ_TYPE:
+                    {
                       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
                         << "Received SOCKET_CONNECT_CLOSE_REQ_TYPE on socket " << SocketFd
+                        << " client: " << Client
                         << EndLogLine;
+
+                      iWARPEM_Message_Hdr_t *Hdr = NULL;
+                      char *Data = NULL;
+                      status = RouterEP->ExtractNextMessage( &Hdr, &Data, &Client );
+                      switch( status )
+                      {
+                        case IWARPEM_SUCCESS:
+                          break;
+                        default:
+                        {
+                          struct epoll_event EP_Event;
+                          EP_Event.events = EPOLLIN;
+                          EP_Event.data.fd = SocketFd;
+
+                          int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
+                                                              EPOLL_CTL_DEL,
+                                                              SocketFd,
+                                                              & EP_Event );
+
+                          StrongAssertLogLine( mapepoll_ctl_rc == 0 )
+                            << "iWARPEM_DataReceiverThread:: mapepoll_ctl() failed"
+                            << " errno: " << errno
+                            << EndLogLine;
+
+                          //iwarpem_generate_conn_termination_event( SocketFd );
+                        }
+                      }
+
+                      iWARPEM_Object_Event_t* CompletionEvent = (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
+                      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+                        << "CompletionEvent malloc -> " << (void *) CompletionEvent
+                        << EndLogLine ;
+
+                      it_connection_event_t* conne = (it_connection_event_t *) & CompletionEvent->mEvent;
+
+                      if( LocalEndPoint->ConnectedFlag == IWARPEM_CONNECTION_FLAG_PASSIVE_SIDE_PENDING_DISCONNECT )
+                        conne->event_number = IT_CM_MSG_CONN_DISCONNECT_EVENT;
+                      else
+                        conne->event_number = IT_CM_MSG_CONN_BROKEN_EVENT;
+
+                      conne->evd = LocalEndPoint->connect_sevd_handle;
+                      conne->ep = (it_ep_handle_t) LocalEndPoint;
+
+                      iWARPEM_Object_EventQueue_t* ConnCmplEventQueue =
+                        (iWARPEM_Object_EventQueue_t*) conne->evd;
+
+                      int enqrc = ConnCmplEventQueue->Enqueue( CompletionEvent );
+
+                      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+                        << "ConnCmplEventQueue=" << ConnCmplEventQueue
+                        << " conne->event_number=" << conne->event_number
+                        << " conne->evd=" << conne->evd
+                        << " conne->ep=" << conne->ep
+                        << EndLogLine ;
+
+                      StrongAssertLogLine( enqrc == 0 )
+                        << "iWARPEM_DataReceiverThread()::Failed to enqueue connection request event"
+                        << EndLogLine;
+                      /*********************************************/
+
+                      LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
+
+                      status = IWARPEM_ERRNO_CONNECTION_CLOSED;
+                      break;
+                    }
+                    case iWARPEM_DISCONNECT_RESP_TYPE:
+                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                        << "Received DISCONNECT_RESP_TYPE on socket " << SocketFd
+                        << EndLogLine;
+                      status = IWARPEM_ERRNO_CONNECTION_CLOSED;
                       break;
 
                     default:
@@ -2002,9 +2067,13 @@ iWARPEM_DataReceiverThread( void* args )
                         << " client: " << Client
                         << " type: " << msg_type
                         << EndLogLine;
-                      continue;
+                      status = IWARPEM_ERRNO_CONNECTION_CLOSED;
+                      break;
                   }
-	        // otherwise create the proper message header and continue the protocol?
+                  if( status != IWARPEM_SUCCESS )
+                    break;
+
+                  // otherwise create the proper message header and continue the protocol?
 
                   LocalEndPoint = RouterEP->GetClientEP( Client );
                   if( ! RouterEP->IsValidClient( Client ) )
@@ -2019,7 +2088,7 @@ iWARPEM_DataReceiverThread( void* args )
                     }
                   else
                     ProcessMessage( LocalEndPoint, SocketFd, epoll_fd );
-                } while( RouterEP->RecvDataAvailable() );
+                } while( RouterEP->RecvDataAvailable() && ( status == IWARPEM_SUCCESS ));
 	      }
 	      else
 #endif

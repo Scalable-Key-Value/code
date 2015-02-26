@@ -68,11 +68,16 @@ class iWARPEM_Multiplexed_Endpoint_t
                                                  rlen,
                                                  & rlen_expected );
 
-    StrongAssertLogLine(rlen == rlen_expected)
-      << "Short read, rlen=" << rlen
-      << " rlen_expected=" << rlen_expected
-      << " Peer has probably gone down"
-      << EndLogLine ;
+    if(( istatus != IWARPEM_SUCCESS ) || ( rlen != rlen_expected ))
+    {
+      BegLogLine(rlen == rlen_expected)
+        << "Short read, rlen=" << rlen
+        << " rlen_expected=" << rlen_expected
+        << " Peer has probably gone down"
+        << EndLogLine ;
+
+      return false;
+    }
 
     StrongAssertLogLine( VirtHdr.ProtocolVersion == IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION )
       << "Protocol version mismatch. Recompile client and/or server to match."
