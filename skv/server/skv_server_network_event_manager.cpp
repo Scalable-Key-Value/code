@@ -349,16 +349,16 @@ FinalizeEPState(  EPStateMap_T*         aEPStateMap,
     }
   }
 
+  aEPStateMap->erase( aEP );
+
   aStateForEP->Finalize();
 
   BegLogLine(SKV_SERVER_CLEANUP_LOG)
-    << "free(aStateForEP= " << (void *) aStateForEP
-    << " )"
-    << EndLogLine ;
+      << "free(aStateForEP= " << (void *) aStateForEP
+      << " )"
+      << EndLogLine ;
 
   free( aStateForEP );
-
-  aEPStateMap->erase( aEP );
 
   it_ep_free( aEP );
 
