@@ -1389,7 +1389,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
                                           Hdr.mTotalDataLen,
                                           &rlen, false );
 
-      if( istatus != IWARPEM_SUCCESS )
+      if(( istatus != IWARPEM_SUCCESS ) || ( rlen != Hdr.mTotalDataLen ))
         {
           struct epoll_event EP_Event;
           EP_Event.events = EPOLLIN;
@@ -1414,6 +1414,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
         << " SocketFd: " << SocketFd
         << " RMRAddr: " << (void *) RMRAddr
         << " Hdr.mTotalDataLen: " << Hdr.mTotalDataLen
+        << " recvd_len: " << rlen
         << " RMRContext: " << RMRContext
         << EndLogLine;
 
@@ -2124,7 +2125,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
   /**********************************************
    * Send Header to destination
    *********************************************/
-  iWARPEM_Object_EndPoint_t *EP = (iWARPEM_Object_EndPoint_t *) SendWR->ep_handle;
+  iWARPEM_Object_EndPoint_t *EP = NULL;
 	  
   if( (SendWR != NULL) )
     EP = (iWARPEM_Object_EndPoint_t*)SendWR->ep_handle;
@@ -3146,6 +3147,13 @@ it_status_t it_ep_rc_create (
 
   EPObj->RecvWrQueue.Init( IWARPEM_RECV_WR_QUEUE_MAX_SIZE );   
 
+#ifdef WITH_CNK_ROUTER
+#ifdef USE_ROUTED_SOCKETS
+  EPObj->ConnType = IWARPEM_CONNECTION_TYPE_VIRUTAL;
+#else
+  EPObj->ConnType = IWARPEM_CONNECTION_TYPE_DIRECT;
+#endif
+#endif
   // EPObj->SendWrQueue.Init();
   // gSendWRLocalEndPointList.Insert( EPObj );
 
@@ -5673,6 +5681,208 @@ it_status_t it_prepare_connection(
   getsockopt( s, SOL_SOCKET, SO_RCVBUF, (int *) & SockRecvBuffSize, & ArgSize );
 
 }
+
+#ifdef WITH_CNK_ROUTER
+static void open_socket_send_private_data( iWARPEM_Router_Endpoint_t *aMasterEP,
+                                           const iWARPEM_Object_EndPoint_t *aLocalEndpoint,
+                                           unsigned int LocalEndpointIndex,
+                                           const iWARPEM_Message_Hdr_t &Hdr,
+                                           const iWARPEM_Private_Data_t & PrivateData )
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT )
+        << "MasterEP=0x" << (void*)aMasterEP
+        << " LocalEndpointIndex=" << LocalEndpointIndex
+        << EndLogLine ;
+    // Record the upstream address for debug
+
+    aMasterEP->AddClient( LocalEndpointIndex, aLocalEndpoint );
+
+    aMasterEP->InsertConnectRequest( LocalEndpointIndex, &Hdr, &PrivateData, aLocalEndpoint );
+  }
+
+typedef std::list<iWARPEM_Router_Endpoint_t*> Uplink_list_t;
+Uplink_list_t gUplinkList;
+
+iWARPEM_Router_Endpoint_t*
+iWARPEM_CreateAndConnectMasterSocket( struct sockaddr_in *aServerAddr, int aLocalEndpointIndex )
+{
+  iWARPEM_Router_Endpoint_t *MasterEP = NULL;
+  iWARPEM_Status_t status = IWARPEM_SUCCESS;
+  int MasterSocket = socket( AF_INET, SOCK_STREAM, 0 );
+  if( MasterSocket <= 0 )
+  {
+    BegLogLine( 1 )
+      << "Error creating master socket#  errno=" << errno
+      << EndLogLine;
+    return MasterEP;
+  }
+
+  int rc = 0;
+  while( 1 )
+  {
+    int serv_addr_len = sizeof( aServerAddr );
+    rc = connect( MasterSocket,
+                  (struct sockaddr *) aServerAddr,
+                  serv_addr_len );
+
+    if( rc < 0 )
+    {
+      if( errno != EAGAIN )
+      {
+        perror("Connection failed") ;
+        StrongAssertLogLine( 0 )
+          << "it_ep_connect:: Connection failed "
+          << " errno: " << errno
+          << EndLogLine;
+      }
+    }
+    else if( rc == 0 )
+      break;
+  }
+
+  if( rc == 0 )
+  {
+    socket_nonblock_on( MasterSocket );
+    socket_nodelay_on( MasterSocket );
+    MasterEP = new iWARPEM_Router_Endpoint_t( MasterSocket );
+
+    // set up the router info
+    iWARPEM_Router_Info_t *routerInfo = MasterEP->GetRouterInfoPtr();
+    routerInfo->RouterID = aLocalEndpointIndex;
+    routerInfo->SocketInfo.ipv4_address = (unsigned int)( aServerAddr->sin_addr.s_addr );
+    routerInfo->SocketInfo.ipv4_port = (unsigned short)( aServerAddr->sin_port );
+
+    iWARPEM_Object_EndPoint_t *MultiplexedEP = new iWARPEM_Object_EndPoint_t;
+
+    bzero( MultiplexedEP, sizeof( iWARPEM_Object_EndPoint_t ) );
+
+    // reuse existing members to represent the multiplexed socket type
+    // the data-receiver needs to be able to distinguish non-multiplexed and multiplexed sockets
+    // the PZ as the first member will be used to identify that this is a multiplexed socket
+    // the connect_sevd_handle holds the router info
+    // further info might go into other members
+    MultiplexedEP->pz_handle           = (it_pz_handle_t)IWARPEM_MULTIPLEXED_SOCKET_MAGIC;
+    MultiplexedEP->request_sevd_handle = NULL;
+    MultiplexedEP->recv_sevd_handle    = NULL;
+    MultiplexedEP->connect_sevd_handle = (it_evd_handle_t)MasterEP;
+    MultiplexedEP->flags               = (it_ep_rc_creation_flags_t)0;
+    //MultiplexedEP->ep_attr             = 0...;
+    MultiplexedEP->ep_handle           = (it_ep_handle_t) MultiplexedEP;
+    MultiplexedEP->ConnType            = IWARPEM_CONNECTION_TYPE_MULTIPLEX;
+    MultiplexedEP->ConnFd = MasterEP->GetRouterFd();
+    MultiplexedEP->ClientId = -1;
+
+    MultiplexedEP->RecvWrQueue.Init( IWARPEM_RECV_WR_QUEUE_MAX_SIZE );
+
+    BegLogLine( 1 )
+      << "Created New MasterEP for socket: " << MasterEP->GetRouterFd()
+      << " @0x" << (void*)MultiplexedEP
+      << EndLogLine;
+
+    // stick this connection into the epoll FD...
+    iwarpem_add_socket_to_list( MasterEP->GetRouterFd(), MultiplexedEP );
+    gSockFdToEndPointMap[ MasterEP->GetRouterFd() ] = MultiplexedEP;
+    gUplinkList.push_back( MasterEP );
+
+    // send private data magic
+    char data[ 1024 ];
+    *(int*)data = htonl( IWARPEM_MULTIPLEXED_SOCKET_MAGIC );
+
+    int transferred = 0;
+    transferred += write( MasterEP->GetRouterFd(), data, sizeof( int ) );
+    if( transferred < sizeof( int ))
+        BegLogLine( 1 )
+          << "Giving up... socket can't even transmit an int... ;-)"
+          << EndLogLine;
+
+    transferred = 0;
+    while( transferred < IWARPEM_ROUTER_INFO_SIZE )
+    {
+      char *d = (char*)routerInfo + transferred;
+      transferred += write( MasterEP->GetRouterFd(), d, IWARPEM_ROUTER_INFO_SIZE );
+    }
+
+    AssertLogLine( MasterEP->GetRouterFd() < SOCK_FD_TO_END_POINT_MAP_COUNT )
+      << "Problem detected: socket descriptor exceeds expected range..."
+      << EndLogLine;
+  }
+  return MasterEP;
+}
+
+#if PK_CNK
+static int my_rank(void)
+  {
+    int id = -1;
+    uint32_t rc;
+    Personality_t pers;
+    rc = Kernel_GetPersonality(&pers, sizeof(pers));
+    if (rc == 0)
+    {
+      Personality_Networks_t *net = &pers.Network_Config;
+      id = ((((((((net->Acoord
+          * net->Bnodes) + net->Bcoord)
+          * net->Cnodes) + net->Ccoord)
+          * net->Dnodes) + net->Dcoord)
+          * net->Enodes) + net->Ecoord);
+    }
+    return id ;
+  }
+
+static iWARPEM_Router_Endpoint_t *gIONMasterEndpoint = NULL;
+// on CNK with forwarder, we always return the main forwarder-socket
+static
+iWARPEM_Router_Endpoint_t*
+LookUpServerEP( const struct iWARPEM_SocketConnect_t &aSocketConnect )
+{
+  if( gIONMasterEndpoint == NULL )
+  {
+    int myRank = my_rank();
+    struct sockaddr_in serv_addr;
+
+    // \todo: get the IP address of the forwarder (i.e. the IP of the local hostname)
+    memset( &serv_addr, 0, sizeof( serv_addr ) );
+    serv_addr.sin_family      = IT_API_SOCKET_FAMILY;
+    serv_addr.sin_port        = aSocketConnect.ipv4_port;
+    serv_addr.sin_addr.s_addr = aSocketConnect.ipv4_address;
+
+    gIONMasterEndpoint = iWARPEM_CreateAndConnectMasterSocket( &serv_addr, myRank );
+  }
+  return gIONMasterEndpoint;
+}
+
+#else
+static
+iWARPEM_Router_Endpoint_t*
+LookUpServerEP( const struct iWARPEM_SocketConnect_t &aSocketConnect )
+{
+  if( gUplinkList.empty() )
+    return NULL;
+
+  Uplink_list_t::iterator ServerEP = gUplinkList.begin();
+  while( ServerEP != gUplinkList.end() )
+  {
+    // BegLogLine( FXLOG_ITAPI_ROUTER && ( ServerEP != NULL ) )
+    //   << "Comparing routerEP: " << index
+    //   << " IP:Port[ " << (void*)ServerEP->GetRouterInfoPtr()->SocketInfo.ipv4_address
+    //   << " : " << (void*)ServerEP->GetRouterInfoPtr()->SocketInfo.ipv4_port
+    //   << " ] with request: [ " << (void*)aSocketConnect.ipv4_address
+    //   << " : " << (void*)aSocketConnect.ipv4_port
+    //   << " ] "
+    //   << EndLogLine;
+
+    if( ( (*ServerEP) != NULL ) &&
+        ( (*ServerEP)->GetRouterInfoPtr()->SocketInfo.ipv4_address == aSocketConnect.ipv4_address ) &&
+        ( (*ServerEP)->GetRouterInfoPtr()->SocketInfo.ipv4_port == aSocketConnect.ipv4_port ) )
+      return (*ServerEP);
+    ServerEP++;
+  }
+  return NULL;
+}
+#endif // PK_CNK
+
+#endif // WITH_CNK_ROUTER
+
+
 // U it_ep_connect
 
 // An object is needed to hold state between
@@ -5722,23 +5932,7 @@ it_status_t itx_ep_connect_with_rmr (
     << "it_ep_connect(): local endpoint already connected"
     << EndLogLine;
 
-#if 0 //def WITH_CNK_ROUTER
-  if( LocalEndPoint->ConnType != IWARPEM_CONNECTION_TYPE_DIRECT )
-  {
-    BegLogLine( 1 )
-      << " Only direct connected sockets supported for connect() yet."
-      << EndLogLine;
-    return IT_ERR_INVALID_EP_TYPE;
-  }
-#endif
-  int s;
-
-  if((s = socket(IT_API_SOCKET_FAMILY, SOCK_STREAM, 0)) < 0)
-    {
-    perror("it_ep_connect socket() open");
-    }
-
-  #ifdef IT_API_OVER_UNIX_DOMAIN_SOCKETS
+#ifdef IT_API_OVER_UNIX_DOMAIN_SOCKETS
   struct sockaddr_un serv_addr;
 
   memset( &serv_addr, 0, sizeof( serv_addr ) );
@@ -5760,6 +5954,52 @@ it_status_t itx_ep_connect_with_rmr (
 
   socklen_t serv_addr_len = sizeof( serv_addr );
 #endif
+
+
+#ifdef WITH_CNK_ROUTER
+  static int LocalEndPointIndex = 0;
+  iWARPEM_Router_Endpoint_t *MasterEP = NULL;
+  if( LocalEndPoint->ConnType != IWARPEM_CONNECTION_TYPE_DIRECT )
+  {
+    iWARPEM_SocketConnect_t SocketConnect;
+    SocketConnect.ipv4_address = serv_addr.sin_addr.s_addr;
+    SocketConnect.ipv4_port = serv_addr.sin_port;
+    MasterEP = LookUpServerEP( SocketConnect );
+
+    if( ! MasterEP )
+    {
+      // create the master connection to the server
+      MasterEP = iWARPEM_CreateAndConnectMasterSocket( &serv_addr, LocalEndPointIndex );
+
+      if( ! MasterEP )
+      {
+        BegLogLine( FXLOG_IT_API_O_SOCKETS_CONNECT )
+          << "Failed to create new multiplexing MasterEP"
+          << EndLogLine
+
+        return IT_ERR_INVALID_EP_TYPE;
+      }
+      else
+      {
+      BegLogLine( FXLOG_IT_API_O_SOCKETS_CONNECT )
+        << " Created new multiplexing MasterEP on socket: " << MasterEP->GetRouterFd()
+        << EndLogLine;
+      }
+    }
+    else
+    {
+      BegLogLine( FXLOG_IT_API_O_SOCKETS_CONNECT )
+        << "MasterEP already established on socket: " << MasterEP->GetRouterFd()
+        << EndLogLine
+    }
+  }
+#endif
+  int s;
+
+  if((s = socket(IT_API_SOCKET_FAMILY, SOCK_STREAM, 0)) < 0)
+    {
+    perror("it_ep_connect socket() open");
+    }
 
   int SockSendBuffSize = -1;
   int SockRecvBuffSize = -1;

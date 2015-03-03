@@ -227,6 +227,8 @@ public:
     BegLogLine( (SKV_SERVER_EVENT_BUFFER_LOG & print) )
       << " Starting to fill buffer:"
       << " cIDX:rIDX: " << mCurrentBufferIndex << ":" << mReadyBufferIndex
+      << " EP: 0x" << (void*)aEP
+      << " EPCmdIdx: " << aEP->GetCurrentCommandSlot()
       << EndLogLine;
 #endif
 

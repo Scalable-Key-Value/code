@@ -92,60 +92,6 @@ static void bgq_msync(void)
 /*******************************************************************/
 
 
-//it_status_t
-//socket_nonblock_on( int fd )
-//{
-//  int flags = fcntl( fd, F_GETFL);
-//  int rc = fcntl( fd, F_SETFL, flags | O_NONBLOCK);
-//  if (rc < 0)
-//    {
-//      BegLogLine( 1 )
-//        << "socket_nonblock_on(" << fd
-//        << "): ERROR: "
-//        << " errno: " << errno
-//        << EndLogLine;
-//
-//      return IT_ERR_ABORT;
-//    }
-//
-//  return IT_SUCCESS;
-//}
-//
-//it_status_t
-//socket_nonblock_off( int fd )
-//{
-//  int flags = fcntl( fd, F_GETFL);
-//  int rc = fcntl( fd, F_SETFL, flags & ~O_NONBLOCK);
-//  if (rc < 0)
-//    {
-//      BegLogLine( 1 )
-//        << "socket_nonblock_off(" << fd
-//        << "): ERROR: "
-//        << " errno: " << errno
-//        << EndLogLine;
-//
-//      return IT_ERR_ABORT;
-//    }
-//
-//  return IT_SUCCESS;
-//}
-//it_status_t
-//socket_nodelay_on( int fd )
-//  {
-//    int one = 1 ;
-//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//      << "Setting NODELAY for socket " << fd
-//      << EndLogLine ;
-//    int rc=setsockopt(fd, SOL_TCP, TCP_NODELAY, &one, sizeof(one)) ;
-//    if ( rc != 0 )
-//      {
-//        BegLogLine(1)
-//            << "Bad return from setsockopt fd=" << fd
-//            << " errno=" << errno
-//            << EndLogLine ;
-//      }
-//    return IT_SUCCESS ;
-//  }
 typedef enum
   {
     IWARPEM_SUCCESS                 = 0x0001,
@@ -280,122 +226,6 @@ public:
 iWARPEM_Bandwidth_Stats_t gBandInStat;
 iWARPEM_Bandwidth_Stats_t gBandOutStat;
 
-//static
-//inline
-//iWARPEM_Status_t
-//write_to_socket( int sock, char * buff, int len, int* wlen )
-//  {
-//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//        << "Writing to FD=" << sock
-//        << " buff=" << (void *) buff
-//        << " length=" << len
-//        << EndLogLine ;
-//    int BytesWritten = 0;
-//    for( ; BytesWritten < len; )
-//    {
-//    int write_rc = write(   sock,
-//                            (((char *) buff) + BytesWritten ),
-//                            len - BytesWritten );
-//    if( write_rc < 0 )
-//      {
-//	// printf( "errno: %d\n", errno );
-//	if( errno == EAGAIN )
-//	  continue;
-//	else if ( errno == ECONNRESET )
-//	  {
-//	    return IWARPEM_ERRNO_CONNECTION_RESET;
-//	  }
-//	else
-//	  StrongAssertLogLine( 0 )
-//	    << "write_to_socket:: ERROR:: "
-//	    << "failed to write to file: " << sock
-//            << " buff: " << (void *) buff
-//            << " len: " << len
-//	    << " errno: " << errno
-//	    << EndLogLine;
-//      }
-//
-//    BytesWritten += write_rc;
-//    }
-//
-//  *wlen = BytesWritten;
-//
-//#if IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL
-//  gBandOutStat.AddBytes( BytesWritten );
-//#endif
-//
-//  return IWARPEM_SUCCESS;
-//  }
-//static
-//inline
-//iWARPEM_Status_t
-//write_to_socket_writev( int sock, struct iovec *iov, int iov_count, int* wlen )
-//{
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "Writing to FD=" << sock
-//    << " iovec=" << (void *) iov
-//    << " iov_count=" << iov_count
-//    << EndLogLine ;
-//writev_retry:
-//  int write_rc = writev(sock,iov,iov_count) ;
-//  if( write_rc < 0 )
-//  {
-//    switch( errno )
-//    {
-//      case EAGAIN:
-//        goto writev_retry;
-//      case ECONNRESET:
-//        return IWARPEM_ERRNO_CONNECTION_RESET;
-//      default:
-//        StrongAssertLogLine( 0 )
-//          << "write_to_socket:: ERROR:: "
-//          << "failed to write to file: " << sock
-//          << " iovec: " << (void *) iov
-//          << " iov_count: " << iov_count
-//          << " errno: " << errno
-//          << EndLogLine;
-//    }
-//  }
-//  *wlen = write_rc ;
-//
-//#if IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL
-//  gBandOutStat.AddBytes( write_rc );
-//#endif
-//
-//  return IWARPEM_SUCCESS;
-//}
-//
-//static iWARPEM_Status_t write_to_socket(int sock,struct iovec *iov, int iov_count, int* wlen)
-//  {
-//#if defined(PK_CNK)
-//    if ( iov_count == 0 )
-//      {
-//        *wlen = 0 ;
-//        return IWARPEM_SUCCESS;
-//      }
-//    else if ( iov_count == 1 )
-//      {
-//        return write_to_socket(sock,(char *)iov[0].iov_base, iov[0].iov_len,wlen) ;
-//      }
-//    else {
-//        size_t total_len=0 ;
-//        for ( int a=0;a<iov_count;a+=1)
-//          {
-//            total_len += iov[a].iov_len ;
-//          }
-//        char buffer[total_len] ;
-//        size_t buffer_index=0 ;
-//        for ( int b=0;b<iov_count;b+=1)
-//          {
-//            memcpy(buffer+buffer_index,iov[b].iov_base,iov[b].iov_len) ;
-//            buffer_index += iov[b].iov_len ;
-//          }
-//        return write_to_socket(sock,buffer,total_len, wlen) ;
-//    }
-//#else
-//    return write_to_socket_writev(sock,iov,iov_count,wlen) ;
-//#endif
-//  }
 #ifndef IT_API_READ_FROM_SOCKET_HIST
 #define IT_API_READ_FROM_SOCKET_HIST ( 0 )
 #endif
@@ -403,89 +233,6 @@ iWARPEM_Bandwidth_Stats_t gBandOutStat;
 histogram_t<IT_API_READ_FROM_SOCKET_HIST> gReadCountHistogram;
 histogram_t<IT_API_READ_FROM_SOCKET_HIST> gReadTimeHistogram;
 
-//static
-//inline
-//iWARPEM_Status_t
-//read_from_socket( int sock, char * buff, int len, int* rlen )
-//  {
-//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//        << "Reading from FD=" << sock
-//        << " buff=" << (void *) buff
-//        << " length=" << len
-//        << EndLogLine ;
-//    int BytesRead = 0;
-//    int ReadCount = 0;
-//
-//    unsigned long long StartTime = PkTimeGetNanos();
-//
-//    for(; BytesRead < len; )
-//      {
-//	int read_rc = read(   sock,
-//			      (((char *) buff) + BytesRead ),
-//			      len - BytesRead );
-//	if( read_rc < 0 )
-//	  {
-//	    // printf( "errno: %d\n", errno );
-//	    if( errno == EAGAIN || errno == EINTR )
-//	      continue;
-//	    else if ( errno == ECONNRESET )
-//	      {
-//	        BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//	            << "ECONNRESET"
-//	            << EndLogLine ;
-//		return IWARPEM_ERRNO_CONNECTION_RESET;
-//	      }
-//	    else
-//	      StrongAssertLogLine( 0 )
-//		<< "read_from_socket:: ERROR:: "
-//		<< "failed to read from file: " << sock
-//		<< " errno: " << errno
-//    << " buff=" << (void *) buff
-//    << " " << (long) buff
-//    << " length=" << len
-//		<< EndLogLine;
-//	  }
-//	else if( read_rc == 0 )
-//	  {
-//	    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//	        << "Connection closed"
-//	        << EndLogLine ;
-//	  return IWARPEM_ERRNO_CONNECTION_CLOSED;
-//	  }
-//
-//        ReadCount++;
-//
-//	BytesRead += read_rc;
-//      }
-//
-//    *rlen = BytesRead;
-//
-//#if IT_API_REPORT_BANDWIDTH_INCOMMING_TOTAL
-//    gBandInStat.AddBytes( BytesRead );
-//#endif
-//
-//    unsigned long long FinisTime = PkTimeGetNanos();
-//
-//    gReadTimeHistogram.Add( FinisTime - StartTime );
-//
-//    gReadCountHistogram.Add( ReadCount );
-//
-//    static int Reported = 0;
-//    static long long ReportOnCount = 0;
-//    if( !Reported && ( ReportOnCount == 145489 ))
-//      {
-//        gReadTimeHistogram.Report();
-//        gReadCountHistogram.Report();
-//        Reported = 1;
-//      }
-//
-//    ReportOnCount++;
-//
-//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//      << "Read completes"
-//      << EndLogLine ;
-//    return IWARPEM_SUCCESS;
-//  }
 
 
 extern "C"
@@ -512,354 +259,6 @@ struct iWARPEM_Object_MemoryRegion_t
   it_lmr_handle_t       lmr_handle;
   it_rmr_context_t      rmr_context;
   };
-
-#if 0
- NOW COMES FROM /src/utils/ThreadSafeQueue.hpp
-template< class Item >
-struct TSafeQueue
-{
-  // new infrastrcture
-  // for now, events will be held as a linked list. malloc'd.
-  pthread_mutex_t         mutex;
-  pthread_cond_t          empty_cond;
-
-  Item *mHead;
-  Item *mTail;
-  int   mCount;
-  int   mMax;
-
-  pthread_mutex_t*
-  GetMutex()
-  {
-    return &mutex;
-  }
-
-  void
-  Finalize()
-  {     
-    Item* CurrentItem = mHead;
-    
-    Item* NextItem = NULL;
-    if( mHead != NULL )
-      NextItem = mHead->mNext;
-    
-    int i = mCount;
-
-    while( i > 0 )
-      {
-	free( CurrentItem );
-	  
-	CurrentItem = NextItem;
-
-	if( CurrentItem != NULL )
-	  NextItem    = CurrentItem->mNext;
-
-	i--;
-      }
-    
-    mHead = NULL;
-    mTail = NULL;
-
-    pthread_mutex_destroy( & mutex );
-    pthread_cond_destroy( & empty_cond );
-  }
-
-  void
-  Init()
-    {
-    pthread_mutex_init( & mutex, NULL );
-    pthread_cond_init( & empty_cond, NULL );
-
-    mHead = NULL;
-    mTail = NULL;
-    mCount = 0;
-    mMax   = 0;
-    }
-
-  int
-  Enqueue( Item *aNextIn )
-    {
-    pthread_mutex_lock( &mutex );
-    if( mCount == 0 )
-      {
-      AssertLogLine( mHead == NULL ) << "supposed to be empty" << EndLogLine;
-      AssertLogLine( mTail == NULL ) << "supposed to be empty" << EndLogLine;
-      mHead = aNextIn;
-      mHead->mNext = NULL;      
-      mHead->mPrev = NULL;      
-
-      mTail = mHead;
-      mCount = 1;
-      }
-    else
-      {      
-      mCount++;
-      
-      aNextIn->mPrev = mTail;
-      mTail->mNext   = aNextIn;
-      aNextIn->mNext = NULL;
-
-      mTail = aNextIn;
-      }
-    pthread_mutex_unlock( &mutex );
-    pthread_cond_broadcast( & empty_cond );
-    return(0);
-    }
-  
-  int 
-  RemoveAssumeLocked( Item* aToRemove )
-  {
-    int rc;
-    if( mCount == 0 )
-      rc = -1;      
-    else 
-      {
-	if( aToRemove->mNext != NULL )
-	  aToRemove->mNext->mPrev = aToRemove->mPrev;
-
-	if( aToRemove->mPrev != NULL )
-	  aToRemove->mPrev->mNext = aToRemove->mNext;
-	
-	mCount--;
-
-	if( mCount == 0 )
-	  {
-	    mHead = NULL;
-	    mTail = NULL;
-	  }	
-	else if( aToRemove == mTail )
-	  {
-	    mTail = aToRemove->mPrev;
-	  }
-	else if( aToRemove == mHead )
-	  {
-	    mHead = mHead->mNext;
-	  }
-	rc = 0;
-      }
-    return rc;
-  }
-
-  int
-  DequeueAssumedLockedNonEmpty( Item **aNextOut )
-  {
-    *aNextOut = mHead;
-    
-    mCount--;
-    if( mCount == 0 )
-      {
-        mHead = NULL;
-        mTail = NULL;
-      }
-    else
-      {
-        mHead = mHead->mNext;
-	mHead->mPrev = NULL;
-      }
-    
-    (*aNextOut)->mNext = NULL;
-    (*aNextOut)->mPrev = NULL;
-      
-    return 0;
-  }
-
-  int
-  DequeueAssumeLockedWithWait( Item **aNextOut )
-  {
-    while( mCount == 0 ) 
-      pthread_cond_wait( & empty_cond, & mutex );
-
-    return DequeueAssumedLockedNonEmpty( aNextOut );
-  }
-
-  int
-  DequeueAssumeLocked( Item **aNextOut )
-  {
-    if( mCount == 0 )
-      return -1;
-    
-    return DequeueAssumedLockedNonEmpty( aNextOut );
-  }
-
-  int
-  DequeueWithWait( Item **aNextOut )
-    {
-      int rc;
-      pthread_mutex_lock( &mutex );
-      rc = DequeueAssumeLockedWithWait( aNextOut );
-      pthread_mutex_unlock( &mutex );
-      return(rc);
-    }
-
-  int
-  Dequeue( Item **aNextOut )
-    {
-      int rc;
-      pthread_mutex_lock( &mutex );
-      rc = DequeueAssumeLocked( aNextOut );
-      pthread_mutex_unlock( &mutex );
-      return(rc);
-    }
-};
-
-template< class Item >
-struct TSafeDoubleLinkedList
-{
-  // new infrastructure
-  // for now, events will be held as a linked list. malloc'd.
-  pthread_mutex_t         mutex;
-  Item *mHead;
-  Item *mTail;
-  int   mCount;
-  Item *mCurrentItem;
-
-  void
-  Finalize()
-  {     
-    Item* CurrentItem = mHead;
-    
-    Item* NextItem = NULL;
-    if( mHead != NULL )
-      NextItem = mHead->mNext;
-    
-    int i = mCount;
-
-    while( i > 0 )
-      {
-	free( CurrentItem );
-	  
-	CurrentItem = NextItem;
-
-	if( CurrentItem != NULL )
-	  NextItem    = CurrentItem->mNext;
-
-	i--;
-      }
-    
-    mHead = NULL;
-    mTail = NULL;
-
-    pthread_mutex_destroy( & mutex );
-  }
-
-  void
-  Init()
-    {
-      BegLogLine( FXLOG_IT_API_O_SOCKETS )
-	<< "TSafeDoubleLinkedList::Init(): Entering "
-	<< EndLogLine;
-
-    pthread_mutex_init( & mutex, NULL );
-    mHead = NULL;
-    mTail = NULL;
-    mCurrentItem = NULL;
-    mCount = 0;
-    }
-
-  int
-  Insert( Item *aNextIn )
-    {
-      BegLogLine( FXLOG_IT_API_O_SOCKETS )
-	<< "TSafeDoubleLinkedList::Insert(): Entering "
-	<< " aNextIn: " << (void *) aNextIn
-	<< EndLogLine;
-      
-    pthread_mutex_lock( &mutex );
-    if( mCount == 0 )
-      {
-      AssertLogLine( mHead == NULL ) << "supposed to be empty" << EndLogLine;
-      AssertLogLine( mTail == NULL ) << "supposed to be empty" << EndLogLine;
-      aNextIn->mNext = NULL;
-      aNextIn->mPrev = NULL;
-      mHead = aNextIn;
-      mTail = aNextIn;
-      mCount = 1;
-      }
-    else
-      {
-      mCount++;
-      
-      mTail->mNext = aNextIn;
-      aNextIn->mNext = NULL;
-      aNextIn->mPrev = mTail;
-
-      mTail = aNextIn;
-      }
-    pthread_mutex_unlock( &mutex );
-    return(0);
-    }  
-  
-  Item*
-  GetNext()
-  {
-    pthread_mutex_lock( &mutex );
-    
-    if( mCurrentItem == NULL )
-      {
-	mCurrentItem = mHead;
-	
-	if( mCurrentItem == NULL )
-	  {
-	    pthread_mutex_unlock( &mutex );
-	    return NULL;
-	  }
-      }
-      
-    Item* rc = mCurrentItem;
-
-    mCurrentItem = mCurrentItem->mNext;
-    
-    pthread_mutex_unlock( &mutex );
-
-    return rc;
-  }
-
-  int
-  Remove( Item *aToRemove )
-    {
-    int rc;
-    pthread_mutex_lock( &mutex );
-    if( mCount == 0 )
-      {
-      rc = -1;
-      }
-    else
-      {
-	AssertLogLine( aToRemove != NULL )
-	  << "TSafeDoubleLinkedList::Remove(): ERROR: "
-	  << EndLogLine;
-	
-	if( aToRemove->mNext != NULL )
-	  aToRemove->mNext->mPrev = aToRemove->mPrev;
-	
-	if( aToRemove->mPrev != NULL )
-	  aToRemove->mPrev->mNext = aToRemove->mNext;
-	
-	mCount--;
-	if( mCount == 0 )
-	  {
-	    mHead        = NULL;
-	    mTail        = NULL;	
-	    mCurrentItem = NULL;
-	  }	
-	else if( aToRemove == mTail )
-	  mTail = aToRemove->mPrev;	
-	else if( aToRemove == mHead )
-	  mHead = aToRemove->mNext;
-	
-	if( mCurrentItem == aToRemove )
-	  mCurrentItem = aToRemove->mNext;
-
-	aToRemove->mNext = NULL;
-	aToRemove->mPrev = NULL;
-		
-      rc = 0;
-      }
-    pthread_mutex_unlock( &mutex );
-    return(rc);
-    }
-};
-#endif
 
 
 struct iWARPEM_Object_Event_t
@@ -923,18 +322,6 @@ struct iWARPEM_Object_EventQueue_t
       return rc;
     }
   };
-
-//typedef enum
-//  {
-//    IWARPEM_SOCKETCONTROL_TYPE_ADD    = 0x0001,
-//    IWARPEM_SOCKETCONTROL_TYPE_REMOVE = 0x0002
-//  } iWARPEM_SocketControl_Type_t;
-//
-//struct iWARPEM_SocketControl_Hdr_t
-//{
-//  iWARPEM_SocketControl_Type_t mOpType;
-//  int                          mSockFd;
-//};
 
 struct iWARPEM_Object_WorkRequest_t
   {    
@@ -1107,32 +494,9 @@ void
   iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
            iwarpem_flush_queue_flag_t aFlag ) ;
 
-//enum {
-//  k_IONPort = 10952 ,
-//  k_UpstreamBufferSize = 16*1024*1024 ,
-//  k_DownstreamBufferSize = 16*1024*1024
-//};
-//static char UpstreamBuffer[k_UpstreamBufferSize] __attribute__((aligned(32))) ;
-//static char DownstreamBuffer[k_DownstreamBufferSize] __attribute__((aligned(32))) ;
-
 enum {
   k_function_0
 };
-//struct rpcBuffer
-//  {
-//    uint32_t sendmemreg_lkey ;
-//    uint32_t recvmemreg_lkey ;
-//  };
-//static struct rpcBuffer rpcBuffer  __attribute__((aligned(32))) ;
-
-//static Kernel_RDMARegion_t sendmemreg;
-//static Kernel_RDMARegion_t recvmemreg;
-//static Kernel_RDMARegion_t rpcmemreg ;
-
-//static volatile struct routerBuffer routerBuffer __attribute__((aligned(32)));
-//static Kernel_RDMARegion_t routermemreg ;
-
-//static int rdmaSocket ;
 #include <it_api_o_sockets_cn_ion.hpp>
 static int my_rank(void)
   {
@@ -1210,6 +574,7 @@ void VerbsChannel::Init(void)
        << EndLogLine ;
      mBuffer.mLkey = routermemreg.lkey ;
      unsigned int LocalEndPoint = 0 ;
+     mBuffer.LockTransmit();
      mBuffer.AppendToBuffer(&LocalEndPoint,sizeof(LocalEndPoint)) ;
      iWARPEM_Message_Hdr_t Hdr ;
      memset(&Hdr,0xff,sizeof(Hdr)) ;
@@ -1219,6 +584,7 @@ void VerbsChannel::Init(void)
      Hdr.mOpType.mKernelConnect.mRoutermemreg_lkey=routermemreg.lkey ;
      Hdr.mOpType.mKernelConnect.mClientRank=my_rank() ;
      mBuffer.AppendToBuffer(&Hdr,sizeof(Hdr)) ;
+     mBuffer.UnlockTransmit();
      mBuffer.Transmit() ;
      pthread_t rdma_responder_thread ;
      BegLogLine(FXLOG_IONCN_BUFFER)
@@ -1277,6 +643,7 @@ bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
 //          << "No acked space upstream, not handled yet"
 //          << EndLogLine ;
       }
+    mBuffer.LockTransmit();
     mBuffer.AppendToBuffer(&LocalEndpointIndex,sizeof(LocalEndpointIndex)) ;
     mBuffer.AppendToBuffer(&Hdr,sizeof(Hdr)) ;
     unsigned long ActualDataLength = 0 ;
@@ -1296,6 +663,7 @@ bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
           << EndLogLine ;
         mBuffer.AppendToBuffer(iov[x].iov_base,iov_len) ;
       }
+    mBuffer.UnlockTransmit();
     StrongAssertLogLine(ActualDataLength == TotalDataLen)
       << "Header data length=" << TotalDataLen
       << " does not match iovec data length=" << ActualDataLength
@@ -1382,6 +750,7 @@ void VerbsChannel::Respond(void)
     BegLogLine(FXLOG_IONCN_BUFFER)
       << "RDMA responder thread"
       << EndLogLine ;
+    static bool still_needs_flush = false;
     for(;;)
       {
           bool rc_receive=Receive() ;
@@ -1397,13 +766,13 @@ void VerbsChannel::Respond(void)
           bool rc_sender=DataSender_OnePass(&Progressed) ;
           while (Progressed)
             {
-              rc_sender != DataSender_OnePass(&Progressed) ;
+              rc_sender = DataSender_OnePass(&Progressed) ;
             }
           pthread_mutex_unlock(&gSendUpstreamLock) ;
           // See if we need to flush the transmit buffer. This is either if we received something and
           // haven't flushed in the sender (to give upstream the free buffer index), or if there have
           // been data send requests.
-          if ( (rc_receive && mBuffer.mReceiveBufferLength > 0 && !rc_sender) || mBuffer.mTransmitBufferIndex > 0)
+          if ( still_needs_flush || (rc_receive && mBuffer.mReceiveBufferLength > 0 && !rc_sender) || mBuffer.mTransmitBufferIndex > 0)
             {
               BegLogLine(FXLOG_IONCN_BUFFER)
                   << "Flushing transmit buffer, rc_receive=" << rc_receive
@@ -1415,7 +784,7 @@ void VerbsChannel::Respond(void)
 //                  << " mBuffer.mReceiveBuffer.mAckedReceiveBytes=" << mBuffer.mReceiveBuffer.mAckedReceiveBytes
 //                  << " mBuffer.mTransmitBuffer.mAckedReceiveBytes=" << mBuffer.mTransmitBuffer.mAckedReceiveBytes
                   << EndLogLine ;
-              FlushTransmit() ;
+              still_needs_flush = ( ! FlushTransmit() );
             }
       }
 
@@ -1487,7 +856,7 @@ bool ion_cn_buffer::rawTransmit(unsigned long aTransmitCount, uint32_t aLkey)
       << " mSentBytes=" << mSentBytes
       << " mReceivedBytes=" << mReceivedBytes
       << EndLogLine ;
-    BegLogLine(FXLOG_IONCN_BUFFER)
+    BegLogLine(FXLOG_IONCN_BUFFER | FXLOG_ITAPI_ROUTER_FRAMES )
       << "this=0x" << (void *) this
       << " TX-FRAME {" << mSentBytes
       << "," << mReceivedBytes
@@ -3983,7 +3352,8 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 
                 BegLogLine(FXLOG_IT_API_O_SOCKETS)
                   << "MemRegPtr=" << (void *) MemRegPtr
-                  << " SendWR->segments_array[ i ].addr.abs=" << (void *) SendWR->segments_array[ i ].addr.abs
+                  << " SendWR->segments_array[ "<< i
+                  << " ].addr.abs=" << (void *) SendWR->segments_array[ i ].addr.abs
                   << EndLogLine ;
 
                 it_addr_mode_t AddrMode = MemRegPtr->addr_mode;
@@ -6970,189 +6340,6 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
     return IT_SUCCESS;
 //  return IT_ERR_QUEUE_EMPTY;
 }
-//// Extended Accept that allows to transmit an RMR context as private data
-//// - registers the lmr with the newly created qp
-//// - makes this info part of the private data and accepts the connection
-//it_status_t itx_ep_accept_with_rmr (
-//                                    IN        it_ep_handle_t         ep_handle,
-//                                    IN        it_cn_est_identifier_t cn_est_id,
-//                                    IN        it_lmr_triplet_t      *lmr,
-//                                    OUT       it_rmr_context_t      *rmr_context )
-//{
-//  const unsigned char         *private_data = (const unsigned char *)"1";
-//  size_t                 private_data_length = 1;
-//
-//    // pthread_mutex_lock( & gITAPIFunctionMutex );
-//
-//  // this is the moment when the ConReq is first associated with the passive side endpoint
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_ep_accept()" << EndLogLine;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_ep_handle_t         ep_handle           " << *(iWARPEM_Object_EndPoint_t *)ep_handle   << EndLogLine;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_cn_est_identifier_t cn_est_id           " << cn_est_id           << EndLogLine;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "unsigned char         *private_data @      " << (void*)private_data << EndLogLine;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "size_t                 private_data_length " << private_data_length << EndLogLine;
-//
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "lmr->lmr=" << lmr->lmr
-//                                     << " lmr->addr.abs=" << lmr->addr.abs
-//                                     << " lmr->length=" << lmr->length
-//                                     << EndLogLine ;
-//  // Use the cn_est_id to get back to information about this connection request
-//  iWARPEM_Object_ConReqInfo_t* ConReqInfoPtr = (iWARPEM_Object_ConReqInfo_t*) cn_est_id;
-//
-//  int s=ConReqInfoPtr->ConnFd ;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "Operating on socket FD=" << s
-//    << EndLogLine ;
-//  // Actually should check magic and other values too
-////   ConReqInfoPtr only required for its ConnFd, which in the sockets implementation
-////   is handled by the underlying accept support
-////  StrongAssertLogLine( ConReqInfoPtr != 0 ) << "it_ep_accept(): cn_est_id let to a NULL ConReqInfo object" << EndLogLine;
-//
-//  // ConReqInfoPtr->AcceptingEndPoint  = ep_handle;
-//  // ConReqInfoPtr->AcceptRejectStatus = 1; // 1 is accepted
-//
-//  // fill out our ep stuff
-//  iWARPEM_Object_EndPoint_t* LocalEndPoint = (iWARPEM_Object_EndPoint_t*) ep_handle;
-//
-//  StrongAssertLogLine( LocalEndPoint != 0 )
-//    << "it_ep_accept(): local endpoint handle null"
-//    << EndLogLine;
-//
-//  StrongAssertLogLine( LocalEndPoint->ConnectedFlag == IWARPEM_CONNECTION_FLAG_DISCONNECTED )
-//    << "it_ep_accept(): local endpoint already connected"
-//    << EndLogLine;
-//
-//  LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_CONNECTED;
-//  LocalEndPoint->ConnFd        = ConReqInfoPtr->ConnFd;
-//
-//  StrongAssertLogLine( private_data_length > 0 )
-//    << "it_ep_accept(): ERROR: private_data must be set to the other EP Node Id (needed for debugging)"
-//    << EndLogLine;
-//
-//  sscanf( (const char *) private_data, "%d", &(LocalEndPoint->OtherEPNodeId) );
-//
-//  unsigned char* internal_private_data = NULL;
-//
-//  // if lmr and rmr_context are provided:
-//  // - register rmr with QP
-//  // - make rmr private data
-//  iWARPEM_Private_Data_t PrivateData;
-//  PrivateData.mLen = private_data_length;
-//
-//  StrongAssertLogLine( PrivateData.mLen < IT_MAX_PRIV_DATA )
-//    << "itx_ep_accept_with_rmr(): Maximum private data length exceeded. Limit is: " << IT_MAX_PRIV_DATA
-//    << " actual is: " << PrivateData.mLen
-//    << EndLogLine;
-//
-//  if( lmr && rmr_context )
-//    {
-//      it_status_t istatus = itx_get_rmr_context_for_ep( ep_handle,
-//                                           lmr->lmr,
-//                                           rmr_context );
-//
-//      if( istatus != IT_SUCCESS )
-//        {
-//          return istatus;
-//        }
-//
-//      // we have to extend the private data buffer if user provided data already
-//      unsigned char *transfer_rmr;
-//
-//      PrivateData.mLen = private_data_length + 3 * sizeof(uint64_t) ; // works also if no user priv-data is present
-//      StrongAssertLogLine( PrivateData.mLen < IT_MAX_PRIV_DATA )
-//        << "itx_ep_accept_with_rmr(): Maximum private data length exceeded after adding rmr. max: " << IT_MAX_PRIV_DATA
-//  << "actual is: " << PrivateData.mLen
-//        << EndLogLine;
-//
-////      internal_private_data = (unsigned char*)malloc( internal_private_data_length );
-//
-//      if( private_data != NULL )
-//        {
-//          memcpy( PrivateData.mData+3 * sizeof(uint64_t) , private_data, private_data_length );
-////          transfer_rmr = (unsigned char*) ( &PrivateData.mData[ private_data_length ] );
-//        }
-////      else
-////        {
-////          transfer_rmr = PrivateData.mData;
-////        }
-//      transfer_rmr = PrivateData.mData;
-//
-//      *((uint64_t*)&transfer_rmr[ 0 ])                   = htobe64( (uint64_t) (*rmr_context) );
-//      *((uint64_t*)&transfer_rmr[ sizeof(uint64_t) ])    = htobe64( (uint64_t) (lmr->addr.abs) );
-//      *((uint64_t*)&transfer_rmr[ sizeof(uint64_t) * 2]) = htobe64( (uint64_t) lmr->length );
-//      BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//       << "transfer_rmr=" << HexDump(transfer_rmr,sizeof(uint64_t)*3)
-//       << EndLogLine ;
-//
-//    }
-//  else
-//    {
-//      PrivateData.mLen = private_data_length; // assume no data
-//      memcpy( PrivateData.mData,
-//      private_data,
-//      private_data_length);
-//    }
-//
-//  int wLen;
-//  int SizeToSend = sizeof( iWARPEM_Private_Data_t );
-//  iWARPEM_Status_t wstat = write_to_socket( s,
-//              (char *) & PrivateData,
-//              SizeToSend,
-//              & wLen );
-//  AssertLogLine( wLen == SizeToSend )
-//    << "it_ep_accept(): ERROR: "
-//    << " wLen: " << wLen
-//    << " SizeToSend: " << SizeToSend
-//    << EndLogLine;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "it_ep_accept(): ep " << *(iWARPEM_Object_EndPoint_t *)ep_handle
-//    << " ConReqInfo@ " << (void*) ConReqInfoPtr
-//    << " SocketFd: " << ConReqInfoPtr->ConnFd
-//    << EndLogLine;
-//
-//  // Add the socket descriptor to the data receiver controller
-//  iwarpem_add_socket_to_list( ConReqInfoPtr->ConnFd, LocalEndPoint );
-//
-//  // create an event to to pass to the user
-//  /* Todo: Seems leaked */
-//  iWARPEM_Object_Event_t* ConnEstablishedEvent = (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
-//
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "ConnEstablishedEvent malloc -> " << (void *) ConnEstablishedEvent
-//    << EndLogLine ;
-//  it_connection_event_t* ice = (it_connection_event_t*) & ConnEstablishedEvent->mEvent;
-//
-//  ice->event_number = IT_CM_MSG_CONN_ESTABLISHED_EVENT;
-//  ice->evd          = LocalEndPoint->connect_sevd_handle; // i guess?
-//  ice->cn_est_id    = (it_cn_est_identifier_t) cn_est_id;
-//  ice->ep           = (it_ep_handle_t) LocalEndPoint;
-//
-//  iWARPEM_Object_EventQueue_t* ConnectEventQueuePtr =
-//    (iWARPEM_Object_EventQueue_t*) LocalEndPoint->connect_sevd_handle;
-//
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "ConnectEventQueuePtr = " << ConnectEventQueuePtr
-//    << EndLogLine ;
-//// Don't seem to have a ConnectEventQueuePtr->
-//  int enqrc = ConnectEventQueuePtr->Enqueue( ConnEstablishedEvent );
-//
-//  StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
-//
-////  free(ConnEstablishedEvent) ; /* TODO check if this plugs a leak */
-//
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "it_ep_accept(): "
-//    << " ConReqInfo@ "    << (void*) ConReqInfoPtr
-//    << EndLogLine;
-//
-//  free(ConReqInfoPtr) ; /* TODO check if this plugs a leak */
-//
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "*rmr_context=" << *rmr_context
-//                                     << EndLogLine ;
-//
-//  //  pthread_mutex_unlock( & gITAPIFunctionMutex );
-//
-//  return(IT_SUCCESS);
-//  }
 
 it_status_t itx_ep_accept_with_rmr (
                                     IN        it_ep_handle_t         ep_handle,
@@ -7165,54 +6352,6 @@ it_status_t itx_ep_accept_with_rmr (
         << EndLogLine ;
     return IT_SUCCESS ;
 }
-// tjcw: I don't think this is used in the 'routed compute node' version
-//it_status_t it_prepare_connection(
-//                                  IN        it_api_o_sockets_qp_mgr_t  *qpMgr,
-//                                  IN  const it_path_t                *path,
-//                                  IN  const it_conn_attributes_t     *conn_attr,
-//                                  IN  const it_conn_qual_t           *connect_qual,
-//                                  IN        it_cn_est_flags_t         cn_est_flags
-//                                  )
-//{
-////  int ret = -1;
-////  int s;
-////
-////  if((s = socket(IT_API_SOCKET_FAMILY, SOCK_STREAM, 0)) < 0)
-////    {
-////    perror("it_ep_connect socket() open");
-////    }
-////
-////#ifdef IT_API_OVER_UNIX_DOMAIN_SOCKETS
-////  struct sockaddr_un serv_addr;
-////
-////  memset( &serv_addr, 0, sizeof( serv_addr ) );
-////  serv_addr.sun_family      = IT_API_SOCKET_FAMILY;
-////
-////  sprintf( serv_addr.sun_path,
-////           "%s.%d",
-////           IT_API_UNIX_SOCKET_PREFIX_PATH,
-////           connect_qual->conn_qual.lr_port.remote );
-////
-////  socklen_t serv_addr_len = sizeof( serv_addr.sun_family ) + strlen( serv_addr.sun_path );
-////#else
-////  struct sockaddr_in serv_addr;
-////
-////  memset( &serv_addr, 0, sizeof( serv_addr ) );
-////  serv_addr.sin_family      = IT_API_SOCKET_FAMILY;
-////  serv_addr.sin_port        = connect_qual->conn_qual.lr_port.remote;
-////  serv_addr.sin_addr.s_addr = path->u.iwarp.raddr.ipv4.s_addr;
-////
-////  socklen_t serv_addr_len = sizeof( serv_addr );
-////#endif
-////
-////  int SockSendBuffSize = -1;
-////  int SockRecvBuffSize = -1;
-////  //BGF size_t ArgSize = sizeof( int );
-////  socklen_t ArgSize = sizeof( int );
-////  getsockopt( s, SOL_SOCKET, SO_SNDBUF, (int *) & SockSendBuffSize, & ArgSize );
-////  getsockopt( s, SOL_SOCKET, SO_RCVBUF, (int *) & SockRecvBuffSize, & ArgSize );
-//
-//}
 // U it_ep_connect
 
 // An object is needed to hold state between
@@ -7263,77 +6402,6 @@ it_status_t itx_ep_connect_with_rmr (
     << EndLogLine;
 
   int s;
-
-//  if((s = socket(IT_API_SOCKET_FAMILY, SOCK_STREAM, 0)) < 0)
-//    {
-//    perror("it_ep_connect socket() open");
-//    }
-//
-//#ifdef IT_API_OVER_UNIX_DOMAIN_SOCKETS
-//  struct sockaddr_un serv_addr;
-//
-//  memset( &serv_addr, 0, sizeof( serv_addr ) );
-//  serv_addr.sun_family      = IT_API_SOCKET_FAMILY;
-//
-//  sprintf( serv_addr.sun_path,
-//           "%s.%d",
-//           IT_API_UNIX_SOCKET_PREFIX_PATH,
-//           connect_qual->conn_qual.lr_port.remote );
-//
-//  socklen_t serv_addr_len = sizeof( serv_addr.sun_family ) + strlen( serv_addr.sun_path );
-//#else
-//  struct sockaddr_in serv_addr;
-//
-//  memset( &serv_addr, 0, sizeof( serv_addr ) );
-//  serv_addr.sin_family      = IT_API_SOCKET_FAMILY;
-//  serv_addr.sin_port        = connect_qual->conn_qual.lr_port.remote;
-//  serv_addr.sin_addr.s_addr = path->u.iwarp.raddr.ipv4.s_addr;
-//
-//  socklen_t serv_addr_len = sizeof( serv_addr );
-//#endif
-//
-//  int SockSendBuffSize = -1;
-//  int SockRecvBuffSize = -1;
-//  //BGF size_t ArgSize = sizeof( int );
-//  socklen_t ArgSize = sizeof( int );
-//  getsockopt( s, SOL_SOCKET, SO_SNDBUF, (int *) & SockSendBuffSize, & ArgSize );
-//  getsockopt( s, SOL_SOCKET, SO_RCVBUF, (int *) & SockRecvBuffSize, & ArgSize );
-//
-//  BegLogLine( 0 )
-//    << "it_ep_connect(): "
-//    << " SockSendBuffSize: " << SockSendBuffSize
-//    << " SockRecvBuffSize: " << SockRecvBuffSize
-//    << EndLogLine;
-//
-//  SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
-//  SockRecvBuffSize = IT_API_SOCKET_BUFF_SIZE;
-//  setsockopt( s, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
-//  setsockopt( s, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
-//
-//  while( 1 )
-//    {
-//      int ConnRc = connect( s,
-//          (struct sockaddr *) & serv_addr,
-//          serv_addr_len );
-//
-//      if( ConnRc < 0 )
-//  {
-//  if( errno != EAGAIN )
-//    {
-//      perror("Connection failed") ;
-//      StrongAssertLogLine( 0 )
-//        << "it_ep_connect:: Connection failed "
-//        << " errno: " << errno
-//        << EndLogLine;
-//    }
-//  }
-//      else if( ConnRc == 0 )
-//  break;
-//    }
-//#if defined(SPINNING_RECEIVE)
-//  socket_nonblock_on(s) ;
-//#endif
-//  socket_nodelay_on(s) ;
 
   s = LocalEndpointSequenceLimit ;
   LocalEndpointSequenceLimit += 1 ;
@@ -7403,18 +6471,6 @@ it_status_t itx_ep_connect_with_rmr (
 	    private_data_length);
     }
 
-//  int wLen;
-//  int SizeToSend = sizeof( iWARPEM_Private_Data_t );
-//  iWARPEM_Status_t wstat = write_to_socket( s,
-//              (char *) & PrivateData,
-//              SizeToSend,
-//              & wLen );
-//  AssertLogLine( wLen == SizeToSend )
-//    << "it_ep_connect(): ERROR: "
-//    << " wLen: " << wLen
-//    << " SizeToSend: " << SizeToSend
-//    << EndLogLine;
-
   struct iWARPEM_Message_Hdr_t Hdr ;
   Hdr.mMsg_Type = iWARPEM_SOCKET_CONNECT_REQ_TYPE ;
   Hdr.mTotalDataLen = sizeof( iWARPEM_Private_Data_t );
@@ -7448,27 +6504,6 @@ it_status_t itx_ep_connect_with_rmr (
     << "Private data reply has arrived, continuing"
     << EndLogLine ;
 // tjcw: We will need some way of fetching the private data from the receive thread
-//  int Dummy;
-//  sscanf( (const char *) private_data, "%d %d", &Dummy, &(LocalEndPoint->OtherEPNodeId) );
-//
-//  int rlen ;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-//    << "About to pol for private data from socket " << s
-//    << EndLogLine ;
-//  struct pollfd pollfds[1] ;
-//  pollfds[0].fd = s ;
-//  pollfds[0].events = POLLIN ;
-//  int rc ;
-//  do {
-//      rc = poll(pollfds,1,100) ;
-//  } while ( rc <= 0 ) ;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-//    << "About to read private data from socket " << s
-//    << EndLogLine ;
-//  read_from_socket(s, (char *)&PrivateDataIn, sizeof(PrivateDataIn),&rlen ) ;
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "PrivateDataIn.mLen=" << PrivateDataIn.mLen
-//    << EndLogLine ;
   // Add the socket descriptor to the data receiver controller
   iwarpem_add_socket_to_list( s, LocalEndPoint );
   {

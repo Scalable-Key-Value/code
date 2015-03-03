@@ -34,12 +34,14 @@ skv_server_command_event_buffer_list_t::PrepareEvent( skv_server_event_t *curren
   skv_client_to_server_cmd_hdr_t* InBoundHdr;
   skv_server_ccb_t* CCB = aEPState->AcquireCCB( &InBoundHdr, &CmdOrd );
 
-  BegLogLine( SKV_SERVER_EVENT_BUFFER_LOG )
-    << "skv_server_command_event_buffer_list_t: EP CCBs drained"
-    << EndLogLine;
-
   if( CCB == NULL )
+  {
+    BegLogLine( SKV_SERVER_EVENT_BUFFER_LOG )
+      << "skv_server_command_event_buffer_list_t: EP CCBs drained"
+      << EndLogLine;
+
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
+  }
 
 #if (SKV_CTRLMSG_DATA_LOG != 0)
   HexDump CtrlMsgData( (void*)InBoundHdr, SKV_CONTROL_MESSAGE_SIZE );

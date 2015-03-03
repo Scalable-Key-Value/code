@@ -116,6 +116,8 @@ union oprec {
 
 struct connection ;
 
+#define FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR ( (struct connection*)0xEFEFEFEFEF )
+
 struct endiorec {
   struct connection * conn ;
   enum optype optype ;
@@ -141,7 +143,9 @@ public:
     BegLogLine( 1 )
       << "Creating new Crossbar_Entry. "
       << " client: " << aClientId
+      << " conn: 0x" << (void*)aDownLink
       << " server: " << aServerId
+      << " srvEP: 0x" << (void*)aUpLink
       << EndLogLine;
   }
   ~Crossbar_Entry_t() {}
@@ -207,7 +211,7 @@ struct iWARPEM_MultiplexedSocketControl_Hdr_t
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
 #ifndef FXLOG_ITAPI_ROUTER
-#define FXLOG_ITAPI_ROUTER ( 1 )
+#define FXLOG_ITAPI_ROUTER ( 0 )
 #endif
 
 #ifndef FXLOG_ITAPI_ROUTER_DETAIL
@@ -215,7 +219,7 @@ struct iWARPEM_MultiplexedSocketControl_Hdr_t
 #endif
 
 #ifndef FXLOG_ITAPI_ROUTER_LW
-#define FXLOG_ITAPI_ROUTER_LW ( 1 )
+#define FXLOG_ITAPI_ROUTER_LW ( 0 )
 #endif
 #ifndef FXLOG_ITAPI_ROUTER_SPIN
 #define FXLOG_ITAPI_ROUTER_SPIN ( 0 )
@@ -246,10 +250,6 @@ struct connection {
   unsigned long ibv_poll_cq_recv_count ;
   unsigned int ibv_send_last_optype ;
   struct ibv_qp *qp;
-//  pthread_mutex_t qp_write_mutex ;
-//  struct ibv_mr *recv_mr;
-//  struct ibv_mr *send_mr;
-//  struct ibv_mr *call_mr ;
   struct ibv_mr *mr ;
   struct endiorec endio_call ;
   struct endiorec endio_uplink ;
@@ -263,26 +263,18 @@ struct connection {
   unsigned long downstream_sequence ;
   unsigned long downstreamSequenceAtCall ;
   unsigned long sequence_in ;
-//  unsigned long sequence_out ;
   unsigned long upstreamSequence ;
-//  int downstreamBufferFree ;
   int rpcBufferPosted ;
   uint64_t routerBuffer_raddr ;
   uint32_t routerBuffer_rkey ;
   unsigned int clientRank ;
-//  unsigned long stuck_epoll_count ;
-  int will_flush_this_connection ;
   int flushed_downstream ;
-  int upstream_buffer_busy;
-  struct connection * next_conn_to_flush ;
-  bool mSendAck ;
-  struct connection * mNextConnToAck ;
-  bool mDisconnecting ;
+  volatile bool mSendAck ;
+  struct connection * mNextConnToAck[2] ;
+  volatile bool mDisconnecting ;
   int issuedDownstreamFetch ;
-//  unsigned int downlink_buffer_busy ;
 
 
-//  struct routerBuffer routerBuffer ;
   uint16_t clientId;
 
   Crossbar_Entry_t *socket_fds[k_LocalEndpointCount];
@@ -291,6 +283,8 @@ struct connection {
   unsigned short upstream_ip_port[k_LocalEndpointCount] ;
   class ion_cn_all_buffer mBuffer ;
 };
+
+static void add_conn_to_flush_queue(struct connection *conn);
 
 void ion_cn_buffer::PostReceive(struct connection *conn)
   {
@@ -376,56 +370,115 @@ void ion_cn_buffer::IssueRDMARead(struct connection *conn, unsigned long Offset,
 static void process_uplink_element(struct connection *conn, unsigned int LocalEndpointIndex, const struct iWARPEM_Message_Hdr_t& Hdr, const void * message) ;
 static void FlushMarkedUplinks(void) ;
 static bool flush_downstream(struct connection *conn) ;
-static struct connection * gFirstConnToAck ;
+static struct connection * volatile gFirstConnToAck ;
+static uint64_t gAckConnectionCount = 0;
+static uint64_t gFlushConnectionCount = 0;
+static volatile int gFlushListIndex = 0;
+static pthread_spinlock_t gDownStreamLock;
+static void LockDownStreamFlush( void )
+{
+  BegLogLine( FXLOG_ITAPI_ROUTER )
+    << "Locking DownStreamFlush."
+    << EndLogLine;
+  pthread_spin_lock( &gDownStreamLock );
+}
+static void UnlockDownStreamFlush( void )
+{
+  pthread_spin_unlock( &gDownStreamLock );
+  BegLogLine( FXLOG_ITAPI_ROUTER )
+    << "Unlocked DownStreamFlush."
+    << EndLogLine;
+}
+
+static bool post_ack_only( struct connection * conn )
+{
+  bool rc_ack = false;
+  conn->mBuffer.LockTransmit();
+
+  if((!conn->mDisconnecting) && ( conn->mBuffer.ReadyToTransmit() || conn->mSendAck ))
+    rc_ack = conn->mBuffer.PostAckOnly( conn );
+
+  // if even the ACK fails, the connection has to be queued for another attempt to flush
+  conn->mBuffer.UnlockTransmit();
+  if( ! rc_ack )
+  {
+    BegLogLine(FXLOG_ITAPI_ROUTER_FRAMES)
+      << "Problem: Flush and ACK failed or skipped! conn=0x" << (void*)conn
+      << " clientId=" << conn->clientId
+      << " mBufferAckStates( " << conn->mBuffer.mBufferAllowsAck << ":" << conn->mBuffer.mBufferRequiresAck << " )"
+      << EndLogLine;
+    conn->mSendAck = true;
+    add_conn_to_flush_queue( conn );
+  }
+  else
+    conn->mSendAck = false;
+  return rc_ack;
+}
+
+// to be executed while downstreamlock is held
 static void AckConnection(struct connection *conn)
+{
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "conn=0x" << (void *) conn
+    << " mDisconnecting=" << conn->mDisconnecting
+    << " mSendAck=" << conn->mSendAck
+    << " needsTransmit=" << conn->mBuffer.NeedsAnyTransmit()
+    << " readtoTransmit=" << conn->mBuffer.ReadyToTransmit()
+    << EndLogLine ;
+
+  if ( (! conn->mDisconnecting) && (conn->mSendAck || conn->mBuffer.NeedsAnyTransmit()) )
+  {
+    bool rc_flush = false;
+    // attempt to do a general TX only if there's actually data otherwise use the ACK-only method and don't mess with the buffer
+    if( conn->mBuffer.mTransmitBufferIndex > 0 )
+      rc_flush = flush_downstream(conn) ;
+
+    // if regular flush fails, we need to check if we have to send at least an ACK to prevent deadlocking
+    if ( ! rc_flush)
+      post_ack_only( conn );
+  }
+}
+static void AckAllConnections(void)
+{
+  LockDownStreamFlush();
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "Flushing all, first_connection_to_flush=0x" << (void *)gFirstConnToAck
+    << " Index: " << gFlushListIndex
+    << EndLogLine ;
+  gAckConnectionCount++;
+  struct connection * ConnToAck=gFirstConnToAck ;
+  gFirstConnToAck= FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR ;
+
+  int ThisFlushListIndex = gFlushListIndex;
+  gFlushListIndex = 1 - gFlushListIndex;
+  UnlockDownStreamFlush();
+
+  if( ConnToAck != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
   {
     BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *) conn
-        << " mDisconnecting=" << conn->mDisconnecting
-        << " mSendAck=" << conn->mSendAck
-        << EndLogLine ;
-    if ( (! conn->mDisconnecting) && conn->mSendAck)
-      {
-        conn->mSendAck=false ;
-        bool rc_flush=flush_downstream(conn) ;
-        if ( ! rc_flush)
-          {
-            BegLogLine(FXLOG_ITAPI_ROUTER)
-                << "conn=0x" << conn
-                << " Downstream flush fails, not retrying"
-                << EndLogLine ;
-// Can't spin here in the completion handler; it will hold off the 'downstream free' completion
-//            do
-//              {
-//                rc_flush=flush_downstream(conn) ;
-//              } while ( ! rc_flush) ;
+      << "Acknowledging connections"
+      << EndLogLine ;
+    while( (ConnToAck != NULL) && (ConnToAck != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR) )
+    {
+      AckConnection(ConnToAck);
+      struct connection *NextConnection = ConnToAck->mNextConnToAck[ ThisFlushListIndex ];
+      ConnToAck->mNextConnToAck[ ThisFlushListIndex ] = NULL;
+      ConnToAck = NextConnection;
 
-          }
-      }
+      BegLogLine(FXLOG_ITAPI_ROUTER)
+        << "Acknowledging next connection.  conn=0x" << ConnToAck
+        << EndLogLine;
+    }
+    BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "All connections acknowledged"
+    << EndLogLine ;
   }
-static void AckAllConnections(void)
-  {
-    struct connection * ConnToAck=gFirstConnToAck ;
-    if(ConnToAck)
-      {
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-            << "Acknowledging connections"
-            << EndLogLine ;
-        gFirstConnToAck=NULL ;
-        while(ConnToAck)
-          {
-            AckConnection(ConnToAck) ;
-            ConnToAck=ConnToAck->mNextConnToAck ;
-          }
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "All connections acknowledged"
-          << EndLogLine ;
-      }
-  }
-void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn)
+}
+void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn, bool contained_ack )
   {
     class ion_cn_all_buffer *buffer=&conn->mBuffer ;
     unsigned long BytesInThisCall=mSentBytes - buffer->mReceivedBytes ;
+    bool RequiresFlush = ((BytesInThisCall > 0) || ( contained_ack ));
     BegLogLine(FXLOG_ITAPI_ROUTER)
         << "this=0x" << (void *) this
         << " conn=0x" << (void *) conn
@@ -436,7 +489,7 @@ void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn)
         << " BytesInThisCall=" << BytesInThisCall
         << " Processing receive buffer"
         << EndLogLine ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
+    BegLogLine(FXLOG_ITAPI_ROUTER | FXLOG_ITAPI_ROUTER_FRAMES )
       << "conn->clientId=" << conn->clientId
       << " this=0x" << (void *) this
       << " RX-FRAME {" << mSentBytes
@@ -447,39 +500,39 @@ void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn)
     BegLogLine(FXLOG_ITAPI_ROUTER_DETAIL)
       << "*this=" << HexDump(this,BytesInThisCall+(sizeof(class ion_cn_buffer)-k_ApplicationBufferSize) )
       << EndLogLine ;
-    unsigned long bufferIndex=sizeof(class ion_cn_buffer)-k_ApplicationBufferSize ;
-    while ( bufferIndex < BytesInThisCall+(sizeof(class ion_cn_buffer)-k_ApplicationBufferSize))
-      {
-       char * bufferPtr = ((char *)this) + bufferIndex ;
+    char * bufferPtr = mApplicationBuffer ;
+    while ( bufferPtr < &(mApplicationBuffer[ BytesInThisCall ]))
+    {
         unsigned int LocalEndpointIndex = * (unsigned int *) bufferPtr ;
-        bufferIndex += sizeof(unsigned int) ;
-        bufferPtr = ((char *)this) + bufferIndex ;
+        bufferPtr +=  sizeof(unsigned int) ;
         struct iWARPEM_Message_Hdr_t * Hdr = (struct iWARPEM_Message_Hdr_t *) bufferPtr;
-        unsigned long nextBufferIndex = bufferIndex + sizeof(struct iWARPEM_Message_Hdr_t) + Hdr->mTotalDataLen ;
+        char *nextBufferPtr = bufferPtr + sizeof(struct iWARPEM_Message_Hdr_t) + Hdr->mTotalDataLen ;
         BegLogLine(FXLOG_ITAPI_ROUTER)
-            << "bufferIndex=" << bufferIndex
             << " LocalEndpointIndex=" << LocalEndpointIndex
             << " bufferPtr=0x" << (void *) bufferPtr
-            << " nextBufferIndex=" << nextBufferIndex
+            << " nextBufferPtr=0x" << (void*)nextBufferPtr
             << EndLogLine ;
         report_hdr(*Hdr) ;
-        StrongAssertLogLine(nextBufferIndex <= BytesInThisCall+(sizeof(class ion_cn_buffer)-k_ApplicationBufferSize) )
+        StrongAssertLogLine(nextBufferPtr <= &mApplicationBuffer[ k_ApplicationBufferSize ] )
           << "Message overflows buffer, Hdr->mTotalDataLen=" << Hdr->mTotalDataLen
-          << " nextBufferIndex=" << nextBufferIndex
+          << " nextBufferPtr=" << nextBufferPtr
           << " BytesInThisCall=" << BytesInThisCall
           << EndLogLine ;
         process_uplink_element(conn,LocalEndpointIndex,*Hdr,(void *)(bufferPtr+sizeof(struct iWARPEM_Message_Hdr_t))) ;
-        bufferIndex = nextBufferIndex ;
+        bufferPtr = nextBufferPtr ;
       }
-    StrongAssertLogLine(bufferIndex == BytesInThisCall+(sizeof(class ion_cn_buffer)-k_ApplicationBufferSize))
-      << "bufferIndex=" << bufferIndex
+    StrongAssertLogLine(bufferPtr == &mApplicationBuffer[ BytesInThisCall ])
+      << "bufferPtr=0x" << (void*)bufferPtr
       << " disagrees with BytesInThisCall=" << BytesInThisCall
+      << " last byte= 0x" << (void*)&mApplicationBuffer[ BytesInThisCall ]
       << EndLogLine ;
     BegLogLine(FXLOG_ITAPI_ROUTER)
       << "conn=0x" << (void *) conn
+      << " buff=0x" << (void*) buffer
       << " Advancing mReceivedBytes from " << buffer->mReceivedBytes
       << " to " << mSentBytes
       << EndLogLine ;
+
     buffer->mReceivedBytes = mSentBytes ;
     buffer->mSentBytesPrevious=buffer->mSentBytes ;
     buffer->mAckedSentBytes=mReceivedBytes ;
@@ -488,27 +541,29 @@ void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn)
       << " buffer->mReceivedBytes=" << buffer->mReceivedBytes
       << " buffer->mSentBytesPrevious=" << buffer->mSentBytesPrevious
       << " buffer->mAckedSentBytes=" << buffer->mAckedSentBytes
+      << " RequiresFlush=" << RequiresFlush
+      << " AckRequest=" << contained_ack
       << EndLogLine ;
-    if ( ! conn->mSendAck)
-      {
-        conn->mSendAck=true ;
-        conn->mNextConnToAck = gFirstConnToAck ;
-        gFirstConnToAck=conn ;
-      }
-    if ( 0 == k_LazyFlushUplinks)
+
+    if( RequiresFlush )
+    {
+      conn->mSendAck=true;
+      add_conn_to_flush_queue( conn );
+      if ( 0 == k_LazyFlushUplinks)
       {
         FlushMarkedUplinks();
       }
+    }
   }
 
 void ion_cn_buffer::ProcessCall(struct connection *conn)
   {
      class ion_cn_all_buffer *buffer=&conn->mBuffer ;
-     buffer->AdvanceAcked(mReceivedBytes) ;
+     bool ack_advanced = buffer->AdvanceAcked(mReceivedBytes);
      unsigned long BytesInThisCall=mSentBytes - buffer->mReceivedBytes ;
      if ( BytesInThisCall > k_LargestRDMASend-(sizeof(class ion_cn_buffer)-k_ApplicationBufferSize))
        {
-         BegLogLine(FXLOG_ITAPI_ROUTER)
+         BegLogLine(FXLOG_ITAPI_ROUTER | FXLOG_ITAPI_ROUTER_FRAMES )
            << "conn->clientId=" << conn->clientId
            << " this=0x" << (void *) this
            << " RX-FRAME-WILL-BE {" << mSentBytes
@@ -522,7 +577,7 @@ void ion_cn_buffer::ProcessCall(struct connection *conn)
              << " BytesInThisCall=" << BytesInThisCall
              << "Issuing RDMA read to pick up rest of receive buffer"
              << EndLogLine ;
-         IssueRDMARead(conn,k_InitialRDMASend,BytesInThisCall-k_InitialRDMASend) ;
+         IssueRDMARead(conn,k_InitialRDMASend,BytesInThisCall) ;
        }
      else
        {
@@ -532,10 +587,93 @@ void ion_cn_buffer::ProcessCall(struct connection *conn)
              << " BytesInThisCall=" << BytesInThisCall
              << " RDMA receive is complete, processing ..."
              << EndLogLine ;
-         ProcessReceiveBuffer(conn) ;
+         ProcessReceiveBuffer(conn, ack_advanced ) ;
          buffer->PostReceive(conn) ;
+         BegLogLine(FXLOG_ITAPI_ROUTER)
+           << "Completed RDMA_Recv processing. this=0x" << (void *) this
+           << " conn=0x" << (void *) conn
+           << " BytesInThisCall=" << BytesInThisCall
+           << EndLogLine ;
        }
   }
+void ion_cn_buffer::ProcessRead( struct connection *conn)
+{
+  class ion_cn_all_buffer *buffer=&conn->mBuffer ;
+  bool ack_advanced = buffer->AdvanceAcked(mReceivedBytes);
+  unsigned long BytesInThisCall=mSentBytes - buffer->mReceivedBytes ;
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "this=0x" << (void *) this
+    << " conn=0x" << (void *) conn
+    << " BytesInThisCall=" << BytesInThisCall
+    << " RDMA receive is complete, processing ..."
+    << EndLogLine ;
+  ProcessReceiveBuffer(conn, ack_advanced ) ;
+  buffer->PostReceive(conn) ;
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "Completed RDMA_Read processing. this=0x" << (void *) this
+    << " conn=0x" << (void *) conn
+    << " BytesInThisCall=" << BytesInThisCall
+    << EndLogLine ;
+}
+bool ion_cn_buffer::pushAckOnly( struct connection *conn, unsigned long aSentBytes, unsigned long aReceivedBytes )
+{
+  mReceivedBytes = aReceivedBytes;
+
+  struct ibv_send_wr wr;
+  struct ibv_send_wr *bad_wr = NULL;
+  struct ibv_sge sge;
+  memset(&wr, 0, sizeof(wr));
+
+  unsigned long Sentinel=SentinelIndex( 0 ) ;
+  unsigned long RDMACount=Sentinel+1+(sizeof(class ion_cn_buffer) - k_ApplicationBufferSize) ;
+
+  wr.wr_id = (uintptr_t) &(conn->endio_ack ) ;
+  wr.opcode = IBV_WR_RDMA_WRITE;
+  wr.sg_list = &sge;
+  wr.num_sge = 1;
+  wr.send_flags = IBV_SEND_SIGNALED;
+  wr.next = NULL ;
+
+  sge.addr = (uintptr_t)this;
+  sge.length = RDMACount;
+  sge.lkey = conn->mr->lkey ;
+
+  wr.wr.rdma.remote_addr = conn->routerBuffer_raddr + offsetof(class ion_cn_all_buffer,mRemoteWrittenSendAckBytes);;
+  wr.wr.rdma.rkey = conn->routerBuffer_rkey ;
+
+  BegLogLine(FXLOG_ITAPI_ROUTER_LW)
+    << "conn=0x" << (void *) conn
+    << " clientRank=" << conn->clientRank
+    << " wr.wr_id=0x" << (void *) wr.wr_id
+    << " qp=0x" << (void *) conn->qp
+    << " sge.addr=0x" << (void *) sge.addr
+    << " sge.length=" << sge.length
+    << " RDMA-ing to wr.wr.rdma.remote_addr=0x" << (void *) wr.wr.rdma.remote_addr
+    << " wr.wr.rdma.rkey=0x" << (void *) wr.wr.rdma.rkey
+    << " mSentBytes=" << mSentBytes
+    << " mReceivedBytes=" << mReceivedBytes
+    << " "
+    << EndLogLine ;
+
+  BegLogLine(FXLOG_ITAPI_ROUTER | FXLOG_ITAPI_ROUTER_FRAMES )
+      << "conn->clientId=" << conn->clientId
+      << " this=0x" << (void *) this
+      << " ACK-TX-FRAME {" << mSentBytes
+      << "," << mReceivedBytes
+      << "," << 0
+      << "}"
+      << " DestBuf=0x" << (void*)wr.wr.rdma.remote_addr
+      << EndLogLine ;
+
+  conn->ibv_send_last_optype = k_wc_ack;
+  conn->ibv_post_send_count += 1 ;
+  int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
+  StrongAssertLogLine(rc == 0)
+    << "ibv_post_send fails, rc=" << rc
+    << EndLogLine ;
+
+  return (rc == 0);
+}
 
 bool ion_cn_buffer::rawTransmit(struct connection *conn, unsigned long aTransmitCount)
   {
@@ -581,13 +719,15 @@ bool ion_cn_buffer::rawTransmit(struct connection *conn, unsigned long aTransmit
       << " "
       << EndLogLine ;
 
-    BegLogLine(FXLOG_ITAPI_ROUTER)
+    BegLogLine(FXLOG_ITAPI_ROUTER | FXLOG_ITAPI_ROUTER_FRAMES )
         << "conn->clientId=" << conn->clientId
         << " this=0x" << (void *) this
         << " TX-FRAME {" << mSentBytes
         << "," << mReceivedBytes
         << "," << aTransmitCount
         << "}"
+        << " DestBuf=0x" << (void*)wr.wr.rdma.remote_addr
+        << " actual_size: " << RDMACount
         << EndLogLine ;
 
     conn->ibv_send_last_optype = k_wc_downlink ;
@@ -600,12 +740,6 @@ bool ion_cn_buffer::rawTransmit(struct connection *conn, unsigned long aTransmit
     return true ;
 
   }
-static struct connection * first_connection_to_flush ;
-
-//static int stuck(const struct connection *conn)
-//  {
-//    return conn->stuck_epoll_count > 10000 ;
-//  }
 
 static void die(const char *reason);
 static void build_context(struct ibv_context *verbs);
@@ -757,135 +891,6 @@ void build_qp_attr(struct ibv_qp_init_attr *qp_attr)
   qp_attr->cap.max_recv_sge = 1;
 }
 
-static void issue_ack(struct connection *conn)
-  {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *)conn
-        << " conn->upstreamSequence=" << conn->upstreamSequence
-        << EndLogLine ;
-#if 0
-    ((struct rpcAckBuffer *)(&conn->routerBuffer.ackBuffer)) -> upstreamSequence = conn->upstreamSequence ;
-
-    struct ibv_send_wr wr2;
-    struct ibv_send_wr *bad_wr = NULL;
-    struct ibv_sge sge2;
-    memset(&wr2, 0, sizeof(wr2));
-
-    wr2.wr_id = (uintptr_t) &(conn->endio_ack ) ;
-    wr2.opcode = IBV_WR_RDMA_WRITE;
-    wr2.sg_list = &sge2;
-    wr2.num_sge = 1;
-    wr2.send_flags = IBV_SEND_SIGNALED;
-
-    sge2.addr = (uintptr_t)&(conn->routerBuffer.ackBuffer);
-//              sge.addr = 0 ; // tjcw as suggested by Bernard
-    sge2.length = sizeof(struct ackBuffer) ;
-    sge2.lkey = conn->mr->lkey ;
-
-    wr2.wr.rdma.remote_addr = conn->routerBuffer_raddr ;
-//              wr.wr.rdma.remote_addr = 0 ; // tjcw as suggested by Bernard
-    wr2.wr.rdma.rkey = conn->routerBuffer_rkey ;
-
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "conn=0x" << (void *) conn
-      << " wr2.wr_id=0x" << (void *) wr2.wr_id
-      << " qp=0x" << (void *) conn->qp
-      << " sge2.addr=0x" << (void *) sge2.addr
-      << " RDMA-ing to wr2.wr.rdma.remote_addr=0x" << (void *) wr2.wr.rdma.remote_addr
-      << " wr2.wr.rdma.rkey=0x" << (void *) wr2.wr.rdma.rkey
-      << " sequence_in=" << conn->sequence_in
-      << " downstream_sequence=" << conn->downstream_sequence
-      << " conn->upstreamSequence=" << conn->upstreamSequence
-      << EndLogLine ;
-
-//    conn->sequence_out += 1 ;
-    StrongAssertLogLine(conn->rpcBufferPosted != 0 )
-      << "RPC buffer is not posted"
-      << EndLogLine ;
-
-//     pthread_mutex_lock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-//     pthread_mutex_lock(&allConnectionMutex) ;
-     conn->ibv_post_send_count += 1 ;
-     conn->ibv_send_last_optype = k_wc_ack ;
-     int rc=ibv_post_send(conn->qp, &wr2, &bad_wr);
-//     pthread_mutex_unlock(&allConnectionMutex) ;
-//     pthread_mutex_unlock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-     StrongAssertLogLine(rc == 0)
-       << "ibv_post_send fails, rc=" << rc
-       << EndLogLine ;
-//    TEST_NZ(ibv_post_send(conn->qp, &wr2, &bad_wr));
-#endif
-  }
-//static void process_call(struct connection *conn, size_t byte_len)
-//  {
-//#if 0
-//    struct rpcBuffer *rpcBuffer = (struct rpcBuffer *)&(conn->routerBuffer.callBuffer) ;
-//    BegLogLine(FXLOG_ITAPI_ROUTER)
-//        << "byte_len=" << byte_len
-//        << " conn=0x" << (void *) conn
-//        << " conn->sequence_in=" << conn->sequence_in
-//        << " rpcBuffer->routerBuffer_addr=0x" << (void *) rpcBuffer->routerBuffer_addr
-//        << " rpcBuffer->routermemreg_lkey=0x" << (void *) rpcBuffer->routermemreg_lkey
-//        << " rpcBuffer->upstreamBufferLength=" << rpcBuffer->upstreamBufferLength
-//        << " rpcBuffer->downstreamSequence=" << rpcBuffer->downstreamSequence
-//        << " rpcBuffer->clientRank=" << rpcBuffer->clientRank
-//        << EndLogLine ;
-//    conn->downstreamSequenceAtCall = rpcBuffer->downstreamSequence ;
-//
-//    if ( conn->sequence_in == 1)
-//      {
-//        conn->routerBuffer_raddr = rpcBuffer->routerBuffer_addr ;
-//        conn->routerBuffer_rkey = rpcBuffer->routermemreg_lkey ;
-//        conn->clientRank = rpcBuffer->clientRank ;
-//      }
-//    size_t upstreamBufferLength = rpcBuffer->upstreamBufferLength ;
-//    conn->upstream_length = upstreamBufferLength ;
-//    struct ibv_send_wr wr;
-//    struct ibv_send_wr *bad_wr = NULL;
-//    struct ibv_sge sge;
-//    memset(&wr, 0, sizeof(wr));
-//
-//    wr.wr_id = (uintptr_t) &(conn->endio_uplink) ;
-//    wr.opcode = IBV_WR_RDMA_READ;
-//    wr.sg_list = &sge;
-//    wr.num_sge = 1;
-//    wr.send_flags = IBV_SEND_SIGNALED;
-//    wr.next = NULL ;
-//
-//    sge.addr = (uintptr_t)&(conn->routerBuffer.upstreamBuffer);
-//    sge.length = upstreamBufferLength ;
-//    sge.lkey = conn->mr->lkey ;
-//
-//    wr.wr.rdma.remote_addr = conn->routerBuffer_raddr + offsetof(struct routerBuffer, upstreamBuffer) ;
-////    wr.wr.rdma.remote_addr = conn->routerBuffer_raddr + sizeof(struct ackBuffer) + sizeof(struct callBuffer);
-////              wr.wr.rdma.remote_addr = 0 ; // tjcw as suggested by Bernard
-//    wr.wr.rdma.rkey = conn->routerBuffer_rkey ;
-//
-//    BegLogLine(FXLOG_ITAPI_ROUTER)
-//      << "conn=0x" << (void *) conn
-//      << " wr.wr_id=0x" << (void *) wr.wr_id
-//      << " qp=0x" << (void *) conn->qp
-//      << " sge.addr=0x" << (void *) sge.addr
-//      << " RDMA-ing from wr.wr.rdma.remote_addr=0x" << (void *) wr.wr.rdma.remote_addr
-//      << " wr.wr.rdma.rkey=0x" << (void *) wr.wr.rdma.rkey
-//      << " sequence_in=" << conn->sequence_in
-//      << " downstream_sequence=" << conn->downstream_sequence
-//      << EndLogLine ;
-//
-////    pthread_mutex_lock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-////    pthread_mutex_lock(&allConnectionMutex) ;
-//    conn->ibv_post_send_count += 1 ;
-//    conn->ibv_send_last_optype = k_wc_uplink ;
-//    int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
-////    pthread_mutex_unlock(&allConnectionMutex) ;
-////    pthread_mutex_unlock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-//    StrongAssertLogLine(rc == 0)
-//      << "ibv_post_send fails, rc=" << rc
-//      << EndLogLine ;
-////    conn->sequence_out += 1 ;
-//#endif
-//  }
-
 struct epoll_record
   {
   iWARPEM_Router_Endpoint_t *conn ;
@@ -899,14 +904,6 @@ int drc_cli_socket;
 enum {
   k_max_epoll = 4097
 };
-
-//struct iWARPEM_SocketControl_Hdr_t
-//{
-//  iWARPEM_SocketControl_Type_t mOpType;
-//  int                          mSockFd;
-//  struct connection *mconn ;
-//  unsigned int mLocalEndpointIndex ;
-//};
 
 static void add_socket_to_poll(iWARPEM_Router_Endpoint_t *conn) ;
 static void remove_socket_from_poll(struct connection *conn, unsigned int LocalEndpointIndex, int fd) ;
@@ -1025,295 +1022,7 @@ static void fetch_downstreamCompleteBuffer(struct connection *conn)
         << "conn=0x" << (void *) conn
 //        << " downstreaml=" << downstreaml
         << EndLogLine ;
-#if 0
-    struct ibv_send_wr wr;
-    struct ibv_send_wr *bad_wr = NULL;
-    struct ibv_sge sge;
-    memset(&wr, 0, sizeof(wr));
-
-    wr.wr_id = (uintptr_t) & (conn->endio_downlink_complete_return) ;
-    wr.opcode = IBV_WR_RDMA_READ ;
-    wr.sg_list = &sge ;
-    wr.num_sge = 1 ;
-    wr.send_flags = IBV_SEND_SIGNALED ;
-    wr.next = NULL ;
-
-    struct downstreamSequence* downstreamSequence=(struct downstreamSequence*)(conn->routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement) ;
-//    unsigned long old_sequence=downstreamSequence->sequence ;
-
-//    downstreamSequence->sequence=0xffffffffffffffffUL ;
-//    BegLogLine(FXLOG_ITAPI_ROUTER)
-//      << "Trampling sequence from 0x" << (void *) old_sequence
-//      << " to 0x" << (void *) downstreamSequence->sequence
-//      << EndLogLine ;
-
-//    ((struct downstreamSequence*)(conn->routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement))->sequence = 0xffffffffffffffffULL ;
-    sge.addr = (uintptr_t) downstreamSequence ;
-    sge.length = sizeof(struct downstreamCompleteBuffer) ;
-    sge.lkey = conn->mr->lkey ;
-
-    wr.wr.rdma.remote_addr = conn->routerBuffer_raddr
-        + offsetof(struct routerBuffer, downstreamCompleteBuffer) ;
-//        + sizeof(struct ackBuffer) + sizeof(struct callBuffer) + sizeof(struct upstreamBuffer) + sizeof(struct downstreamBuffer);
-    wr.wr.rdma.rkey = conn->routerBuffer_rkey ;
-
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "conn=0x" << (void *) conn
-      << " wr.wr_id=0x" << (void *) wr.wr_id
-      << " qp=0x" << (void *) conn->qp
-      << " sge.addr=0x" << (void *) sge.addr
-      << " RDMA-ing from wr.wr.rdma.remote_addr=0x" << (void *) wr.wr.rdma.remote_addr
-      << " wr.wr.rdma.rkey=0x" << (void *) wr.wr.rdma.rkey
-      << " sge.length=" << sge.length
-      << " sequence_in=" << conn->sequence_in
-      << " downstream_sequence=" << conn->downstream_sequence
-      << EndLogLine ;
-
-//    conn->sequence_out += 1 ;
-    conn->issuedDownstreamFetch=1 ;
-//    pthread_mutex_lock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-//    pthread_mutex_lock(&allConnectionMutex) ;
-    conn->ibv_send_last_optype = k_wc_downlink_complete_return ;
-    conn->ibv_post_send_count += 1 ;
-    int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
-//    pthread_mutex_unlock(&allConnectionMutex) ;
-//    pthread_mutex_unlock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-    StrongAssertLogLine(rc == 0)
-      << "ibv_post_send fails, rc=" << rc
-      << EndLogLine ;
-#endif
   }
-static void send_downstream_given_buffer_free(struct connection *conn) ;
-static void send_downstream(struct connection *conn, size_t length)
-  {
-    static int send_downstream_count ;
-    static int send_downstream_without_fetching_count ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *) conn
-        << " length=" << length
-        << EndLogLine ;
-    conn->downstream_length = length ;
-    unsigned long conn_downstream_sequence = conn->downstream_sequence ;
-    BegLogLine(FXLOG_ITAPI_ROUTER_EPOLL_SPIN)
-        << "conn=0x" << (void *) conn
-        << " conn_downstream_sequence=" << conn_downstream_sequence
-        << EndLogLine ;
-    StrongAssertLogLine(conn->downstreamSequenceAtCall <= conn->downstream_sequence)
-      << "Downstream has run ahead, conn->downstreamSequenceAtCall=" << conn->downstreamSequenceAtCall
-      << " conn_downstream_sequence=" << conn_downstream_sequence
-      << EndLogLine ;
-    if ( conn->downstreamSequenceAtCall == conn_downstream_sequence )
-        {
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "conn=0x" << (void *) conn
-          << " clientRank=" << conn->clientRank
-          << " conn_downstream_sequence=" << conn_downstream_sequence
-          << " buffer free on remote, sending downstream, length=" << conn->downstream_length
-          << EndLogLine ;
-//          *downstreamlP = conn->downstream_length ;
-#if 0
-          struct downstreamLength * downstreamLengthP = (struct downstreamLength *)&((conn->routerBuffer).downstreamLengthBuffer) ;
-          downstreamLengthP->sequence=conn->downstream_sequence ;
-          downstreamLengthP->length=conn->downstream_length ;
-          send_downstream_without_fetching_count += 1 ;
-          send_downstream_given_buffer_free(conn) ;
-#endif
-      }
-    else
-      {
-        fetch_downstreamCompleteBuffer(conn) ;
-      }
-    send_downstream_count += 1 ;
-    if ( send_downstream_count >= 4096 )
-      {
-        BegLogLine(1)
-            << "Sends downstream without fetching downstream sequence " << send_downstream_without_fetching_count
-            << "/4096"
-            << EndLogLine  ;
-        send_downstream_count=0 ;
-        send_downstream_without_fetching_count=0 ;
-      }
-  }
-static void send_downstream_given_buffer_free(struct connection *conn) ;
-
-static void send_downstream_if_buffer_free(struct connection *conn)
-  {
-#if 0
-    static unsigned int send_downstream_if_buffer_free_count ;
-    static unsigned int send_downstream_if_buffer_free_retry_count ;
-    struct downstreamSequence* downstreamSequence=(struct downstreamSequence*)(conn->routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement) ;
-    volatile unsigned long *downstreamSequenceP = (volatile unsigned long *)&(downstreamSequence->sequence) ;
-    unsigned long downstreamSequenceNumber =*downstreamSequenceP ;
-    unsigned long conn_downstream_sequence = conn->downstream_sequence ;
-    BegLogLine(FXLOG_ITAPI_ROUTER_EPOLL_SPIN)
-        << "conn=0x" << (void *) conn
-        << " downstreamlSequenceP=0x" << (void *) downstreamSequenceP
-        << " downstreamSequenceNumber=" << downstreamSequenceNumber
-        << " conn_downstream_sequence=" << conn_downstream_sequence
-        << EndLogLine ;
-    StrongAssertLogLine(downstreamSequenceNumber <= conn->downstream_sequence)
-      << "Downstream has run ahead, downstreamSequenceNumber=" << downstreamSequenceNumber
-      << " conn_downstream_sequence=" << conn_downstream_sequence
-      << EndLogLine ;
-    if ( downstreamSequenceNumber == conn_downstream_sequence )
-        {
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "conn=0x" << (void *) conn
-          << " clientRank=" << conn->clientRank
-          << " downstreamlSequenceP=0x" << (void *) downstreamSequenceP
-          << " downstreamSequenceNumber=" << downstreamSequenceNumber
-          << " conn_downstream_sequence=" << conn_downstream_sequence
-          << " buffer free on remote, sending downstream, length=" << conn->downstream_length
-          << " downstreamSequence=0x" << (void *)downstreamSequenceNumber
-          << EndLogLine ;
-//          *downstreamlP = conn->downstream_length ;
-          struct downstreamLength * downstreamLengthP = (struct downstreamLength *)&((conn->routerBuffer).downstreamLengthBuffer) ;
-          downstreamLengthP->sequence=conn->downstream_sequence ;
-          downstreamLengthP->length=conn->downstream_length ;
-          send_downstream_given_buffer_free(conn) ;
-//          BegLogLine(FXLOG_ITAPI_ROUTER_LW)
-//            << "conn=" << conn
-//            << " clientRank=" << conn->clientRank
-//            << " downstreamlSequenceP=0x" << (void *) downstreamSequenceP
-//            << " downstreamSequenceNumber=" << downstreamSequenceNumber
-//            << " conn_downstream_sequence=" << conn_downstream_sequence
-//            << " buffer free on remote, sending downstream, length=" << conn->downstream_length
-//            << " downstreamSequence=0x" << (void *)downstreamSequenceNumber
-//            << EndLogLine ;
-        }
-    else
-      {
-        BegLogLine(FXLOG_ITAPI_ROUTER_EPOLL_SPIN)
-            << "Buffer not free on remote, retrying, conn=0x" << (void *) conn
-            << " downstreamSequenceNumber=" << downstreamSequenceNumber
-            << " conn_downstream_sequence=" << conn_downstream_sequence
-            << EndLogLine ;
-        StrongAssertLogLine(conn_downstream_sequence == downstreamSequenceNumber+1)
-          << "Downstream sequencing error, conn_downstream_sequence=" << conn_downstream_sequence
-          << " downstreamSequenceNumber=" << downstreamSequenceNumber
-          << EndLogLine ;
-        send_downstream_if_buffer_free_retry_count += 1 ;
-        fetch_downstreamCompleteBuffer(conn) ;
-      }
-    send_downstream_if_buffer_free_count += 1 ;
-    if ( send_downstream_if_buffer_free_count >= 4096 )
-      {
-        BegLogLine(1)
-            << "Downstream buffer retries " << send_downstream_if_buffer_free_retry_count
-            << "/4096"
-            << EndLogLine ;
-        send_downstream_if_buffer_free_count = 0 ;
-        send_downstream_if_buffer_free_retry_count = 0 ;
-      }
-#endif
-  }
-static void indicate_downlink_complete(struct connection *conn)
-  {
-#if 0
-    struct ibv_send_wr wr2;
-    struct ibv_send_wr *bad_wr = NULL;
-    struct ibv_sge sge2;
-    memset(&wr2, 0, sizeof(wr2));
-    wr2.wr_id = (uintptr_t) & (conn->endio_downlink_complete) ;
-    wr2.opcode = IBV_WR_RDMA_WRITE ;
-    wr2.sg_list = &sge2 ;
-    wr2.num_sge = 1 ;
-    wr2.send_flags = IBV_SEND_SIGNALED ;
-    wr2.next = NULL ;
-
-    sge2.addr = (uintptr_t) &(conn->routerBuffer.downstreamLengthBuffer) ;
-    sge2.length = sizeof(struct downstreamLengthBuffer) ;
-    sge2.lkey = conn->mr->lkey ;
-
-    wr2.wr.rdma.remote_addr = conn->routerBuffer_raddr + offsetof(struct routerBuffer, downstreamLengthBuffer) ;
-//        + sizeof(struct ackBuffer) + sizeof(struct callBuffer) + sizeof(struct upstreamBuffer) + sizeof(struct downstreamBuffer);
-    wr2.wr.rdma.rkey = conn->routerBuffer_rkey ;
-
-    struct downstreamLength * downstreamLength=(struct downstreamLength *)&(conn->routerBuffer.downstreamLengthBuffer) ;
-    BegLogLine(FXLOG_ITAPI_ROUTER_LW)
-      << "conn=0x" << (void *) conn
-      << " clientRank=" << conn->clientRank
-      << " length=" << downstreamLength->length
-      << " sequence=" << downstreamLength->sequence
-      << EndLogLine ;
-
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "conn=0x" << (void *) conn
-      << " qp=0x" << (void *) conn->qp
-      << " wr2.wr_id=0x" << (void *) wr2.wr_id
-      << " sge2.addr=0x" << (void *) sge2.addr
-      << " sge2.length=" << sge2.length
-      << " RDMA-ing to wr2.wr.rdma.remote_addr=0x" << (void *) wr2.wr.rdma.remote_addr
-      << " wr2.wr.rdma.rkey=0x" << (void *) wr2.wr.rdma.rkey
-      << " sequence_in=" << conn->sequence_in
-      << " downstream_sequence=" << conn->downstream_sequence
-      << EndLogLine ;
-
-//    conn->sequence_out += 2 ;
-//    pthread_mutex_lock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-//    pthread_mutex_lock(&allConnectionMutex) ;
-    conn->ibv_send_last_optype = k_wc_downlink_complete ;
-    conn->ibv_post_send_count += 1 ;
-    int rc=ibv_post_send(conn->qp, &wr2, &bad_wr);
-//    pthread_mutex_unlock(&allConnectionMutex) ;
-//    pthread_mutex_unlock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-    StrongAssertLogLine(rc == 0)
-      << "ibv_post_send fails, rc=" << rc
-      << EndLogLine ;
-#endif
-  }
-static void send_downstream_given_buffer_free(struct connection *conn)
-  {
-#if 0
-    struct ibv_send_wr wr;
-    struct ibv_send_wr *bad_wr = NULL;
-    struct ibv_sge sge;
-    size_t length = conn->downstream_length ;
-    memset(&wr, 0, sizeof(wr));
-
-    wr.wr_id = (uintptr_t) &(conn->endio_downlink ) ;
-    wr.opcode = IBV_WR_RDMA_WRITE;
-    wr.sg_list = &sge;
-    wr.num_sge = 1;
-    wr.send_flags = IBV_SEND_SIGNALED;
-    wr.next = NULL ;
-
-    sge.addr = (uintptr_t)&(conn->routerBuffer.downstreamBuffer);
-    sge.length = sizeof(struct downstreamBuffer) ;
-    sge.lkey = conn->mr->lkey ;
-
-    wr.wr.rdma.remote_addr = conn->routerBuffer_raddr + offsetof(struct routerBuffer, downstreamBuffer) ;
-//        + sizeof(struct ackBuffer) + sizeof(struct callBuffer) + sizeof(struct upstreamBuffer);
-    wr.wr.rdma.rkey = conn->routerBuffer_rkey ;
-
-
-
-    BegLogLine(FXLOG_ITAPI_ROUTER_LW)
-      << "conn=0x" << (void *) conn
-      << " clientRank=" << conn->clientRank
-      << " wr.wr_id=0x" << (void *) wr.wr_id
-      << " qp=0x" << (void *) conn->qp
-      << " sge.addr=0x" << (void *) sge.addr
-      << " RDMA-ing to wr.wr.rdma.remote_addr=0x" << (void *) wr.wr.rdma.remote_addr
-      << " wr.wr.rdma.rkey=0x" << (void *) wr.wr.rdma.rkey
-      << " sequence_in=" << conn->sequence_in
-      << " downstream_sequence=" << conn->downstream_sequence
-      << EndLogLine ;
-
-//    conn->sequence_out += 2 ;
-//    pthread_mutex_lock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-//    pthread_mutex_lock(&allConnectionMutex) ;
-    conn->ibv_send_last_optype = k_wc_downlink ;
-    conn->ibv_post_send_count += 1 ;
-    int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
-//    pthread_mutex_unlock(&allConnectionMutex) ;
-//    pthread_mutex_unlock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-    StrongAssertLogLine(rc == 0)
-      << "ibv_post_send fails, rc=" << rc
-      << EndLogLine ;
-#endif
-  }
-
 static
 inline
 iWARPEM_Status_t
@@ -1325,323 +1034,257 @@ RecvRaw( iWARPEM_Router_Endpoint_t *rEP, char *buff, int len, int* wlen )
   return status;
 }
 
-
 // Point the connection at the start of its downlink buffer
 static void rewind_downstream_buffer(struct connection *conn)
   {
-#if 0
-    char * downstreamBufferElementPtr = (char *)(conn->routerBuffer.downstreamBuffer.downstreamBufferElement) ;
-    unsigned long * downstream_sequence_ptr = (unsigned long *)downstreamBufferElementPtr ;
-    size_t * downstream_length_ptr = (size_t *) downstream_sequence_ptr+1 ;
-//    conn->downstream_sequence += 1 ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "Downstream sequence number=" << conn->downstream_sequence
-      << " conn=0x" << (void *) conn
-      << EndLogLine ;
-    *downstream_sequence_ptr = conn->downstream_sequence ;
-//    size_t * downstream_length_ptr = (size_t *) downstream_sequence_ptr+1 ;
-//    conn->downstream_sequence += 1 ;
-#endif
     BegLogLine(FXLOG_ITAPI_ROUTER)
       << "Downstream sequence number=" << conn->downstream_sequence
       << " conn=0x" << (void *) conn
       << EndLogLine ;
     conn->downstream_length = 2*sizeof(unsigned long) ;
   }
+
 static void add_conn_to_flush_queue(struct connection *conn)
+{
+  LockDownStreamFlush();
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "conn=0x" << (void *) conn
+    << " gFirstConnToAck=0x" << (void*)gFirstConnToAck
+    << " mNextConnToAck=0x" << (void*)conn->mNextConnToAck
+    << EndLogLine ;
+
+  int ThisFlushListIndex = gFlushListIndex;
+
+  // never try to add a connection that's already in the list
+  // it's part of the list if the next ptr is != NULL
+  if((conn != gFirstConnToAck) && (conn->mNextConnToAck[ ThisFlushListIndex ] == NULL))
   {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "conn=0x" << (void *) conn
-      << " will_flush_this_connection=" <<  conn->will_flush_this_connection
-      << EndLogLine ;
-//    if ( 0 == conn->will_flush_this_connection)
-      {
-        conn->will_flush_this_connection=1 ;
-        conn->next_conn_to_flush = first_connection_to_flush ;
-        first_connection_to_flush = conn ;
-      }
+    conn->mNextConnToAck[ ThisFlushListIndex ] = gFirstConnToAck;
+    gFirstConnToAck = conn ;
+    if( conn->mNextConnToAck[ ThisFlushListIndex ] == NULL )
+      conn->mNextConnToAck[ ThisFlushListIndex ] = FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR;
   }
+  UnlockDownStreamFlush();
+}
 static bool flush_downstream(struct connection *conn)
+{
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "Flushing conn=0x" << (void *) conn
+    << EndLogLine ;
+  class ion_cn_all_buffer *buffer=&conn->mBuffer ;
+  bool rc_transmit=buffer->Transmit(conn) ;
+  if( rc_transmit )
   {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "Flushing conn=0x" << (void *) conn
-        << EndLogLine ;
-    class ion_cn_all_buffer *buffer=&conn->mBuffer ;
-    bool rc_transmit=buffer->Transmit(conn) ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "rc_transmit=" << rc_transmit
-      << EndLogLine ;
-    return rc_transmit ;
+    conn->mSendAck=false ;
   }
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "rc_transmit=" << rc_transmit
+    << EndLogLine ;
+  return rc_transmit ;
+}
 
 static void flush_all_downstream(void)
-  {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "Flushing all, first_connection_to_flush=0x" << (void *) first_connection_to_flush
-        << EndLogLine ;
-    struct connection *conn=first_connection_to_flush ;
-    first_connection_to_flush=NULL ;
-    while (conn != NULL )
-      {
-        bool rc_flush=flush_downstream(conn) ;
-        conn->will_flush_this_connection = 0 ;
-        struct connection *next_conn = conn->next_conn_to_flush ;
-        conn->next_conn_to_flush=NULL ;
-        if ( ! rc_flush )
-          {
-            // Re-queue this connection because the attempted transmit didn't go anywhere
-            add_conn_to_flush_queue(conn) ;
-          }
-        conn=next_conn ;
-      }
-  }
+{
+  LockDownStreamFlush();
 
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "Flushing all, first_connection_to_flush=0x" << (void *)gFirstConnToAck
+    << " Index: " << gFlushListIndex
+    << EndLogLine ;
+  gFlushConnectionCount++;
+  struct connection *conn=gFirstConnToAck ;
+  gFirstConnToAck = FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR;
+  int ThisFlushListIndex = gFlushListIndex;
+  gFlushListIndex = 1 - gFlushListIndex;
+
+  UnlockDownStreamFlush();
+
+  while ( (conn != NULL) && (conn != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR) )
+  {
+    bool rc_flush=true;
+    if( (! conn->mDisconnecting) && conn->mBuffer.ReadyToTransmit())
+      rc_flush = flush_downstream(conn);
+    struct connection *next_conn = conn->mNextConnToAck[ ThisFlushListIndex ] ;
+    conn->mNextConnToAck[ ThisFlushListIndex ]=NULL ;
+
+    if( ! rc_flush )
+    {
+      // Re-queue this connection because the attempted transmit didn't go anywhere
+      add_conn_to_flush_queue(conn) ;
+    }
+    conn=next_conn ;
+  }
+}
 
 static void queue_downstream(struct connection *conn,unsigned int LocalEndpointIndex, const struct iWARPEM_Message_Hdr_t &rHdr, const char *rData)
+{
+  size_t TotalDataLen = rHdr.mTotalDataLen ;
+  if(conn->flushed_downstream)
   {
-    size_t TotalDataLen = rHdr.mTotalDataLen ;
-    if(conn->flushed_downstream)
-      {
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-            << "conn=0x" << (void *) conn
-            << " has been flushed"
-            << EndLogLine ;
-        conn->flushed_downstream=0 ;
-        wait_for_downstream_buffer(conn) ;
-        rewind_downstream_buffer(conn) ;
-      }
-    class ion_cn_all_buffer *buffer=&conn->mBuffer ;
-
-    // There must be room for a sentinel byte at the end of the buffer, because that is how the ION will
-    // determine that the RDMA is complete
-    if ( sizeof(LocalEndpointIndex) + sizeof(rHdr) + TotalDataLen >= buffer->SpaceInBuffer())
-      {
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-            << "conn=0x" << (void *) conn
-            << " buffer fills, flushing all downstream"
-            << EndLogLine ;
-        do
-          {
-            flush_all_downstream() ;
-            BegLogLine(FXLOG_ITAPI_ROUTER)
-              << "conn=0x" << (void *) conn
-              << " will_flush_this_connection=" << conn->will_flush_this_connection
-              << EndLogLine ;
-          } while (conn->will_flush_this_connection ) ;
-      }
-    if(conn->flushed_downstream)
-      {
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-            << "conn=0x" << (void *) conn
-            << " has been flushed"
-            << EndLogLine ;
-        conn->flushed_downstream=0 ;
-        wait_for_downstream_buffer(conn) ;
-        rewind_downstream_buffer(conn) ;
-      }
-    StrongAssertLogLine(sizeof(LocalEndpointIndex) + sizeof(rHdr) + TotalDataLen < buffer->SpaceInBuffer())
+    BegLogLine(FXLOG_ITAPI_ROUTER)
       << "conn=0x" << (void *) conn
-      << " message length=" << TotalDataLen
-      << " overflows buffer, SpaceInBuffer=" << buffer->SpaceInBuffer()
+      << " has been flushed"
       << EndLogLine ;
-// We have to hold the transmit mutex over this, otherwise we get deadlocks if the receive thread sends an
-// ack when this is part-done
-    buffer->LockTransmit() ;
-    buffer->AppendToBuffer(&LocalEndpointIndex,sizeof(LocalEndpointIndex)) ;
-    buffer->AppendToBuffer(&rHdr,sizeof(rHdr)) ;
-    buffer->AppendToBuffer(rData,TotalDataLen) ;
-    add_conn_to_flush_queue(conn) ;
-    buffer->UnlockTransmit() ;
+    conn->flushed_downstream=0 ;
+    wait_for_downstream_buffer(conn) ;
+    rewind_downstream_buffer(conn) ;
   }
+  class ion_cn_all_buffer *buffer=&conn->mBuffer ;
+
+  // There must be room for a sentinel byte at the end of the buffer, because that is how the ION will
+  // determine that the RDMA is complete
+  if ( sizeof(LocalEndpointIndex) + sizeof(rHdr) + TotalDataLen >= buffer->SpaceInBuffer())
+  {
+    BegLogLine(FXLOG_ITAPI_ROUTER | FXLOG_ITAPI_ROUTER_FRAMES)
+      << "conn=0x" << (void *) conn
+      << " buffer fills, flushing all downstream"
+      << EndLogLine ;
+    bool rc_flushed = true;
+    do
+    {
+      LockDownStreamFlush();
+      rc_flushed = flush_downstream( conn ) ;
+      BegLogLine(FXLOG_ITAPI_ROUTER)
+        << "conn=0x" << (void *) conn
+        << " flushed=" << rc_flushed
+        << EndLogLine ;
+      UnlockDownStreamFlush();
+      // no need to check rc_flushed since flush_downstream resets will_flush_this_connection
+    } while( ! rc_flushed );
+  }
+  if(conn->flushed_downstream)
+  {
+    BegLogLine(FXLOG_ITAPI_ROUTER)
+      << "conn=0x" << (void *) conn
+      << " has been flushed"
+      << EndLogLine ;
+    conn->flushed_downstream=0 ;
+    wait_for_downstream_buffer(conn) ;
+    rewind_downstream_buffer(conn) ;
+  }
+  StrongAssertLogLine(sizeof(LocalEndpointIndex) + sizeof(rHdr) + TotalDataLen < buffer->SpaceInBuffer())
+    << "conn=0x" << (void *) conn
+    << " message length=" << TotalDataLen
+    << " overflows buffer, SpaceInBuffer=" << buffer->SpaceInBuffer()
+    << EndLogLine ;
+
+  // We have to hold the transmit mutex over this, otherwise we get deadlocks if the receive thread sends an
+  // ack when this is part-done
+  buffer->LockTransmit() ;
+  buffer->AppendToBuffer(&LocalEndpointIndex,sizeof(LocalEndpointIndex)) ;
+  buffer->AppendToBuffer(&rHdr,sizeof(rHdr)) ;
+  buffer->AppendToBuffer(rData,TotalDataLen) ;
+  buffer->UnlockTransmit() ;
+
+  add_conn_to_flush_queue(conn) ;
+}
 
 static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
+{
+  StrongAssertLogLine( aServerEP != NULL )
+    << " invalid router endpoint"
+    << EndLogLine ;
+  uint16_t client;
+  iWARPEM_Msg_Type_t msg_type = aServerEP->GetNextMessageType( &client );
+
+  StrongAssertLogLine(msg_type != iWARPEM_UNKNOWN_REQ_TYPE)
+    << "Indicated iWARPEM_UNKNOWN_REQ_TYPE, peer has probably gone down, no recovery."
+    << EndLogLine ;
+
+  Crossbar_Entry_t *cb = aServerEP->GetClientEP( client );
+  StrongAssertLogLine( cb != NULL )
+    << "client=" << client
+    << " has no crossbar entry"
+    << EndLogLine ;
+
+  struct connection *conn = (struct connection*)cb->getDownLink();
+
+  if (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE )
   {
-    StrongAssertLogLine( aServerEP != NULL )
-      << " invalid router endpoint"
+    BegLogLine(1)
+      << "LocalHdr.mMsg_Type=" << msg_type
+      << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
+      << " port=" << conn->upstream_ip_port[ client ]
+      << ". Hanging for diagnosis"
       << EndLogLine ;
-    uint16_t client;
-    iWARPEM_Msg_Type_t msg_type = aServerEP->GetNextMessageType( &client );
-
-    StrongAssertLogLine(msg_type != iWARPEM_UNKNOWN_REQ_TYPE)
-      << "Indicated iWARPEM_UNKNOWN_REQ_TYPE, peer has probably gone down, no recovery."
-      << EndLogLine ;
-
-    Crossbar_Entry_t *cb = aServerEP->GetClientEP( client );
-    StrongAssertLogLine( cb != NULL )
-      << "client=" << client
-      << " has no crossbar entry"
-      << EndLogLine ;
-
-    struct connection *conn = (struct connection*)cb->getDownLink();
-
-    if (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE )
-      {
-        BegLogLine(1)
-          << "LocalHdr.mMsg_Type=" << msg_type
-          << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
-          << " port=" << conn->upstream_ip_port[ client ]
-          << ". Hanging for diagnosis"
-          << EndLogLine ;
-        printf("mMsg_Type is out of range, hanging for diagnosis\n") ;
-        fflush(stdout) ;
-        for (;;) { sleep(1) ; }
-      }
-
-// Currently we spin in wait_for_downstream_buffer()
-//    if ( conn->localDownstreamSequence == conn->downstream_sequence)
-//      {
-//        BegLogLine(FXLOG_ITAPI_ROUTER_EPOLL_SPIN)
-//            << "conn=0x" << (void *) conn
-//            << " at the moment because downstream buffer is busy. Will try again later."
-//            << EndLogLine ;
-//        gDownstreamWaitqueue.push( aServerEP );
-//        conn->stuck_epoll_count += 1 ;
-//        if(stuck(conn))
-//        {
-//          struct downstreamSequence* downstreamSequence=(struct downstreamSequence*)(conn->routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement) ;
-//          volatile unsigned long *downstreamSequenceP = (volatile unsigned long *)&(downstreamSequence->sequence) ;
-//          unsigned long downstreamSequenceNumber =*downstreamSequenceP ;
-//          unsigned long conn_downstream_sequence = conn->downstream_sequence ;
-//          BegLogLine(FXLOG_ITAPI_ROUTER_LW)
-//            << "conn=0x" << (void *) conn
-//            << " clientRank=" << conn->clientRank
-//            << " downstreamlSequenceP=0x" << (void *) downstreamSequenceP
-//            << " downstreamSequenceNumber=" << downstreamSequenceNumber
-//            << " conn_downstream_sequence=" << conn_downstream_sequence
-//            << " issuedDownstreamFetch=" << conn->issuedDownstreamFetch
-//            << " ibv_post_recv_count=" << conn->ibv_post_recv_count
-//            << " ibv_post_send_count=" << conn->ibv_post_send_count
-//            << " ibv_poll_cq_recv_count=" << conn->ibv_poll_cq_recv_count
-//            << " ibv_poll_cq_send_count=" << conn->ibv_poll_cq_send_count
-//            << " ibv_send_last_optype=" << conn->ibv_send_last_optype
-//            << EndLogLine ;
-//          StrongAssertLogLine(downstreamSequenceNumber <= conn->downstream_sequence)
-//            << "Downstream has run ahead, downstreamSequenceNumber=" << downstreamSequenceNumber
-//            << " conn_downstream_sequence=" << conn_downstream_sequence
-//            << EndLogLine ;
-//        }
-//        return 1;
-//      }
-//    if(stuck(conn))
-//    {
-//      BegLogLine(FXLOG_ITAPI_ROUTER_LW)
-//        << "conn=0x" << (void *) conn
-//        << " clientRank=" << conn->clientRank
-//        << " now progressing, stuck_epoll_count was " << conn->stuck_epoll_count
-//        << EndLogLine ;
-//    }
-//    conn->stuck_epoll_count = 0 ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *) conn
-        << " client=" << client
-        << EndLogLine ;
-    struct iWARPEM_Message_Hdr_t *rHdr;
-    char *rData;
-
-    iWARPEM_Status_t status = aServerEP->ExtractNextMessage( &rHdr, &rData, &client );
-
-    if( status == IWARPEM_SUCCESS )
-    {
-      BegLogLine( 0 )
-        << "Forwarding downstream of client " << client
-        << " type: " << iWARPEM_Msg_Type_to_string( rHdr->mMsg_Type )
-        << " len: " << rHdr->mTotalDataLen
-        << EndLogLine;
-//      wait_for_downstream_buffer(conn) ;
-//      rewind_downstream_buffer(conn) ;
-      queue_downstream(conn,cb->getServerId(), *rHdr,rData) ;
-
-//      flush_downstream(conn) ;
-
-      // -> mostly diagnosis and aftermath
-      // Set up a local header to diagnose if Hdr is beibng trampled by an RDMA read
-      // tjcw: If it is, this doesn't really solve the exposure
-      size_t TotalDataLen = rHdr->mTotalDataLen ;
-#if 0
-      if (TotalDataLen > sizeof(struct downstreamBuffer)-(2*sizeof(unsigned long) + sizeof(unsigned int) + sizeof(struct iWARPEM_Message_Hdr_t)) )
-      {
-        BegLogLine(1)
-          << "LocalHdr.mTotalDataLen=" << rHdr->mTotalDataLen
-          << " too large for buffer. mMsg_Type=" << iWARPEM_Msg_Type_to_string(msg_type)
-          << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
-          << " port=" << conn->upstream_ip_port[ client ]
-          << EndLogLine ;
-        printf("mTotalDataLen is too large for buffer, hanging for diagnosis\n") ;
-        fflush(stdout) ;
-        for (;;) { sleep(1) ; }
-      }
-      StrongAssertLogLine(TotalDataLen <= sizeof(struct downstreamBuffer)-(sizeof(unsigned long) + sizeof(unsigned int) + sizeof(struct iWARPEM_Message_Hdr_t)))
-        << "TotalDataLen=" << TotalDataLen
-        << " too large for buffer. mMsg_Type=" << iWARPEM_Msg_Type_to_string(msg_type)
-        << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
-        << " port=" << conn->upstream_ip_port[ client ]
-        << EndLogLine ;
-#endif
-      BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << conn
-        << " mMsg_Type="<< iWARPEM_Msg_Type_to_string(msg_type)
-        << " TotalDataLen=" << TotalDataLen
-        << EndLogLine ;
-      report_hdr(*rHdr) ;
-      if (msg_type == iWARPEM_DISCONNECT_RESP_TYPE)
-        {
-          BegLogLine(FXLOG_ITAPI_ROUTER)
-              << "Forwarded a DISCONNECT RESPONSE message"
-              << EndLogLine ;
-          conn->mDisconnecting = true ;
-        }
-//      AssertLogLine(msg_type==Hdr->mMsg_Type && TotalDataLen == Hdr->mTotalDataLen)
-//        << "Hdr trampled, Hdr->mMsg_Type=" << Hdr->mMsg_Type
-//        << " Hdr->mTotalDataLen=" << Hdr->mTotalDataLen
-//        << " should be mMsg_Type=" << msg_type
-//        << " and TotalDataLen=" << TotalDataLen
-//        << EndLogLine ;
-    }
-    else
-    {
-      // TODO: This needs to send a close signal over virtual socket instead of removing
-      // the whole socket from epoll
-      aServerEP->CloseAllClients();  // needs more work...
-
-      int fd = aServerEP->GetRouterFd();
-      BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *) conn
-        << " LocalEndpointIndex=" << cb->getServerId()
-        << " close from upstream. Removing socket " << fd
-        << " from poll. This will cause the downstream client to lose activation."
-        << EndLogLine ;
-
-      struct epoll_event EP_Event;
-      EP_Event.events = EPOLLIN;
-      // This will result in a duplicate EPOLL_CTL_DEL when we get a close from downstream, but
-      // that doesn't seem to matter
-      int epoll_ctl_rc = epoll_ctl( epoll_fd,
-                                    EPOLL_CTL_DEL,
-                                    fd,
-                                    & EP_Event );
-
-      StrongAssertLogLine( epoll_ctl_rc == 0 )
-        << "epoll_ctl() failed"
-        << " errno: " << errno
-        << EndLogLine;
-
-      // Synthesise a 'close' and send downstream
-      struct iWARPEM_Message_Hdr_t Hdr ;
-
-//      wait_for_downstream_buffer(conn) ;
-//      rewind_downstream_buffer(conn) ;
-      Hdr.mMsg_Type = iWARPEM_SOCKET_CLOSE_TYPE ;
-      Hdr.mTotalDataLen = 0 ;
-      queue_downstream(conn,cb->getServerId(), Hdr,NULL) ;
-
-//      flush_downstream(conn) ;
-
-//      *downstream_length_ptr = 2*sizeof(unsigned long) + sizeof(unsigned int) + sizeof(struct iWARPEM_Message_Hdr_t) ;
-//      send_downstream(conn, 2*sizeof(unsigned long) + sizeof(unsigned int) + sizeof(struct iWARPEM_Message_Hdr_t)) ;
-
-    }
-    return 0;
+    printf("mMsg_Type is out of range, hanging for diagnosis\n") ;
+    fflush(stdout) ;
+    for (;;) { sleep(1) ; }
   }
+
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "conn=0x" << (void *) conn
+    << " client=" << client
+    << " msg_type=" << msg_type
+    << EndLogLine ;
+  struct iWARPEM_Message_Hdr_t *rHdr;
+  char *rData;
+
+  iWARPEM_Status_t status = aServerEP->ExtractNextMessage( &rHdr, &rData, &client );
+
+  if( status == IWARPEM_SUCCESS )
+  {
+    BegLogLine( 0 )
+      << "Forwarding downstream of client " << client
+      << " type: " << iWARPEM_Msg_Type_to_string( rHdr->mMsg_Type )
+      << " len: " << rHdr->mTotalDataLen
+      << EndLogLine;
+    queue_downstream(conn,cb->getServerId(), *rHdr,rData) ;
+
+    // -> mostly diagnosis and aftermath
+    // Set up a local header to diagnose if Hdr is beibng trampled by an RDMA read
+    // tjcw: If it is, this doesn't really solve the exposure
+    size_t TotalDataLen = rHdr->mTotalDataLen ;
+    BegLogLine(FXLOG_ITAPI_ROUTER)
+      << "conn=0x" << conn
+      << " mMsg_Type="<< iWARPEM_Msg_Type_to_string(msg_type)
+      << " TotalDataLen=" << TotalDataLen
+      << EndLogLine ;
+    report_hdr(*rHdr) ;
+    if (msg_type == iWARPEM_DISCONNECT_RESP_TYPE)
+    {
+      BegLogLine(FXLOG_ITAPI_ROUTER)
+        << "Forwarded a DISCONNECT RESPONSE message"
+        << EndLogLine ;
+    }
+  }
+  else
+  {
+    // TODO: This needs to send a close signal over virtual socket instead of removing
+    // the whole socket from epoll
+    aServerEP->CloseAllClients();  // needs more work...
+
+    int fd = aServerEP->GetRouterFd();
+    BegLogLine(FXLOG_ITAPI_ROUTER)
+      << "conn=0x" << (void *) conn
+      << " LocalEndpointIndex=" << cb->getServerId()
+      << " close from upstream. Removing socket " << fd
+      << " from poll. This will cause the downstream client to lose activation."
+      << EndLogLine ;
+
+    struct epoll_event EP_Event;
+    EP_Event.events = EPOLLIN;
+    // This will result in a duplicate EPOLL_CTL_DEL when we get a close from downstream, but
+    // that doesn't seem to matter
+    int epoll_ctl_rc = epoll_ctl( epoll_fd,
+                                  EPOLL_CTL_DEL,
+                                  fd,
+                                  & EP_Event );
+
+    StrongAssertLogLine( epoll_ctl_rc == 0 )
+      << "epoll_ctl() failed"
+      << " errno: " << errno
+      << EndLogLine;
+
+    // Synthesise a 'close' and send downstream
+    struct iWARPEM_Message_Hdr_t Hdr ;
+
+    Hdr.mMsg_Type = iWARPEM_SOCKET_CLOSE_TYPE ;
+    Hdr.mTotalDataLen = 0 ;
+    queue_downstream(conn,cb->getServerId(), Hdr,NULL) ;
+  }
+  return 0;
+}
 static int epoll_wait_handling_eintr(int epoll_fd, struct epoll_event *events, int events_size, int timeout)
   {
     BegLogLine(FXLOG_ITAPI_ROUTER_EPOLL_SPIN)
@@ -1661,115 +1304,82 @@ static int epoll_wait_handling_eintr(int epoll_fd, struct epoll_event *events, i
     return nfds ;
   }
 void * polling_thread(void *arg)
+{
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "Polling starting"
+    << EndLogLine ;
+  struct epoll_record * drc_serv_record = (struct epoll_record *) malloc(sizeof(struct epoll_record)) ;
+  drc_serv_record->conn = NULL ;
+  drc_serv_record->fd=new_drc_serv_socket ;
+  struct epoll_event ev ;
+  ev.events = EPOLLIN ;
+  ev.data.ptr = ( void *) drc_serv_record ;
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "Adding fd=" << new_drc_serv_socket
+    << " to epoll"
+    << EndLogLine ;
+  int rc=epoll_ctl(epoll_fd, EPOLL_CTL_ADD, new_drc_serv_socket, &ev) ;
+  AssertLogLine(rc == 0 )
+    << "epoll_ctl failed, errno=" << errno
+    << EndLogLine ;
+
+  for(;;)
   {
+    struct epoll_event events[k_max_epoll] ;
+    // Handle all the data in the sockets before we flush all downstream
     BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "Polling starting"
+      << "Blocking on epoll wait"
+      << EndLogLine ;
+    int nfds = epoll_wait_handling_eintr(epoll_fd, events, k_max_epoll, -1) ;
+    AssertLogLine(nfds != -1)
+      << "epoll_wait failed, errno=" << errno
+      << EndLogLine ;
+
+    BegLogLine(FXLOG_ITAPI_ROUTER)
+      << "epoll_wait returns, nfds=" << nfds
+      << EndLogLine ;
+    for ( int n=0;n<nfds; n+=1)
+    {
+      struct epoll_record * ep = (struct epoll_record *)events[n].data.ptr ;
+      uint32_t epoll_events = events[n].events ;
+      iWARPEM_Router_Endpoint_t *conn = ep->conn ;
+      int fd=ep->fd ;
+      BegLogLine(FXLOG_ITAPI_ROUTER)
+        << "conn=0x" << (void *) conn
+        << " fd=" << fd
         << EndLogLine ;
-    struct epoll_record * drc_serv_record = (struct epoll_record *) malloc(sizeof(struct epoll_record)) ;
-    drc_serv_record->conn = NULL ;
-    drc_serv_record->fd=new_drc_serv_socket ;
-    struct epoll_event ev ;
-    ev.events = EPOLLIN ;
-    ev.data.ptr = ( void *) drc_serv_record ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "Adding fd=" << new_drc_serv_socket
-      << " to epoll"
-      << EndLogLine ;
-    int rc=epoll_ctl(epoll_fd, EPOLL_CTL_ADD, new_drc_serv_socket, &ev) ;
-    AssertLogLine(rc == 0 )
-      << "epoll_ctl failed, errno=" << errno
-      << EndLogLine ;
-
-    for(;;)
+      if ( conn == NULL)
       {
-        struct epoll_event events[k_max_epoll] ;
-        // Handle all the data in the sockets before we flush all downstream
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "Blocking on epoll wait"
-          << EndLogLine ;
-        int nfds = epoll_wait_handling_eintr(epoll_fd, events, k_max_epoll, -1) ;
-//        if ( 0 == nfds)
-//          {
-//            BegLogLine(FXLOG_ITAPI_ROUTER)
-//              << "epoll_wait returns, nfds=0, flushing all downstream"
-//              << EndLogLine ;
-//            flush_all_downstream() ;
-//            nfds = epoll_wait_handling_eintr(epoll_fd, events, k_max_epoll, -1) ;
-//          }
+        StrongAssertLogLine( fd == new_drc_serv_socket )
+          << "Receiving data on an unknown and/or unconnected socket. Cannot proceed."
+          << " fd= " << fd
+          << " expected ctrl_fd= " << new_drc_serv_socket
+          << EndLogLine;
 
-        AssertLogLine(nfds != -1)
-          << "epoll_wait failed, errno=" << errno
-          << EndLogLine ;
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "epoll_wait returns, nfds=" << nfds
-          << EndLogLine ;
-        for ( int n=0;n<nfds; n+=1)
-          {
-            struct epoll_record * ep = (struct epoll_record *)events[n].data.ptr ;
-            uint32_t epoll_events = events[n].events ;
-//            AssertLogLine((! (epoll_events & EPOLLERR)) && (! (epoll_events & EPOLLHUP)))
-//              << "Error or hangup, 0x" << (void *) epoll_events
-//              << EndLogLine ;
-            iWARPEM_Router_Endpoint_t *conn = ep->conn ;
-            int fd=ep->fd ;
-            BegLogLine(FXLOG_ITAPI_ROUTER)
-              << "conn=0x" << (void *) conn
-              << " fd=" << fd
-              << EndLogLine ;
-            if ( conn == NULL)
-              {
-              StrongAssertLogLine( fd == new_drc_serv_socket )
-                << "Receiving data on an unknown and/or unconnected socket. Cannot proceed."
-                << " fd= " << fd
-                << " expected ctrl_fd= " << new_drc_serv_socket
-                << EndLogLine;
+        iWARPEM_MultiplexedSocketControl_Hdr_t ControlHdr;
+        int rlen;
+        int istatus = read_from_socket( fd,
+                                        (char *) & ControlHdr,
+                                        sizeof( iWARPEM_MultiplexedSocketControl_Hdr_t ),
+                                        & rlen );
+        process_control_message(ControlHdr);
 
-              iWARPEM_MultiplexedSocketControl_Hdr_t ControlHdr;
-              int rlen;
-              int istatus = read_from_socket( fd,
-                                              (char *) & ControlHdr,
-                                              sizeof( iWARPEM_MultiplexedSocketControl_Hdr_t ),
-                                              & rlen );
-              process_control_message(ControlHdr);
-
-              }
-            else
-              {
-                int status;
-                do
-                {
-                  status = process_downlink( conn ) ;
-                } while ( (status == 0) && conn->RecvDataAvailable() );
-
-              }
-// This logic now done in individual queue_downstreams
-//            while( !gDownstreamWaitqueue.empty() )
-//            {
-//              conn = gDownstreamWaitqueue.front();
-//              gDownstreamWaitqueue.pop();
-//              int status;
-//              do
-//              {
-//                status = process_downlink( conn ) ;
-//              } while ( (status == 0) && conn->RecvDataAvailable() );
-//            }
-          }
-        struct connection * connection_to_flush=first_connection_to_flush ;
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "connection_to_flush=0x" << connection_to_flush
-          << EndLogLine ;
-        while (connection_to_flush)
-          {
-            flush_all_downstream() ;
-            connection_to_flush=first_connection_to_flush ;
-            BegLogLine(FXLOG_ITAPI_ROUTER && connection_to_flush)
-              << "Still something in downstream flush queue, connection_to_flush= " << connection_to_flush
-              << EndLogLine ;
-          }
       }
+      else
+      {
+        int status;
+        do
+        {
+          status = process_downlink( conn ) ;
+        } while ( (status == 0) && conn->RecvDataAvailable() );
+      }
+    }
 
-    return NULL ;
+    if( nfds == 0 )
+      flush_all_downstream();
   }
+  return NULL ;
+}
 static void setup_polling_thread(void)
   {
     epoll_fd=epoll_create(4097) ;
@@ -2073,10 +1683,7 @@ void FlushMarkedUplinks()
       for( int n=0; n<IT_API_MULTIPLEX_MAX_PER_SOCKET; n++ )
       {
         if( (*ServerEP)->IsValidClient( n ) )
-        {
           Crossbar_Entry_t *cb = (*ServerEP)->GetClientEP( n );
-          ((struct connection*)cb->getDownLink())->upstream_buffer_busy = 0;
-        }
       }
     }
     ServerEP++;
@@ -2157,59 +1764,6 @@ static void process_uplink_element(struct connection *conn, unsigned int LocalEn
       break ;
     }
   }
-//static void process_uplink(struct connection *conn)
-//  {
-////    BegLogLine(FXLOG_ITAPI_ROUTER)
-////        << "byte_len=" << byte_len
-////        << EndLogLine ;
-////    struct rpcBuffer *rpcBuffer = (struct rpcBuffer *)&(conn->routerBuffer.callBuffer) ;
-//#if 0
-//    struct upstreamBuffer * upstreamBuffer = (struct upstreamBuffer *)&(conn->routerBuffer.upstreamBuffer) ;
-//    unsigned long * upstreamSequenceP = (unsigned long *) upstreamBuffer ;
-//    unsigned long upstreamSequence = * upstreamSequenceP ;
-//    unsigned long conn_upstreamSequence=conn->upstreamSequence ;
-//    size_t byte_len=conn->upstream_length ;
-////    StrongAssertLogLine(conn->upstream_length == byte_len)
-////      << "conn=0x" << (void *) conn
-////      << " conn->upstream_length=" << conn->upstream_length
-////      << " disagrees with byte_len=" << byte_len
-////      << " (conn->upstreamSequence=" << conn_upstreamSequence
-////      << " upstreamSequence=" << upstreamSequence
-////      << ")"
-////      << EndLogLine ;
-//    StrongAssertLogLine(conn->upstreamSequence == upstreamSequence)
-//      << "conn=0x" << (void *) conn
-//      << " conn->upstreamSequence=" << conn_upstreamSequence
-//      << " disagrees with upstreamSequence=" << upstreamSequence
-//      << EndLogLine ;
-//    conn->upstreamSequence=conn_upstreamSequence+1 ;
-//    size_t bufferIndex = sizeof(unsigned long) ;
-//
-//    while ( bufferIndex < byte_len )
-//      {
-//        unsigned int LocalEndpointIndex = * (unsigned int *) (upstreamBuffer->upstreamBufferElement+bufferIndex) ;
-//        bufferIndex += sizeof(unsigned int) ;
-//        struct iWARPEM_Message_Hdr_t * Hdr = (struct iWARPEM_Message_Hdr_t *) (upstreamBuffer->upstreamBufferElement+bufferIndex);
-//        size_t nextBufferIndex = bufferIndex + sizeof(struct iWARPEM_Message_Hdr_t) + Hdr->mTotalDataLen ;
-//        StrongAssertLogLine(nextBufferIndex <= byte_len )
-//          << "Message ovflows buffer, Hdr->mTotalDataLen=" << Hdr->mTotalDataLen
-//          << " nextBufferIndex=" << nextBufferIndex
-//          << " byte_len=" << byte_len
-//          << EndLogLine ;
-//        process_uplink_element(conn,LocalEndpointIndex,*Hdr,(void *)(upstreamBuffer->upstreamBufferElement+bufferIndex+sizeof(struct iWARPEM_Message_Hdr_t))) ;
-//        bufferIndex = nextBufferIndex ;
-//      }
-//    StrongAssertLogLine(bufferIndex == byte_len)
-//      << " bufferIndex=" << bufferIndex
-//      << " disagrees with byte_len=" << byte_len
-//      << EndLogLine ;
-//#endif
-//    if ( 0 == k_LazyFlushUplinks)
-//      {
-//        FlushMarkedUplinks();
-//      }
-//  }
-
 #include <skv/common/skv_config.hpp>
 #include <skv/common/skv_types.hpp>
 
@@ -2391,14 +1945,14 @@ int ConnectToServers( int aMyRank )
 static struct ThreadSafeQueue_t<struct endiorec *, 0> cqSlihQueue ;
 
 static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlushUplinks)
+{
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << " endiorec=0x" << (void *) endiorec
+    << EndLogLine ;
+  enum optype optype = endiorec->optype ;
+  struct connection *conn = endiorec->conn ;
+  switch(optype)
   {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << " endiorec=0x" << (void *) endiorec
-      << EndLogLine ;
-    enum optype optype = endiorec->optype ;
-    struct connection *conn = endiorec->conn ;
-    switch(optype)
-      {
     case k_wc_recv:
       BegLogLine(FXLOG_ITAPI_ROUTER )
         << "conn=0x" << (void *) conn
@@ -2406,241 +1960,130 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
         << " k_wc_recv"
         << EndLogLine ;
       conn->mBuffer.ProcessCall(conn) ;
+
       BegLogLine(FXLOG_ITAPI_ROUTER)
         << "Setting requireFlushUplinks=1"
         << EndLogLine ;
-      * requireFlushUplinks = 1 ;
+      *requireFlushUplinks = 1 ;
       break ;
+
     case k_wc_uplink:
-      {
-        class ion_cn_buffer_pair *buffer_pair=&conn->mBuffer.mReceiveBuffer ;
-        class ion_cn_buffer *buffer=buffer_pair->mBuffer+buffer_pair->CurrentBufferIndex() ;
-        BegLogLine(FXLOG_ITAPI_ROUTER )
-          << " conn=0x" << (void *) conn
-          << " clientRank=" << conn->clientRank
-          << " CurrentBufferIndex()=" << buffer_pair->CurrentBufferIndex()
-          << " k_wc_uplink"
-          << EndLogLine ;
-        buffer->ProcessReceiveBuffer(conn) ;
-        buffer_pair->PostReceive(conn) ;
-      }
+      BegLogLine(FXLOG_ITAPI_ROUTER )
+        << " conn=0x" << (void *) conn
+        << " clientRank=" << conn->clientRank
+        << " k_wc_uplink"
+        << EndLogLine ;
+      conn->mBuffer.ProcessRead( conn );
+
       BegLogLine(FXLOG_ITAPI_ROUTER)
         << "Setting requireFlushUplinks=1"
         << EndLogLine ;
-      * requireFlushUplinks = 1 ;
-      conn->upstream_buffer_busy = 1;
-      issue_ack(conn) ;
-      break ;
+      *requireFlushUplinks = 1 ;
+      break;
+
     default:
       StrongAssertLogLine(0)
         << "Unknown optype=" << optype
         << EndLogLine ;
       break ;
       }
-
   }
 
 static void do_cq_processing(struct ibv_wc& wc)
+{
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << " ibv_poll_cq returns wc.status=" << wc.status
+    << " wc.opcode=" << wc.opcode
+    << EndLogLine ;
+
+  StrongAssertLogLine(wc.status == IBV_WC_SUCCESS)
+    << "Bad wc.status=" << wc.status
+    << " from ibv_poll_cq"
+    << EndLogLine ;
+
+  struct endiorec * endiorec = ( struct endiorec * )wc.wr_id ;
+  enum optype optype = endiorec->optype ;
+  struct connection *conn = endiorec->conn ;
+  size_t byte_len = wc.byte_len ;
+  if ( optype == k_wc_recv)
   {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << " ibv_poll_cq returns wc.status=" << wc.status
-      << " wc.opcode=" << wc.opcode
-      << EndLogLine ;
+    conn->ibv_poll_cq_recv_count += 1 ;
+  }
+  else
+  {
+    conn->ibv_poll_cq_send_count += 1 ;
+  }
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "endiorec=0x" << (void *) endiorec
+    << " optype=" << optype
+    << " conn=0x" << (void *) conn
+    << " qp=0x" << (void *) conn->qp
+    << " byte_len=" << byte_len
+    << " sequence_in=" << conn->sequence_in
+    << " downstream_sequence=" << conn->downstream_sequence
+    << " ibv_post_recv_count=" << conn->ibv_post_recv_count
+    << " ibv_post_send_count=" << conn->ibv_post_send_count
+    << " ibv_poll_cq_recv_count=" << conn->ibv_poll_cq_recv_count
+    << " ibv_poll_cq_send_count=" << conn->ibv_poll_cq_send_count
+    << " ibv_send_last_optype=" << conn->ibv_send_last_optype
+    << EndLogLine ;
 
-//        if (wc.status != IBV_WC_SUCCESS) {
-//            wc_stat_echo(&wc);
-//            die("on_completion: status is not IBV_WC_SUCCESS.");
-//        }
-    StrongAssertLogLine(wc.status == IBV_WC_SUCCESS)
-      << "Bad wc.status=" << wc.status
-      << " from ibv_poll_cq"
-      << EndLogLine ;
-
-    struct endiorec * endiorec = ( struct endiorec * )wc.wr_id ;
-    enum optype optype = endiorec->optype ;
-    struct connection *conn = endiorec->conn ;
-    size_t byte_len = wc.byte_len ;
-    if ( optype == k_wc_recv)
-      {
-        conn->ibv_poll_cq_recv_count += 1 ;
-      }
-    else
-      {
-        conn->ibv_poll_cq_send_count += 1 ;
-      }
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "endiorec=0x" << (void *) endiorec
-      << " optype=" << optype
-      << " conn=0x" << (void *) conn
-      << " qp=0x" << (void *) conn->qp
-      << " byte_len=" << byte_len
-      << " sequence_in=" << conn->sequence_in
-      << " downstream_sequence=" << conn->downstream_sequence
-      << " ibv_post_recv_count=" << conn->ibv_post_recv_count
-      << " ibv_post_send_count=" << conn->ibv_post_send_count
-      << " ibv_poll_cq_recv_count=" << conn->ibv_poll_cq_recv_count
-      << " ibv_poll_cq_send_count=" << conn->ibv_poll_cq_send_count
-      << " ibv_send_last_optype=" << conn->ibv_send_last_optype
-      << EndLogLine ;
-
-    conn->sequence_in += 1 ;
-    switch(optype)
-      {
+  conn->sequence_in += 1 ;
+  switch(optype)
+  {
     case k_wc_recv:
       BegLogLine(FXLOG_ITAPI_ROUTER_LW )
         << "conn=0x" << (void *) conn
         << " clientRank=" << conn->clientRank
+        << " clientId=" << conn->clientId
         << " k_wc_recv"
         << EndLogLine ;
       received++ ;
-//      conn->rpcBufferPosted=0 ;
-      // We won't actually get the call until (after) we set the ack buffer to zero. But we must have the
-      // receive buffer posted early.
-#if 0
-      post_call_buffer(conn, &conn->routerBuffer.callBuffer) ;
-#endif
       cqSlihQueue.Enqueue(endiorec) ;
-//      conn->mBuffer.ProcessCall(conn) ;
-//      process_call(conn,byte_len) ;
       break ;
     case k_wc_uplink:
       BegLogLine(FXLOG_ITAPI_ROUTER_LW )
         << " conn=0x" << (void *) conn
         << " clientRank=" << conn->clientRank
+        << " clientId=" << conn->clientId
         << " k_wc_uplink"
         << EndLogLine ;
-//          printf("uplink completed successfully.\n");
-//          fflush(stdout) ;
       cqSlihQueue.Enqueue(endiorec) ;
-//      process_uplink(conn,byte_len) ;
-//      if ( k_LazyFlushUplinks )
-//        {
-//          *requireFlushUplinks = 1 ;
-//        }
-//      issue_ack(conn) ;
       break ;
     case k_wc_downlink:
-      {
-//        unsigned long localDownstreamSequence=conn->localDownstreamSequence ;
-//        unsigned long downstream_sequence=conn->downstream_sequence ;
-//        conn->localDownstreamSequence = localDownstreamSequence+1 ;
-        BegLogLine(FXLOG_ITAPI_ROUTER_LW)
-          << "conn=0x" << (void *) conn
-          << " clientRank=" << conn->clientRank
-          << " k_wc_downlink"
-          << EndLogLine ;
-//        AssertLogLine(localDownstreamSequence == downstream_sequence)
-//          << "conn=0x" << (void *) conn
-//          << " clientRank=" << conn->clientRank
-//          << " localDownstreamSequence=" << localDownstreamSequence
-//          << " downstream_sequence=" << downstream_sequence
-//          << EndLogLine ;
-//          conn->downstreamBufferFree=1 ;
-        indicate_downlink_complete(conn) ;
-//          // DMA into the compute node's ack buffer to indicate that we are ready to receive another call
-//          post_ack(conn) ;
-      }
+      BegLogLine(FXLOG_ITAPI_ROUTER_LW)
+        << "conn=0x" << (void *) conn
+        << " clientRank=" << conn->clientRank
+        << " clientId=" << conn->clientId
+        << " k_wc_downlink TX complete. Nothing to do."
+        << EndLogLine ;
       break ;
     case k_wc_ack:
       BegLogLine(FXLOG_ITAPI_ROUTER)
         << "conn=0x" << (void *) conn
         << " clientRank=" << conn->clientRank
-        << " k_wc_ack"
+        << " clientId=" << conn->clientId
+        << " k_wc_ack. TX complete. Nothing to do."
         << EndLogLine ;
       break ;
     case k_wc_downlink_complete:
       BegLogLine(FXLOG_ITAPI_ROUTER)
         << "k_wc_downlink_complete"
         << EndLogLine ;
-#if 0
-      {
-        struct downstreamLength * downstreamLength=(struct downstreamLength *)&(conn->routerBuffer.downstreamLengthBuffer) ;
-        BegLogLine(FXLOG_ITAPI_ROUTER_LW )
-          << "conn=0x" << (void *) conn
-          << " clientRank=" << conn->clientRank
-          << " length=" << downstreamLength->length
-          << " sequence=" << downstreamLength->sequence
-          << EndLogLine ;
-      }
-#endif
-//          conn->downlink_buffer_busy=0 ;
-//          fetch_downlink_complete_flag(conn) ;
       break ;
     case k_wc_downlink_complete_return:
-      {
-#if 0
-      struct downstreamSequence* downstreamSequence=(struct downstreamSequence*)(conn->routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement) ;
-      unsigned long *downstreamSequenceP = &(downstreamSequence->sequence) ;
-      unsigned long downstreamSequenceNumber =*downstreamSequenceP ;
-      unsigned long conn_downstream_sequence = conn->downstream_sequence ;
-      BegLogLine(FXLOG_ITAPI_ROUTER_LW)
-        << "conn=0x" << (void *) conn
-        << " clientRank=" << conn->clientRank
-        << " downstreamSequenceNumber=" << downstreamSequenceNumber
-        << " conn_downstream_sequence=" << conn_downstream_sequence
-        << " k_wc_downlink_complete_return"
+      BegLogLine(FXLOG_ITAPI_ROUTER)
+        << "k_wc_downlink_complete_return: SHOULD NOT HAPPEN ANY MORE..."
         << EndLogLine ;
-#endif
       conn->issuedDownstreamFetch=0 ;
-      send_downstream_if_buffer_free(conn) ;
-      }
       break ;
     default:
       StrongAssertLogLine(0)
         << "Unknown optype=" << optype
         << EndLogLine ;
       break ;
-      }
-
-//        if (wc.opcode & IBV_WC_RECV) {
-//            received++;
-//            BegLogLine(FXLOG_ITAPI_ROUTER)
-//              << " IBV_WC_RECV"
-//              << EndLogLine ;
-//            process_call(conn,byte_len) ;
-////            struct rpcBuffer * rpcBuffer = (struct rpcBuffer *) conn->recv_region ;
-////            BegLogLine(FXLOG_ITAPI_ROUTER)
-////              << "rpcBuffer->sendmemreg_lkey 0x" << (void *) rpcBuffer->sendmemreg_lkey
-////              << " rpcBuffer->recvmemreg_lkey 0x" << (void *) rpcBuffer->recvmemreg_lkey
-////              << EndLogLine ;l
-////            // printf("received message: %s\n", conn->recv_region);
-//////            if ( received % 10 == 0 ) {
-//////                post_receives(conn, 1);
-//////            }
-////            // Re-post the buffer just processed
-//            post_call_buffer(conn, &conn->routerBuffer.callBuffer) ;
-//
-//        }
-//        else if (wc.opcode == IBV_WC_SEND)
-//          {
-//            BegLogLine(FXLOG_ITAPI_ROUTER)
-//              << " IBV_WC_SEND"
-//              << EndLogLine ;
-//            printf("send completed successfully.\n");
-//            fflush(stdout) ;
-//          }
-//        else if ( wc.opcode == IBV_WC_RDMA_READ)
-//          {
-//            BegLogLine(FXLOG_ITAPI_ROUTER)
-//              << " IBV_WC_RDMA_READ"
-//              << EndLogLine ;
-//            process_uplink(conn,byte_len) ;
-//            // DMA into the compute node's ack buffer to indicate that we are ready to receive another call
-//            post_ack(conn) ;
-//          }
-//        else if ( wc.opcode == IBV_WC_RDMA_WRITE )
-//          {
-//            BegLogLine(FXLOG_ITAPI_ROUTER)
-//              << " IBV_WC_RDMA_WRITE"
-//              << EndLogLine ;
-//          }
-//        else {
-//            BegLogLine(FXLOG_ITAPI_ROUTER)
-//                << "Unknown IBV opcode " << wc.opcode
-//                << EndLogLine ;
-//        }
-
   }
+}
 
 enum {
   k_spin_poll=1
@@ -2684,383 +2127,84 @@ static void * poll_cq(void *ctx)
     << EndLogLine ;
   int requireFlushUplinks = 0 ;
   unsigned long idlecount=0 ;
-  // Follow Bernard Matzler's completion handling sequence
+  // Follow Bernard Metzler's completion handling sequence
   while(1)
-    {
-      int rv ;
-rearm:
-      if ( 0 == k_spin_poll)
-        {
-          ibv_req_notify_cq(cq, 0) ;
-        }
-again:
-      rv = ibv_poll_cq(cq, k_wc_array_size, wc) ;
-      BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
-        << "rv=" << rv
-        << " idlecount=" << idlecount
-        << EndLogLine ;
-      if ( rv < 0 )
-        {
-          StrongAssertLogLine(0)
-                << "poll_cq processing ends because ibv_poll_cq returns with rv=" << rv
-                << EndLogLine ;
-          break ;
-        }
-      if ( rv > 0 )
-        {
-          idlecount = 0 ;
-          for ( unsigned int wc_index=0; wc_index<rv;wc_index+=1)
-            {
-              do_cq_processing( wc[wc_index]) ;
-            }
-          goto again ;
-        }
-      else
-        {
-          struct endiorec * endiorec ;
-          int rc=cqSlihQueue.Dequeue(&endiorec) ;
-          if ( 0 == rc)
-            {
-              do_cq_slih_processing(endiorec, &requireFlushUplinks) ;
-            }
-          else
-            {
-              idlecount += 1 ;
-//              BegLogLine(FXLOG_ITAPI_ROUTER)
-//                  << "requireFlushUplinks=" << requireFlushUplinks
-//                  << EndLogLine ;
-              BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
-                << "idlecount=" << idlecount
-                << " gFirstConnToAck=0x" << (void *) gFirstConnToAck
-                << EndLogLine ;
-              if ( k_LazyFlushUplinks && 0 != requireFlushUplinks )
-                {
-                  FlushMarkedUplinks();
-                  requireFlushUplinks = 0 ;
-                }
-              AckAllConnections() ;
-            }
-        }
-      if ( 0 == k_spin_poll)
-        {
-          struct ibv_cq *next_cq ;
+  {
+    int rv ;
 
-          rv=ibv_get_cq_event(s_ctx->comp_channel, &next_cq, &ctx) ;
-          if ( rv )
-            {
-              StrongAssertLogLine(0)
-                    << "poll_cq processing ends because ibv_get_cq_event returns with rv=" << rv
-                    << EndLogLine ;
-              break ;
-            }
-          AssertLogLine(cq == next_cq)
-            << "CQ changed from " << (void *) cq
-            << " to " << next_cq
-            << EndLogLine ;
-          ibv_ack_cq_events(cq, 1);
-          goto rearm ;
-        }
+    rearm:
+    if ( 0 == k_spin_poll)
+      ibv_req_notify_cq(cq, 0) ;
+
+    again:
+    rv = ibv_poll_cq(cq, k_wc_array_size, wc) ;
+    BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
+      << "rv=" << rv
+      << " idlecount=" << idlecount
+      << EndLogLine ;
+    if ( rv < 0 )
+    {
+      StrongAssertLogLine(0)
+        << "poll_cq processing ends because ibv_poll_cq returns with rv=" << rv
+        << EndLogLine ;
+      break ;
     }
-//  while (1) {
-//    TEST_NZ(ibv_get_cq_event(s_ctx->comp_channel, &cq, &ctx));
-//    ibv_ack_cq_events(cq, 1);
-//    TEST_NZ(ibv_req_notify_cq(cq, 0));
-//
-//    while (ibv_poll_cq(cq, 1, &wc)) {
-//        BegLogLine(FXLOG_ITAPI_ROUTER)
-//          << " ibv_poll_cq returns wc.status=" << wc.status
-//          << " wc.opcode=" << wc.opcode
-//          << EndLogLine ;
-//
-////        if (wc.status != IBV_WC_SUCCESS) {
-////            wc_stat_echo(&wc);
-////            die("on_completion: status is not IBV_WC_SUCCESS.");
-////        }
-//        StrongAssertLogLine(wc.status == IBV_WC_SUCCESS)
-//          << "Bad wc.status=" << wc.status
-//          << " from ibv_poll_cq"
-//          << EndLogLine ;
-//
-//        struct endiorec * endiorec = ( struct endiorec * )wc.wr_id ;
-//        enum optype optype = endiorec->optype ;
-//        struct connection *conn = endiorec->conn ;
-//        size_t byte_len = wc.byte_len ;
-//        if ( optype == k_wc_recv)
-//          {
-//            conn->ibv_poll_cq_recv_count += 1 ;
-//          }
-//        else
-//          {
-//            conn->ibv_poll_cq_send_count += 1 ;
-//          }
-//        BegLogLine(FXLOG_ITAPI_ROUTER)
-//          << "endiorec=0x" << (void *) endiorec
-//          << " optype=" << optype
-//          << " conn=0x" << (void *) conn
-//          << " qp=0x" << (void *) conn->qp
-//          << " byte_len=" << byte_len
-//          << " sequence_in=" << conn->sequence_in
-//          << " downstream_sequence=" << conn->downstream_sequence
-//          << " ibv_post_recv_count=" << conn->ibv_post_recv_count
-//          << " ibv_post_send_count=" << conn->ibv_post_send_count
-//          << " ibv_poll_cq_recv_count=" << conn->ibv_poll_cq_recv_count
-//          << " ibv_poll_cq_send_count=" << conn->ibv_poll_cq_send_count
-//          << " ibv_send_last_optype=" << conn->ibv_send_last_optype
-//          << EndLogLine ;
-//
-//        conn->sequence_in += 1 ;
-//        switch(optype)
-//          {
-//        case k_wc_recv:
-//          BegLogLine(FXLOG_ITAPI_ROUTER_LW && stuck(conn) )
-//            << "conn=0x" << (void *) conn
-//            << " clientRank=" << conn->clientRank
-//            << " k_wc_recv"
-//            << EndLogLine ;
-//          received++ ;
-//          conn->rpcBufferPosted=0 ;
-//          // We won't actually get the call until (after) we set the ack buffer to zero. But we must have the
-//          // receive buffer posted early.
-//          post_call_buffer(conn, &conn->routerBuffer.callBuffer) ;
-//          process_call(conn,byte_len) ;
-//          break ;
-//        case k_wc_uplink:
-//          BegLogLine(FXLOG_ITAPI_ROUTER_LW && stuck(conn) )
-//            << " conn=0x" << (void *) conn
-//            << " clientRank=" << conn->clientRank
-//            << " k_wc_uplink"
-//            << EndLogLine ;
-////          printf("uplink completed successfully.\n");
-////          fflush(stdout) ;
-//          process_uplink(conn,byte_len) ;
-//          issue_ack(conn) ;
-//          break ;
-//        case k_wc_downlink:
-//          {
-//            unsigned long localDownstreamSequence=conn->localDownstreamSequence ;
-//            unsigned long downstream_sequence=conn->downstream_sequence ;
-//            conn->localDownstreamSequence = localDownstreamSequence+1 ;
-//            BegLogLine(FXLOG_ITAPI_ROUTER_LW && stuck(conn) )
-//              << "conn=0x" << (void *) conn
-//              << " clientRank=" << conn->clientRank
-//              << " k_wc_downlink, setting conn->localDownstreamSequence=" << localDownstreamSequence+1
-//              << EndLogLine ;
-//            AssertLogLine(localDownstreamSequence == downstream_sequence)
-//              << "conn=0x" << (void *) conn
-//              << " clientRank=" << conn->clientRank
-//              << " localDownstreamSequence=" << localDownstreamSequence
-//              << " downstream_sequence=" << downstream_sequence
-//              << EndLogLine ;
-//  //          conn->downstreamBufferFree=1 ;
-//            indicate_downlink_complete(conn) ;
-//  //          // DMA into the compute node's ack buffer to indicate that we are ready to receive another call
-//  //          post_ack(conn) ;
-//          }
-//          break ;
-//        case k_wc_ack:
-//          BegLogLine(FXLOG_ITAPI_ROUTER && stuck(conn) )
-//            << "conn=0x" << (void *) conn
-//            << " clientRank=" << conn->clientRank
-//            << " k_wc_ack"
-//            << EndLogLine ;
-//          break ;
-//        case k_wc_downlink_complete:
-//          BegLogLine(FXLOG_ITAPI_ROUTER)
-//            << "k_wc_downlink_complete"
-//            << EndLogLine ;
-//          {
-//            struct downstreamLength * downstreamLength=(struct downstreamLength *)&(conn->routerBuffer.downstreamLengthBuffer) ;
-//            BegLogLine(FXLOG_ITAPI_ROUTER_LW && stuck(conn) )
-//              << "conn=0x" << (void *) conn
-//              << " clientRank=" << conn->clientRank
-//              << " length=" << downstreamLength->length
-//              << " sequence=" << downstreamLength->sequence
-//              << EndLogLine ;
-//          }
-////          conn->downlink_buffer_busy=0 ;
-////          fetch_downlink_complete_flag(conn) ;
-//          break ;
-//        case k_wc_downlink_complete_return:
-//          {
-//          struct downstreamSequence* downstreamSequence=(struct downstreamSequence*)(conn->routerBuffer.downstreamCompleteBuffer.downstreamCompleteBufferElement) ;
-//          unsigned long *downstreamSequenceP = &(downstreamSequence->sequence) ;
-//          unsigned long downstreamSequenceNumber =*downstreamSequenceP ;
-//          unsigned long conn_downstream_sequence = conn->downstream_sequence ;
-//          BegLogLine(FXLOG_ITAPI_ROUTER_LW && stuck(conn))
-//            << "conn=0x" << (void *) conn
-//            << " clientRank=" << conn->clientRank
-//            << " downstreamSequenceNumber=" << downstreamSequenceNumber
-//            << " conn_downstream_sequence=" << conn_downstream_sequence
-//            << " k_wc_downlink_complete_return"
-//            << EndLogLine ;
-//          conn->issuedDownstreamFetch=0 ;
-//          send_downstream_if_buffer_free(conn) ;
-//          }
-//          break ;
-//        default:
-//          StrongAssertLogLine(0)
-//            << "Unknown optype=" << optype
-//            << EndLogLine ;
-//          break ;
-//          }
-//
-////        if (wc.opcode & IBV_WC_RECV) {
-////            received++;
-////            BegLogLine(FXLOG_ITAPI_ROUTER)
-////              << " IBV_WC_RECV"
-////              << EndLogLine ;
-////            process_call(conn,byte_len) ;
-//////            struct rpcBuffer * rpcBuffer = (struct rpcBuffer *) conn->recv_region ;
-//////            BegLogLine(FXLOG_ITAPI_ROUTER)
-//////              << "rpcBuffer->sendmemreg_lkey 0x" << (void *) rpcBuffer->sendmemreg_lkey
-//////              << " rpcBuffer->recvmemreg_lkey 0x" << (void *) rpcBuffer->recvmemreg_lkey
-//////              << EndLogLine ;l
-//////            // printf("received message: %s\n", conn->recv_region);
-////////            if ( received % 10 == 0 ) {
-////////                post_receives(conn, 1);
-////////            }
-//////            // Re-post the buffer just processed
-////            post_call_buffer(conn, &conn->routerBuffer.callBuffer) ;
-////
-////        }
-////        else if (wc.opcode == IBV_WC_SEND)
-////          {
-////            BegLogLine(FXLOG_ITAPI_ROUTER)
-////              << " IBV_WC_SEND"
-////              << EndLogLine ;
-////            printf("send completed successfully.\n");
-////            fflush(stdout) ;
-////          }
-////        else if ( wc.opcode == IBV_WC_RDMA_READ)
-////          {
-////            BegLogLine(FXLOG_ITAPI_ROUTER)
-////              << " IBV_WC_RDMA_READ"
-////              << EndLogLine ;
-////            process_uplink(conn,byte_len) ;
-////            // DMA into the compute node's ack buffer to indicate that we are ready to receive another call
-////            post_ack(conn) ;
-////          }
-////        else if ( wc.opcode == IBV_WC_RDMA_WRITE )
-////          {
-////            BegLogLine(FXLOG_ITAPI_ROUTER)
-////              << " IBV_WC_RDMA_WRITE"
-////              << EndLogLine ;
-////          }
-////        else {
-////            BegLogLine(FXLOG_ITAPI_ROUTER)
-////                << "Unknown IBV opcode " << wc.opcode
-////                << EndLogLine ;
-////        }
-//    }
-//  }
+    // if there are events: process them - i.e. Queue them for slih-processing
+    if ( rv > 0 )
+    {
+      idlecount = 0 ;
+      for ( unsigned int wc_index=0; wc_index<rv;wc_index+=1)
+      {
+        do_cq_processing( wc[wc_index]) ;
+      }
+      goto again ;
+    }
+    else
+      // if there are no events, process the slih-queue - i.e. push data into upstream buffers
+    {
+      struct endiorec * endiorec ;
+      int rc=cqSlihQueue.Dequeue(&endiorec) ;
+      if ( 0 == rc)
+      {
+        do_cq_slih_processing(endiorec, &requireFlushUplinks);
+      }
+      else
+        // if slih-queue is empty, check if there's anything to flush upstream or ack downstream
+      {
+        idlecount += 1 ;
+        BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
+          << "idlecount=" << idlecount
+          << EndLogLine ;
+        if ( k_LazyFlushUplinks && 0 != requireFlushUplinks )
+        {
+          FlushMarkedUplinks();
+          requireFlushUplinks = 0 ;
+        }
+        AckAllConnections();
+      }
+    }
+    if ( 0 == k_spin_poll)
+    {
+      struct ibv_cq *next_cq ;
+
+      rv=ibv_get_cq_event(s_ctx->comp_channel, &next_cq, &ctx) ;
+      if ( rv )
+      {
+        StrongAssertLogLine(0)
+          << "poll_cq processing ends because ibv_get_cq_event returns with rv=" << rv
+          << EndLogLine ;
+        break ;
+      }
+      AssertLogLine(cq == next_cq)
+        << "CQ changed from " << (void *) cq
+        << " to " << next_cq
+        << EndLogLine ;
+      ibv_ack_cq_events(cq, 1);
+      goto rearm ;
+    }
+  }
   return NULL;
 }
-
-static void post_call_buffer(struct connection *conn, volatile struct callBuffer * callBuffer)
-  {
-#if 0
-    struct ibv_recv_wr wr, *bad_wr = NULL;
-    struct ibv_sge sge;
-    int rc;
-    wr.wr_id = (uintptr_t) &(conn->endio_call) ;
-    wr.next = NULL;
-    wr.sg_list = &sge;
-    wr.num_sge = 1;
-
-    sge.addr = (uintptr_t)callBuffer;
-    sge.length = k_CallBufferSize;
-    sge.lkey = conn->mr->lkey;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "conn=0x" << (void *) conn
-      << " qp=0x" << (void *) conn->qp
-      << " wr_id=0x" << (void *) wr.wr_id
-      << " sequence_in=" << conn->sequence_in
-      << " downstream_sequence=" << conn->downstream_sequence
-      << " upstreamSequence=" << conn->upstreamSequence
-      << EndLogLine ;
-
-//    conn->sequence_out += 1 ;
-//    pthread_mutex_lock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-//    pthread_mutex_lock(&allConnectionMutex) ;
-    if( conn->upstream_buffer_busy )
-      FlushMarkedUplinks();
-    rc=ibv_post_recv(conn->qp, &wr, &bad_wr);
-//    pthread_mutex_unlock(&allConnectionMutex) ;
-//    pthread_mutex_unlock((pthread_mutex_t *) &conn->qp_write_mutex) ;
-
-    if (rc!=0)
-      {
-        printf("ERROR: posting ibv_post_recv() failed\n");
-        fflush(stdout) ;
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-          << "ERROR: posting ibv_post_recv() failed, rc=" << rc
-          << EndLogLine ;
-        StrongAssertLogLine(0)
-          << "ibv_post_recv failed, rc=" << rc
-          << EndLogLine ;
-      }
-#endif
-    conn->ibv_post_recv_count += 1 ;
-    conn->rpcBufferPosted = 1 ;
-
-  }
-//static void post_all_call_buffers(struct connection *conn)
-//  {
-//    for(int x=0;x<k_CallBufferCount; x += 1)
-//      {
-//        struct ibv_recv_wr wr, *bad_wr = NULL;
-//        struct ibv_sge sge;
-//        int rc;
-//        struct callBuffer * callBuffer = allCallBuffer.callBuffer+x ;
-//        wr.wr_id = (uintptr_t) callBuffer ;
-//        wr.next = NULL;
-//        wr.sg_list = &sge;
-//        wr.num_sge = 1;
-//
-//        sge.addr = (uintptr_t)callBuffer;
-//        sge.length = k_CallBufferSize;
-//        sge.lkey = conn->call_mr->lkey;
-//
-//        rc=ibv_post_recv(conn->qp, &wr, &bad_wr);
-//        BegLogLine(FXLOG_ITAPI_ROUTER)
-//          << "posting ibv_post_recv(), rc=" << rc
-//          << EndLogLine ;
-//       if (rc!=0)
-//          {
-//            printf("ERROR: posting ibv_post_recv() #%i failed\n", x);
-//            fflush(stdout) ;
-//            BegLogLine(FXLOG_ITAPI_ROUTER)
-//              << "ERROR: posting ibv_post_recv() failed, rc=" << rc
-//              << EndLogLine ;
-//          }
-//
-//      }
-//  }
-//void post_receives(struct connection *conn, int rcount)
-//{
-//  struct ibv_recv_wr wr, *bad_wr = NULL;
-//  struct ibv_sge sge;
-//  int rc, i;
-//
-//  wr.wr_id = (uintptr_t)conn;
-//  wr.next = NULL;
-//  wr.sg_list = &sge;
-//  wr.num_sge = 1;
-//
-//  sge.addr = (uintptr_t)conn->recv_region;
-//  sge.length = k_CallBufferSize;
-//  sge.lkey = conn->recv_mr->lkey;
-//
-//  for (i=0; i<rcount; i++) {
-////    printf("another ibv_post_recv()\n");
-//      rc=ibv_post_recv(conn->qp, &wr, &bad_wr);
-//      if (rc!=0)
-//        {
-//          printf("ERROR: posting ibv_post_recv() #%i failed\n", i);
-//          fflush(stdout) ;
-//        }
-//  }
-//}
 
 void register_memory(struct connection *conn)
 {
@@ -3096,8 +2240,6 @@ int on_connect_request(struct rdma_cm_id *id)
   struct rdma_conn_param cm_params;
   struct connection *conn;
 
-//  printf("received connection request\n");
-//  fflush(stdout) ;
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "Received connection request, id=0x" << (void *) id
     << EndLogLine ;
@@ -3113,7 +2255,6 @@ int on_connect_request(struct rdma_cm_id *id)
   memset((void *) &conn->routerBuffer, 0xfd, sizeof(conn->routerBuffer)) ;
 #endif
   conn->qp = id->qp;
-//  conn->connection = conn ;
   conn->endio_call.conn = conn ;
   conn->endio_call.optype = k_wc_recv ;
   conn->endio_uplink.conn = conn ;
@@ -3133,26 +2274,20 @@ int on_connect_request(struct rdma_cm_id *id)
   conn->ibv_poll_cq_recv_count = 0 ;
   conn->ibv_send_last_optype = 0xffffffff ;
   conn->sequence_in = 0 ;
-//  conn->sequence_out = 0 ;
   conn->upstreamSequence = 0 ;
-  conn->upstream_buffer_busy = 0;
 
-//  conn->downstreamBufferFree = 1 ;
   conn->downstream_sequence = 0 ;
   conn->localDownstreamSequence = 1 ;
-//  conn->downlink_buffer_busy = 0 ;
 
   conn->routerBuffer_rkey = 0 ;
   conn->routerBuffer_raddr = 0 ;
 
-//  conn->stuck_epoll_count = 0 ;
   conn->issuedDownstreamFetch = 0 ;
-  conn->will_flush_this_connection = 0 ;
-  conn->next_conn_to_flush = NULL ;
   conn->flushed_downstream = 1 ;
   conn->mSendAck=false ;
   conn->mDisconnecting=false ;
-
+  conn->mNextConnToAck[ 0 ] = NULL;
+  conn->mNextConnToAck[ 1 ] = NULL;
 
   conn->clientId = GetFreeClientId();
 
@@ -3173,57 +2308,32 @@ int on_connect_request(struct rdma_cm_id *id)
 
 int on_connection(void *context)
 {
-//  struct connection *conn = (struct connection *)context;
-//  struct ibv_send_wr wr;
-//  struct ibv_send_wr *bad_wr = NULL;
-//  struct ibv_sge sge;
-
-//    printf("pid: %d pthread: %i connected\n", getpid(), (int) pthread_self());
-//    fflush(stdout) ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "connected, context=0x" << context
-      << EndLogLine ;
-  // snprintf(conn->send_region, k_CallBufferSize, "message from passive/server side with pid %d", getpid());
-
- /* posting send ...\n"); */
-
- /*  memset(&wr, 0, sizeof(wr)); */
-
- /*  wr.opcode = IBV_WR_SEND; */
- /*  wr.sg_list = &sge; */
- /*  wr.num_sge = 1; */
- /*  wr.send_flags = IBV_SEND_SIGNALED; */
-
- /*  sge.addr = (uintptr_t)conn->send_region; */
- /*  sge.length = k_CallBufferSize; */
- /*  sge.lkey = conn->send_mr->lkey; */
-
-  // TEST_NZ(ibv_post_send(conn->qp, &wr, &bad_wr));
-
+  BegLogLine(FXLOG_ITAPI_ROUTER)
+    << "connected, context=0x" << context
+    << " doing nothing... connection completed."
+    << EndLogLine ;
   return 0;
 }
 
 int on_disconnect(struct rdma_cm_id *id)
 {
   struct connection *conn = (struct connection *)id->context;
+  conn->mDisconnecting = true ;
 
-//  printf("peer disconnected. Msgs received: %i\n", received);
-//  fflush(stdout) ;
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "Peer disconnected. Msgs received=" << received
     << " conn=0x" << (void *) conn
     << EndLogLine ;
 
+  BegLogLine( 1 )
+    << "Flush stats: "
+    << " AckConn: " << gAckConnectionCount
+    << " FlushConn: " << gFlushConnectionCount
+    << EndLogLine;
   conn->mBuffer.Term() ;
 
   rdma_destroy_qp(id);
-
-//  ibv_dereg_mr(conn->send_mr);
-//  ibv_dereg_mr(conn->recv_mr);
   ibv_dereg_mr(conn->mr) ;
-
-//  free(conn->send_region);
-//  free(conn->recv_region);
   free((void *)conn);
   rdma_destroy_id(id);
 

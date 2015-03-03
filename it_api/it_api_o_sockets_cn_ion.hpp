@@ -9,11 +9,17 @@
 #define FXLOG_IONCN_BUFFER_DETAIL (0)
 #endif
 
+#ifndef FXLOG_ITAPI_ROUTER_FRAMES 
+#define FXLOG_ITAPI_ROUTER_FRAMES (0)
+#endif
+
+#define CN_ION_SENTINEL_LENGTH_VALUE ( 0xffffffffffffffffUL )
+
 #include <string.h>
 #include <it_api_o_sockets_types.h>
 
 enum {
-  k_ApplicationBufferSize=512*1024 ,
+  k_ApplicationBufferSize=16*1024*1024 ,
   k_IONPort = 10952
 };
 
@@ -22,15 +28,17 @@ class ion_cn_buffer
   {
 public:
   unsigned long mSentBytes ;
-  unsigned long mReceivedBytes ;
+  volatile unsigned long mReceivedBytes ;
   char mApplicationBuffer[k_ApplicationBufferSize] ;
   void Init(void)
     {
-//      mSentBytes=0 ;
-//      mReceivedBytes=0 ;
+     mSentBytes=0 ;
+     mReceivedBytes=0 ;
     } ;
   bool rawTransmit(unsigned long aTransmitCount, uint32_t aLkey) ;
   bool rawTransmit(struct connection *conn, unsigned long aTransmitCount) ;
+  bool pushAckOnly(struct connection *conn, unsigned long aSentBytes, unsigned long aReceivedBytes );
+
   bool Transmit(unsigned long aSentBytes, unsigned long aReceivedBytes, unsigned long aTransmitCount, uint32_t aLkey)
     {
       BegLogLine(FXLOG_IONCN_BUFFER)
@@ -75,14 +83,16 @@ public:
     {
       BegLogLine(FXLOG_IONCN_BUFFER)
           << "Setting sentinels in buffer at 0x" << (void *) this
+          << " oldvalues: mSentBytes=" << mSentBytes
+          << " mReceivedBytes=" << mReceivedBytes
           << EndLogLine ;
-      mSentBytes=0xffffffffffffffff ;
-      mReceivedBytes=0xffffffffffffffff ;
       unsigned long SentinelCount=k_ApplicationBufferSize/k_SentinelModulo ;
       for(unsigned long x=0;x<SentinelCount;x+=1)
         {
           mApplicationBuffer[x*k_SentinelModulo-1] = 0 ;
         }
+      mSentBytes=CN_ION_SENTINEL_LENGTH_VALUE;
+      mReceivedBytes=CN_ION_SENTINEL_LENGTH_VALUE;
     }
   bool Transmit(struct connection *conn, unsigned long aSentBytes, unsigned long aReceivedBytes, unsigned long aTransmitCount)
     {
@@ -114,12 +124,18 @@ public:
       unsigned long ReceivedBytes = mSentBytes ;
       unsigned long BytesThisTime = ReceivedBytes-aReceivedBytes ;
       *aBytesThisTime=BytesThisTime ;
-      return ReceivedBytes > aReceivedBytes && ReceivedBytes != 0xffffffffffffffff ;
+      return ReceivedBytes > aReceivedBytes && ReceivedBytes != CN_ION_SENTINEL_LENGTH_VALUE;
     }
   bool Receive(unsigned long aReceivedBytes, unsigned long * aReceivedThisTime)
     {
       unsigned long ReceivedBytes = mSentBytes ;
-      if ( ReceivedBytes < aReceivedBytes || ReceivedBytes == 0xffffffffffffffff ) return false ;
+      // BegLogLine( mReceivedBytes != CN_ION_SENTINEL_LENGTH_VALUE )
+      //   << "Real data available in buffer. this=0x" << (void*)this
+      //   << " mSentBytes=" << mSentBytes
+      //   << " mReceivedBytes=" << mReceivedBytes
+      //   << EndLogLine;
+        
+      if ( ReceivedBytes < aReceivedBytes || ReceivedBytes == CN_ION_SENTINEL_LENGTH_VALUE ) return false ;
       unsigned long BytesThisTime = ReceivedBytes-aReceivedBytes ;
       AssertLogLine(BytesThisTime <= k_ApplicationBufferSize)
         << "BytesThisTime=" << BytesThisTime
@@ -146,7 +162,7 @@ public:
         << " SentinelValue=" << SentinelValue
         << EndLogLine ;
       *aReceivedThisTime = BytesThisTime ;
-      BegLogLine(FXLOG_IONCN_BUFFER && rc)
+      BegLogLine( (FXLOG_IONCN_BUFFER  | FXLOG_ITAPI_ROUTER_FRAMES ) && rc ) 
         << "this=0x" << (void *) this
         << " RX-FRAME {" << mSentBytes
         << "," << mReceivedBytes
@@ -176,7 +192,8 @@ public:
     } ;
   void IssueRDMARead(struct connection *conn, unsigned long Offset, unsigned long Length) ;
   void ProcessCall(struct connection *conn) ;
-  void ProcessReceiveBuffer(struct connection *conn) ;
+  void ProcessRead(struct connection *conn);
+  void ProcessReceiveBuffer(struct connection *conn, bool contained_ack ) ;
   void PostReceive(struct connection *conn) ;
   };
 
@@ -190,15 +207,11 @@ class ion_cn_buffer_pair
 public:
   class ion_cn_buffer mBuffer[2] ;
   unsigned long mBlockCount ;
-//  unsigned long mAckedSentBytes ;
-//  unsigned long mAckedReceivedBytes ;
   void Init(void)
     {
       mBuffer[0].Init() ;
       mBuffer[1].Init() ;
       mBlockCount = 0 ;
-//      mAckedSentBytes = 0 ;
-//      mAckedReceivedBytes = 0 ;
     } ;
   unsigned int CurrentBufferIndex(void)
     {
@@ -237,14 +250,19 @@ public:
         }
       return rc ;
     } ;
+  bool PostAckOnly(struct connection *conn, unsigned long aSentBytes, unsigned long aReceivedBytes )
+  {
+    return mBuffer[ CurrentBufferIndex() ].pushAckOnly( conn, aSentBytes, aReceivedBytes );
+  }
   enum {
     k_CheckOtherBuffer=1
   };
   bool Receive(unsigned long aReceivedCount, unsigned long *aBytesThisTime)
     {
+    static unsigned long idlecount = 0;
       unsigned int CurrentBuffer=CurrentBufferIndex() ;
       bool rc=mBuffer[CurrentBuffer].Receive(aReceivedCount,aBytesThisTime) ;
-      BegLogLine(FXLOG_IONCN_BUFFER && rc)
+      BegLogLine(FXLOG_IONCN_BUFFER )
           << "aReceivedCount=" << aReceivedCount
           << " *aBytesThisTime=" << *aBytesThisTime
           << " mBlockCount=0x" << mBlockCount
@@ -255,15 +273,24 @@ public:
 //These members now in ion_cn_all_buffer
 //          mAckedSentBytes=mBuffer[CurrentBuffer].mSentBytes ;
 //          mAckedReceivedBytes=mBuffer[CurrentBuffer].mReceivedBytes ;
+        idlecount=0;
         }
       else if ( k_CheckOtherBuffer )
         {
           unsigned long OtherBytesThisTime ;
           bool rc_other=mBuffer[1-CurrentBuffer].CheckReceive(aReceivedCount, &OtherBytesThisTime) ;
-          BegLogLine(FXLOG_IONCN_BUFFER && rc_other)
+          BegLogLine( ( FXLOG_IONCN_BUFFER | FXLOG_ITAPI_ROUTER_FRAMES ) && rc_other )
             << "New received frame in other buffer, CurrentBuffer=" << CurrentBuffer
             << " OtherBytesThisTime=" << OtherBytesThisTime
+            << " BufAddr=0x" << (void*)&(mBuffer[1-CurrentBuffer])
             << EndLogLine ;
+        }
+      if( ! rc )
+        {
+        idlecount++;
+        // BegLogLine( 0 == (idlecount % 0xffff) )
+        //   << "Receive still idle: " << idlecount
+        //   << EndLogLine;
         }
       return rc ;
     } ;
@@ -289,11 +316,19 @@ public:
   void ProcessCall(struct connection *conn)
     {
       BegLogLine(FXLOG_IONCN_BUFFER)
-          << " mBlockCount=0x" << mBlockCount
+          << " mBlockCount=" << mBlockCount
           << " CurrentBufferIndex()=" << CurrentBufferIndex()
           << EndLogLine ;
       mBuffer[CurrentBufferIndex()].ProcessCall(conn) ;
     }
+  void ProcessRead(struct connection *conn)
+  {
+    BegLogLine(FXLOG_IONCN_BUFFER)
+      << " mBlockCount=" << mBlockCount
+      << " CurrentBufferIndex()=" << CurrentBufferIndex()
+      << EndLogLine;
+    mBuffer[CurrentBufferIndex()].ProcessRead(conn);
+  }
   void PostReceive(struct connection *conn)
     {
       BegLogLine(FXLOG_IONCN_BUFFER)
@@ -329,9 +364,12 @@ public:
   unsigned long mTransmitBufferIndex ;
   unsigned long mReceiveBufferLength ;
   uint32_t mLkey ;
-  pthread_mutex_t mTransmitMutex ;
+  pthread_spinlock_t mTransmitMutex ;
   class ion_cn_buffer_pair mTransmitBuffer ;
   class ion_cn_buffer_pair mReceiveBuffer ;
+  class ion_cn_buffer mRemoteWrittenSendAckBytes;
+  volatile bool mBufferRequiresAck;
+  volatile bool mBufferAllowsAck;
   void Init(void)
     {
       BegLogLine(FXLOG_IONCN_BUFFER)
@@ -339,6 +377,7 @@ public:
           << EndLogLine ;
       mTransmitBuffer.Init() ;
       mReceiveBuffer.Init() ;
+      mRemoteWrittenSendAckBytes.Init();
       mReceiveBuffer.mBuffer[0].SetSentinels() ;
       mReceiveBuffer.mBuffer[1].SetSentinels() ;
       mSentBytes=0 ;
@@ -347,8 +386,9 @@ public:
       mSentBytesPrevious=0 ;
 //      mAckedReceivedBytes=0 ;
       mTransmitBufferIndex=0 ;
+      mBufferRequiresAck=false;
+      mBufferAllowsAck=false;
       mLkey=0 ;
-      pthread_mutex_init(&mTransmitMutex, NULL) ;
       BegLogLine(FXLOG_IONCN_BUFFER)
           << "Initialised, this=0x" << (void *) this
           << EndLogLine ;
@@ -358,19 +398,37 @@ public:
       BegLogLine(FXLOG_IONCN_BUFFER)
           << "Terminating, this=0x" << (void *) this
           << EndLogLine ;
-      pthread_mutex_destroy(&mTransmitMutex) ;
+      pthread_spin_destroy(&mTransmitMutex) ;
       BegLogLine(FXLOG_IONCN_BUFFER)
           << "Terminated, this=0x" << (void *) this
           << EndLogLine ;
     }
   void LockTransmit(void)
     {
-      pthread_mutex_lock(&mTransmitMutex) ;
+      pthread_spin_lock(&mTransmitMutex) ;
     }
   void UnlockTransmit(void)
     {
-      pthread_mutex_unlock(&mTransmitMutex) ;
+      pthread_spin_unlock(&mTransmitMutex) ;
     }
+  unsigned long GetRemoteAckedBytes( void )
+  {
+    return mRemoteWrittenSendAckBytes.mReceivedBytes;
+  }
+  bool NeedsAnyTransmit( void )
+  {
+    return( (mTransmitBufferIndex > 0) ||
+        (mBufferRequiresAck) );
+  }
+  bool ReadyToTransmit( void )
+  {
+    return( NeedsAnyTransmit() && mBufferAllowsAck );
+  }
+  void SetRemoteAckedBytes( unsigned long newVal )
+  {
+    if( newVal > mRemoteWrittenSendAckBytes.mReceivedBytes )
+      mRemoteWrittenSendAckBytes.mReceivedBytes = newVal;
+  }
   enum
   {
     k_DoubleBufferingUplink=0 ,
@@ -388,29 +446,66 @@ public:
     {
       bool rc ;
       LockTransmit() ;
+      unsigned long RemoteAckedBytes = GetRemoteAckedBytes();
       BegLogLine(FXLOG_IONCN_BUFFER)
         << "mSentBytes=" << mSentBytes
         << " mSentBytesPrevious=" << mSentBytesPrevious
         << " mAckedSentBytes=" << mAckedSentBytes
+        << " mRemoteWrittenSendAckBytes=" << RemoteAckedBytes
         << EndLogLine ;
+
+      // update/check for any received ACKs before attempting to send
+      if( RemoteAckedBytes > mAckedSentBytes )
+        {
+        BegLogLine( FXLOG_IONCN_BUFFER )
+          << "AckedSentBytes needs update: " 
+          << " mAckedSentBytes=" << mAckedSentBytes
+          << " mRemoteWrittenSendAckBytes=" << RemoteAckedBytes
+          << EndLogLine;
+        mAckedSentBytes = RemoteAckedBytes;
+        }
+
+      // check and send:
       if ( mAckedSentBytes >= RequiredSentAckUplink() )
         {
           rc=mTransmitBuffer.Transmit(mSentBytes+mTransmitBufferIndex,mReceivedBytes,mTransmitBufferIndex,mLkey) ;
           if(rc)
             {
+              mBufferRequiresAck = false;
               mSentBytes += mTransmitBufferIndex ;
               mTransmitBufferIndex=0 ;
             }
         }
       else
-        {
+      {
+        mBufferRequiresAck = true;
+        unsigned long TSent0 = mTransmitBuffer.mBuffer[0].mSentBytes;
+        unsigned long TRecv0 = mTransmitBuffer.mBuffer[0].mReceivedBytes;
+        unsigned long TSent1 = mTransmitBuffer.mBuffer[1].mSentBytes;
+        unsigned long TRecv1 = mTransmitBuffer.mBuffer[1].mReceivedBytes;
+
+        unsigned long RSent0 = mReceiveBuffer.mBuffer[0].mSentBytes;
+        unsigned long RRecv0 = mReceiveBuffer.mBuffer[0].mReceivedBytes;
+        unsigned long RSent1 = mReceiveBuffer.mBuffer[1].mSentBytes;
+        unsigned long RRecv1 = mReceiveBuffer.mBuffer[1].mReceivedBytes;
+        BegLogLine( FXLOG_IONCN_BUFFER | FXLOG_ITAPI_ROUTER_FRAMES )
+          << "Not Sending. Buffer Stats: "
+          << " mRemoteWrittenSendAckBytes=" << RemoteAckedBytes
+          << " mReceiveBuffer[0x" << (void*)(&mReceiveBuffer.mBuffer[0]) << "]=( " << RSent0 << " : " << RRecv0 << " )"
+          << " mReceiveBuffer[0x" << (void*)(&mReceiveBuffer.mBuffer[1]) << "]=( " << RSent1 << " : " << RRecv1 << " )"
+          << " current_rindex=" << mReceiveBuffer.CurrentBufferIndex()
+          << " mTransmitBuffer[0]=( " << TSent0 << " : " << TRecv0 << " )"
+          << " mTransmitBuffer[1]=( " << TSent1 << " : " << TRecv1 << " )"
+          << " current_tindex=" << mTransmitBuffer.CurrentBufferIndex()
+          << EndLogLine;
+
           BegLogLine(FXLOG_IONCN_BUFFER)
-              << "Remote buffer not free yet, mAckedSentBytes=" << mAckedSentBytes
-              << " mSentBytesPrevious=" << mSentBytesPrevious
-              << " mSentBytes=" << mSentBytes
-              << EndLogLine ;
-          rc=false ;
-        }
+            << "Remote buffer not free yet. mAckedSentBytes=" << mAckedSentBytes
+            << " mSentBytesPrevious=" << mSentBytesPrevious
+            << " mSentBytes=" << mSentBytes
+            << EndLogLine ;
+          rc = false;
+      }
       UnlockTransmit() ;
       return rc ;
     }
@@ -424,44 +519,132 @@ public:
         << " mSentBytesPrevious=" << mSentBytesPrevious
         << " mAckedSentBytes=" << mAckedSentBytes
         << EndLogLine ;
-      if ( mAckedSentBytes >= RequiredSentAckDownlink())
+
+      if( ( mAckedSentBytes >= RequiredSentAckDownlink()) && ( mBufferAllowsAck ) )
+      {
+        rc=mTransmitBuffer.Transmit(conn,mSentBytes+mTransmitBufferIndex,mReceivedBytes,mTransmitBufferIndex) ;
+        if( rc )
         {
-          rc=mTransmitBuffer.Transmit(conn,mSentBytes+mTransmitBufferIndex,mReceivedBytes,mTransmitBufferIndex) ;
-          if(rc)
-            {
-              mSentBytes += mTransmitBufferIndex ;
-              mTransmitBufferIndex=0 ;
-            }
+          mBufferRequiresAck = false;
+          mSentBytes += mTransmitBufferIndex ;
+          mTransmitBufferIndex=0 ;
         }
+      }
       else
+      {
+        unsigned long TSent0 = mTransmitBuffer.mBuffer[0].mSentBytes;
+        unsigned long TRecv0 = mTransmitBuffer.mBuffer[0].mReceivedBytes;
+        unsigned long TSent1 = mTransmitBuffer.mBuffer[1].mSentBytes;
+        unsigned long TRecv1 = mTransmitBuffer.mBuffer[1].mReceivedBytes;
+
+        unsigned long RSent0 = mReceiveBuffer.mBuffer[0].mSentBytes;
+        unsigned long RRecv0 = mReceiveBuffer.mBuffer[0].mReceivedBytes;
+        unsigned long RSent1 = mReceiveBuffer.mBuffer[1].mSentBytes;
+        unsigned long RRecv1 = mReceiveBuffer.mBuffer[1].mReceivedBytes;
+        BegLogLine( FXLOG_IONCN_BUFFER | FXLOG_ITAPI_ROUTER_FRAMES )
+          << "Remote Buffer not free: conn=" << (void*)conn
+          << " Buffer Stats: "
+          << " mReceiveBuffer[0]=( " << RSent0 << " : " << RRecv0 << " )"
+          << " mReceiveBuffer[1]=( " << RSent1 << " : " << RRecv1 << " )"
+          << " current_rindex=" << mReceiveBuffer.CurrentBufferIndex()
+          << " mTransmitBuffer[0]=( " << TSent0 << " : " << TRecv0 << " )"
+          << " mTransmitBuffer[1]=( " << TSent1 << " : " << TRecv1 << " )"
+          << " current_tindex=" << mTransmitBuffer.CurrentBufferIndex()
+          << EndLogLine;
+        BegLogLine(FXLOG_IONCN_BUFFER)
+          << "conn=0x" << (void *) conn
+          << " Remote buffer not free yet. Check if we should acknowledge current status. mAckedSentBytes=" << mAckedSentBytes
+          << " mSentBytesPrevious=" << mSentBytesPrevious
+          << " mSentBytes=" << mSentBytes
+          << " mTransmitBufferIndex=" << mTransmitBufferIndex
+          << EndLogLine ;
+
+        // ack the current status, regardless of what the remote side thinks...
+        rc = false;
+        unsigned long newReceivedBytes = mTransmitBuffer.mBuffer[ mTransmitBuffer.CurrentBufferIndex() ].mReceivedBytes;
+        if( mReceivedBytes > newReceivedBytes )
         {
-          BegLogLine(FXLOG_IONCN_BUFFER)
-              << "conn=0x" << (void *) conn
-              << " Remote buffer not free yet, mAckedSentBytes=" << mAckedSentBytes
-              << " mSentBytesPrevious=" << mSentBytesPrevious
-              << " mSentBytes=" << mSentBytes
-              << EndLogLine ;
-          rc=false ;
+          mBufferRequiresAck = true;
+          BegLogLine( FXLOG_IONCN_BUFFER | FXLOG_ITAPI_ROUTER_FRAMES )
+            << "ACK required.  conn=0x" << (void*) conn
+            << " mReceivedBytes=" << mReceivedBytes
+            << " newReceivedBytes=" << newReceivedBytes
+            << " mBufferAckStates( " << mBufferAllowsAck << ":" << mBufferRequiresAck << " )"
+            << " mAckedSentBytes=" << mAckedSentBytes
+            << EndLogLine;
         }
+      }
       UnlockTransmit() ;
       return rc ;
 
     }
+  bool PostAckOnly( struct connection *conn )
+  {
+    bool rc = mTransmitBuffer.PostAckOnly( conn, mSentBytes, mReceivedBytes );
+    if( rc )
+      mBufferRequiresAck = false;
+    return rc;
+  }
   bool Receive(void)
     {
+    static volatile unsigned long idlecount = 0;
+      mReceiveBufferLength = 0;
+        unsigned long TSent0 = mTransmitBuffer.mBuffer[0].mSentBytes;
+        unsigned long TRecv0 = mTransmitBuffer.mBuffer[0].mReceivedBytes;
+        unsigned long TSent1 = mTransmitBuffer.mBuffer[1].mSentBytes;
+        unsigned long TRecv1 = mTransmitBuffer.mBuffer[1].mReceivedBytes;
+
+        unsigned long RSent0 = mReceiveBuffer.mBuffer[0].mSentBytes;
+        unsigned long RRecv0 = mReceiveBuffer.mBuffer[0].mReceivedBytes;
+        unsigned long RSent1 = mReceiveBuffer.mBuffer[1].mSentBytes;
+        unsigned long RRecv1 = mReceiveBuffer.mBuffer[1].mReceivedBytes;
+        BegLogLine( (FXLOG_IONCN_BUFFER | FXLOG_ITAPI_ROUTER_FRAMES) && (idlecount % 0xfffff == 0) )
+          << "Current Buffer Stats: "
+          << " mRemoteWrittenSendAckBytes=" << GetRemoteAckedBytes()
+          << " mReceiveBuffer[0x" << (void*)(&mReceiveBuffer.mBuffer[0]) << "]=( " << RSent0 << " : " << RRecv0 << " )"
+          << " mReceiveBuffer[0x" << (void*)(&mReceiveBuffer.mBuffer[1]) << "]=( " << RSent1 << " : " << RRecv1 << " )"
+          << " current_rindex=" << mReceiveBuffer.CurrentBufferIndex()
+          << " mTransmitBuffer[0]=( " << TSent0 << " : " << TRecv0 << " )"
+          << " mTransmitBuffer[1]=( " << TSent1 << " : " << TRecv1 << " )"
+          << " current_tindex=" << mTransmitBuffer.CurrentBufferIndex()
+          << EndLogLine;
       bool rc=mReceiveBuffer.Receive(mReceivedBytes,&mReceiveBufferLength) ;
       if ( rc )
         {
+          idlecount = 0;
           unsigned int CurrentBuffer=mReceiveBuffer.CurrentBufferIndex() ;
           mSentBytesPrevious=mSentBytes ;
           mAckedSentBytes=mReceiveBuffer.mBuffer[CurrentBuffer].mReceivedBytes ;
+          SetRemoteAckedBytes( mAckedSentBytes );
 //          mAckedReceivedBytes=mReceiveBuffer.mBuffer[CurrentBuffer].mReceivedBytes ;
+          mBufferRequiresAck = true;
           BegLogLine(FXLOG_IONCN_BUFFER)
             << "mSentBytesPrevious=" << mSentBytesPrevious
             << " mAckedSentBytes=" << mAckedSentBytes
 //            << " mAckedReceivedBytes=" << mAckedReceivedBytes
             << EndLogLine ;
         }
+      else
+      {
+      idlecount++;
+        if( mBufferRequiresAck )
+        {
+          unsigned long newAckedSentBytes = mAckedSentBytes;
+          unsigned long BufferRecvBytes = mReceiveBuffer.mBuffer[ 0 ].mReceivedBytes;
+          if( BufferRecvBytes < CN_ION_SENTINEL_LENGTH_VALUE )
+            newAckedSentBytes = std::max( newAckedSentBytes, BufferRecvBytes );
+
+          BufferRecvBytes = mReceiveBuffer.mBuffer[ 1 ].mReceivedBytes;
+          if( BufferRecvBytes < CN_ION_SENTINEL_LENGTH_VALUE )
+            newAckedSentBytes = std::max( newAckedSentBytes, BufferRecvBytes );
+
+          if( mAckedSentBytes < newAckedSentBytes )
+            {
+            mAckedSentBytes = newAckedSentBytes;
+            }
+        }
+        rc = false;
+      }
       return rc ;
     }
   void HandleBuffer(void)
@@ -504,10 +687,16 @@ public:
     {
       return mTransmitBufferIndex>0 ;
     }
-  void AdvanceAcked(unsigned long aAckedSentBytes)
+  bool AdvanceAcked(unsigned long aAckedSentBytes)
     {
 //      mTransmitBuffer.AdvanceAcked(aAckedSentBytes) ;
+    if( mAckedSentBytes < aAckedSentBytes )
+    {
       mAckedSentBytes=aAckedSentBytes ;
+      return true;
+    }
+    else
+      return false;
     }
 //  void HoldForUpstreamSpace(void)
 //    {
@@ -516,6 +705,7 @@ public:
   void PostReceive(struct connection *conn)
     {
       mReceiveBuffer.PostReceive(conn) ;
+      mBufferAllowsAck = true;
     }
   void PostAllReceives(struct connection *conn)
     {
@@ -523,8 +713,14 @@ public:
     } ;
   void ProcessCall(struct connection *conn)
     {
+      mBufferAllowsAck = false;
       mReceiveBuffer.ProcessCall(conn) ;
     }
+  void ProcessRead(struct connection *conn)
+  {
+    mBufferAllowsAck = false;
+    mReceiveBuffer.ProcessRead(conn);
+  }
   };
 
 //class LocalEndpointAndHdr

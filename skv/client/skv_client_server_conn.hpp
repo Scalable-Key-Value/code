@@ -337,6 +337,12 @@ struct skv_client_queued_command_rep_t
 
 #endif
 
+      BegLogLine( SKV_CLIENT_REQUEST_COALESCING_LOG )
+        << "PostRequest(): EP: " << (void*)mEP
+        << " mSegsCount: " << mSendSegsCount
+        << " inFlight: " << mInFlightWriteCount
+        << EndLogLine;
+
       status = it_post_rdma_write( mEP,
                                    &(mQueuedSegments[ mCurrentServerRecvSlot ]),
                                    mSendSegsCount,

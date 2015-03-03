@@ -211,7 +211,7 @@ public:
         && ( mClientEPs[ aClientId ] != NULL ) );
   }
 
-  MultiplexedConnectionType* AddClient( uint16_t aClientId, MultiplexedConnectionType *aClientEP )
+  MultiplexedConnectionType* AddClient( uint16_t aClientId, const MultiplexedConnectionType *aClientEP )
   {
     if( aClientId >= mMaxClientCount )
     {
@@ -238,7 +238,7 @@ public:
         << EndLogLine;
       return NULL;
     }
-    mClientEPs[ aClientId ] = aClientEP;
+    mClientEPs[ aClientId ] = (MultiplexedConnectionType *)aClientEP;
     mClientCount++;
 
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
@@ -345,10 +345,11 @@ public:
           return status;
       }
     }
-    iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mCurrentRecvPtr;
-
     if( aClient != NULL )
     {
+      iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mSendBuffer->AlignedPosition( mCurrentRecvPtr );
+      mCurrentRecvPtr = (char*)MultHdr;
+
       MultHdr->ClientID = ntohs( MultHdr->ClientID );
       *aClient = MultHdr->ClientID;
 
