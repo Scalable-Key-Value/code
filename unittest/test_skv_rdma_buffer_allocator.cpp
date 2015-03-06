@@ -13,10 +13,17 @@
  *      Author: lschneid
  */
 
+#ifndef SKV_CLIENT_UNI
 #define SKV_CLIENT_UNI
-#define SKV_NON_MPI
+#endif
 
+#ifndef SKV_NON_MPI
+#define SKV_NON_MPI
+#endif
+
+#ifndef SKV_UNIT_TEST
 #define SKV_UNIT_TEST
+#endif
 
 #define ITAPI_ENABLE_V21_BINDINGS
 #define VP_NAME "vp_softrdma"
