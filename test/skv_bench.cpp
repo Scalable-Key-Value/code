@@ -27,6 +27,10 @@
 #define SKV_BENCH_LOG ( 0 )
 #endif
 
+#ifndef SKV_BENCH_LOG_LW
+#define SKV_BENCH_LOG_LW ( 0 )
+#endif
+
 #ifndef SKV_BENCH_DATA_LOG
 #define SKV_BENCH_DATA_LOG ( 0 )
 #endif
@@ -34,6 +38,8 @@
 #ifndef SKV_BENCH_RESULT_LOG
 #define SKV_BENCH_RESULT_LOG ( 1 )
 #endif
+
+//#define DEBUG_CONNECT
 
 #define DEFAULT_START ( 1 )
 #define DEFAULT_END   ( 2 )
@@ -51,6 +57,7 @@
 
 #define MB_FACTOR ( (1000 * 1000) )
 
+//#define SKV_BENCH_SHOW_HOSTNAME
 
 /*************************************************************
  * Output formating macros
@@ -736,6 +743,8 @@ public:
     /*********************************************************
      * insert phase
      */
+    MPI_Barrier( MPI_COMM_WORLD );
+
     double TimeLimit = mConfigRef->mTimeLimit;
     double CurrentTime = MPI_Wtime();
     size_t Requests = 0;
@@ -798,7 +807,13 @@ public:
                                    mConfigRef->mBatchSize ) );
 
     CurrentTime = MPI_Wtime();
+    BegLogLine(SKV_BENCH_LOG_LW)
+      << "Entering barrier"
+      << EndLogLine ;
     MPI_Barrier( MPI_COMM_WORLD );
+    BegLogLine(SKV_BENCH_LOG_LW)
+      << "Exiting barrier"
+      << EndLogLine ;
     mLocalData.mInsert.Calculate( CurrentTime-StartTime, mValueSize, (double)Requests );
 
     /*********************************************************
@@ -848,7 +863,13 @@ public:
                                   mConfigRef->mBatchSize ) );
 
     CurrentTime = MPI_Wtime();
+    BegLogLine(SKV_BENCH_LOG_LW)
+      << "Entering barrier"
+      << EndLogLine ;
     MPI_Barrier( MPI_COMM_WORLD );
+    BegLogLine(SKV_BENCH_LOG_LW)
+      << "Exiting barrier"
+      << EndLogLine ;
     mLocalData.mRetrieve.Calculate( CurrentTime-StartTime, mValueSize, (double)Requests );
 
     /*********************************************************
@@ -895,7 +916,13 @@ public:
                                    mConfigRef->mBatchSize ) );
 
     CurrentTime = MPI_Wtime();
+    BegLogLine(SKV_BENCH_LOG_LW)
+      << "Entering barrier"
+      << EndLogLine ;
     MPI_Barrier( MPI_COMM_WORLD );
+    BegLogLine(SKV_BENCH_LOG_LW)
+      << "Exiting barrier"
+      << EndLogLine ;
     mLocalData.mRemove.Calculate( CurrentTime-StartTime, mValueSize, (double)Requests );
 
     MPI_Allreduce( & mLocalData.mInsert, & mGlobalData.mInsert, 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD );
@@ -1129,15 +1156,31 @@ main(int argc, char **argv)
   if( config.mRank == 0 )
     std::cout << config << std::endl;
 
+#ifdef SKV_BENCH_SHOW_HOSTNAME
+  char hostname[256];
+  gethostname( hostname, 256 );
+  std::cout << hostname << std::endl;
+#endif
+
   skv_status_t status = SKV_SUCCESS;
   skv_bench_t bench;
   skv_bench_gliding_avg_t glAvg;
   double sdev;
 
+#ifdef DEBUG_CONNECT
+  for( int n=0; n<config.mNodeCount; n++ )
+  {
+    if( config.mRank == n )
+      status = bench.Init( config );
+    MPI_Barrier( MPI_COMM_WORLD );
+  }
+#else
   status = bench.Init( config );
+#endif
   if( config.mRank == 0)
     glAvg.PrintHeader();
 
+  MPI_Barrier( MPI_COMM_WORLD );
   for( int k = config.mKeySize.GetStart(); !config.mKeySize.OutOfRange( k ); k= config.mKeySize.Next( k ) )
     for( int v = config.mValueSize.GetStart(); !config.mValueSize.OutOfRange( v ); v = config.mValueSize.Next( v ) )
     {
