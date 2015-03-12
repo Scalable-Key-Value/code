@@ -23,9 +23,9 @@ struct rpcAckBuffer
   };
 
 enum {
-  k_IONPort = 10952 ,
-  k_UpstreamBufferSize = 1024*1024 ,
-  k_DownstreamBufferSize = 1024*1024 ,
+  k_IONPort = CNK_ROUTER_PORT,
+  k_UpstreamBufferSize = CNK_ROUTER_BUFFER_SIZE,
+  k_DownstreamBufferSize = CNK_ROUTER_BUFFER_SIZE ,
   k_CallBufferSize = sizeof(struct rpcBuffer) ,
   k_AckBufferSize = sizeof(struct rpcAckBuffer)
 //  k_CallBufferCount = 64

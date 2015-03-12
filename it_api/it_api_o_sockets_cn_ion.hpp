@@ -18,9 +18,12 @@
 #include <string.h>
 #include <it_api_o_sockets_types.h>
 
+#define CNK_ROUTER_BUFFER_SIZE ( 16 * 1024 * 1024ull )
+#define CNK_ROUTER_PORT ( 10952 )
+
 enum {
-  k_ApplicationBufferSize=16*1024*1024 ,
-  k_IONPort = 10952
+  k_ApplicationBufferSize= CNK_ROUTER_BUFFER_SIZE ,
+  k_IONPort = CNK_ROUTER_PORT
 };
 
 struct connection *conn ;
@@ -191,7 +194,7 @@ public:
       memcpy(mApplicationBuffer+aDest,aSrc,aLength) ;
     } ;
   void IssueRDMARead(struct connection *conn, unsigned long Offset, unsigned long Length) ;
-  void ProcessCall(struct connection *conn) ;
+  int ProcessCall(struct connection *conn) ;
   void ProcessRead(struct connection *conn);
   void ProcessReceiveBuffer(struct connection *conn, bool contained_ack ) ;
   void PostReceive(struct connection *conn) ;
@@ -313,13 +316,13 @@ public:
           << EndLogLine ;
       mBuffer[CurrentBufferIndex()].CopyToBuffer(aDest,aSrc,aLength) ;
     } ;
-  void ProcessCall(struct connection *conn)
+  int ProcessCall(struct connection *conn)
     {
       BegLogLine(FXLOG_IONCN_BUFFER)
           << " mBlockCount=" << mBlockCount
           << " CurrentBufferIndex()=" << CurrentBufferIndex()
           << EndLogLine ;
-      mBuffer[CurrentBufferIndex()].ProcessCall(conn) ;
+      return mBuffer[CurrentBufferIndex()].ProcessCall(conn) ;
     }
   void ProcessRead(struct connection *conn)
   {
@@ -711,10 +714,10 @@ public:
     {
       mReceiveBuffer.PostAllReceives(conn) ;
     } ;
-  void ProcessCall(struct connection *conn)
+  int ProcessCall(struct connection *conn)
     {
       mBufferAllowsAck = false;
-      mReceiveBuffer.ProcessCall(conn) ;
+      return mReceiveBuffer.ProcessCall(conn) ;
     }
   void ProcessRead(struct connection *conn)
   {

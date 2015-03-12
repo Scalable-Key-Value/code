@@ -217,17 +217,7 @@ struct ThreadSafeQueue_t
               expiry.tv_nsec=nsec ;
               expiry.tv_sec=now.tv_sec+mCondWaitTimeout.tv_sec ;
             }
-
-          BegLogLine( 1 )
-            << "Queue full. Sleeping... "
-            << " size: " << GetCount()
-            << EndLogLine;
           pthread_cond_timedwait( & full_cond, & mutex, & expiry );
-          BegLogLine( 1 )
-            << "Queue full. Woke up... "
-            << " size: " << GetCount()
-            << EndLogLine;
-
           if( tLockless )
             pthread_mutex_unlock( &mutex );
         }

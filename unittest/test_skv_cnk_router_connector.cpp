@@ -153,7 +153,7 @@ public:
     bool ret = false;
     iWARPEM_Message_Hdr_t *Hdr;
     char *Data;
-    uint16_t Client;
+    iWARPEM_StreamId_t Client;
     do
     {
       if( mRouterEP->ExtractNextMessage( &Hdr, &Data, &Client ) != IWARPEM_SUCCESS )

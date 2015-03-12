@@ -19,13 +19,18 @@
 #define FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG ( 0 )
 #endif
 
-#define IWARPEM_SOCKET_BUFFER_ALIGNMENT ( 8 )
-#define IWARPEM_SOCKET_BUFFER_ALIGNMENT_MASK ( 0x7 )
+#define IWARPEM_SOCKET_DATA_ALIGNMENT_MASK ( 0xFF )
+#define IWARPEM_SOCKET_DATA_ALIGNMENT ( 256 )
+
+#define IWARPEM_SOCKET_HEADER_ALIGNMENT_MASK ( 0x7 )
+#define IWARPEM_SOCKET_HEADER_ALIGNMENT ( 8 )
+
 
 class iWARPEM_Socket_Buffer_t
 {
 protected:
   it_api_multiplexed_socket_message_header_t *mHeader;
+  size_t mHeadSpace;
 
   inline void UpdateHeaderLen( const size_t aLen )
   {
@@ -33,29 +38,60 @@ protected:
   }
 public:
   iWARPEM_Socket_Buffer_t( const size_t aBufferSize = IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE,
-                           const bool aAllowCopy = false ) { mHeader = NULL; }
-  virtual ~iWARPEM_Socket_Buffer_t() {};
+                           const bool aAllowCopy = false )
+  {
+    mHeader = NULL;
+    mHeadSpace = AlignedHeaderPosition( (const char*) sizeof( it_api_multiplexed_socket_message_header_t ) );
+  }
+  virtual ~iWARPEM_Socket_Buffer_t() { mHeader = NULL; };
 
+  virtual void ConfigureAsReceiveBuffer() = 0;
   inline size_t GetRemainingSize() const;
-  inline void AddClientHdr( uint16_t aClient );
+  virtual void* AddHdr( const char* aHdrPtr, const size_t aSize ) = 0;
   virtual void AddData( const char* aBuffer, const size_t aSize ) = 0;
-  virtual void AddData( const struct iovec &aIOV ) = 0;
+  virtual void AddDataContigous( const char *aBuffer, const size_t aSize ) = 0;
+
+  virtual char* GetHdrPtr( size_t *aSize, uintptr_t aAdvancePos = 1 ) = 0;
+  virtual size_t GetData( char ** aBuffer, size_t *aSize ) = 0;
   inline size_t GetDataLen() const;
+  inline bool FlushRecommended() const;
   virtual iWARPEM_Status_t FlushToSocket( const int aSocket, int *wlen ) = 0;
+  virtual iWARPEM_Status_t FillFromSocket( const int aSocket ) = 0;
   inline void Reset();
 
-  inline void SetHeader( const it_api_multiplexed_socket_message_header_t &aHdr );
-  inline void SetHeader( const unsigned char aProtocolVersion, const unsigned char aMsgType );
+  inline void SetHeader( const it_api_multiplexed_socket_message_header_t &aHdr )
+  {
+    mHeader->MsgType = aHdr.MsgType;
+    mHeader->ProtocolVersion = aHdr.ProtocolVersion;
+  }
+  inline void SetHeader( const unsigned char aProtocolVersion, const unsigned char aMsgType )
+  {
+    mHeader->MsgType = aMsgType;
+    mHeader->ProtocolVersion = aProtocolVersion;
+  }
+
+  inline uintptr_t AlignedDataPosition( const char* aAddr )
+  {
+    uintptr_t base = (uintptr_t)aAddr;
+    return ( (base - 1) & (~IWARPEM_SOCKET_DATA_ALIGNMENT_MASK )) + IWARPEM_SOCKET_DATA_ALIGNMENT;
+  }
+  inline uintptr_t AlignedHeaderPosition( const char* aAddr )
+  {
+    uintptr_t base = (uintptr_t)aAddr;
+    return ( (base - 1) & (~IWARPEM_SOCKET_HEADER_ALIGNMENT_MASK )) + IWARPEM_SOCKET_HEADER_ALIGNMENT;
+  }
 };
 
-class iWARPEM_Memory_Socket_Buffer_t : protected iWARPEM_Socket_Buffer_t
+class iWARPEM_Memory_Socket_Buffer_t : public iWARPEM_Socket_Buffer_t
 {
+  char *mShadowBufferStart;   // keep track of the actually allocated buffer in case we're not aligned
   char *mBuffer;
   char *mCurrentPosition;
   char *mBufferEnd;
 
   size_t mBufferSize;
   bool mAllowCopy;
+  bool mIsRecvBuffer;
 
 public:
   iWARPEM_Memory_Socket_Buffer_t( const size_t aBufferSize = IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE,
@@ -66,55 +102,69 @@ public:
       << EndLogLine;
 
     mBufferSize = aBufferSize;
-    mBuffer = (char*)new uintptr_t[ mBufferSize / sizeof(uintptr_t) ];
+    size_t AllocSize = mBufferSize
+        + sizeof( it_api_multiplexed_socket_message_header_t )
+        + 2*IWARPEM_SOCKET_DATA_ALIGNMENT   // room for alignment shift
+        + sizeof(uintptr_t);
 
-    AssertLogLine( ((uintptr_t)mBuffer & IWARPEM_SOCKET_BUFFER_ALIGNMENT_MASK ) == 0 )
-      << "Buffer is not aligned to " << IWARPEM_SOCKET_BUFFER_ALIGNMENT << " Bytes."
+    mShadowBufferStart = (char*)new uintptr_t[ AllocSize / sizeof(uintptr_t) ];
+
+    mHeader = (struct it_api_multiplexed_socket_message_header_t*)AlignedDataPosition( mShadowBufferStart );
+    bzero( mHeader, IWARPEM_SOCKET_DATA_ALIGNMENT );
+
+    mBuffer = (char*)mHeader + mHeadSpace;
+
+    AssertLogLine( ((uintptr_t)mBuffer & IWARPEM_SOCKET_HEADER_ALIGNMENT_MASK ) == 0 )
+      << "Buffer is not aligned to " << IWARPEM_SOCKET_HEADER_ALIGNMENT << " Bytes."
       << " @: " << (void*)mBuffer
       << EndLogLine;
 
-    mHeader = (it_api_multiplexed_socket_message_header_t*)mBuffer;
-    mBufferEnd = mBuffer + mBufferSize;
+    mIsRecvBuffer = false;
     mAllowCopy = aAllowCopy;
+    mBufferEnd = mBuffer + mBufferSize;
 
     Reset();
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Created Data Buffer. size=" << aBufferSize
+      << " Header=0x" << (void*)mHeader
+      << " Buffer=0x" << (void*)mBuffer
+      << " End=0x" << (void*)mBufferEnd
+      << EndLogLine;
   }
   ~iWARPEM_Memory_Socket_Buffer_t()
   {
-    delete mBuffer;
+    delete mShadowBufferStart;
+    mShadowBufferStart = NULL;
     mBuffer = NULL;
     mCurrentPosition = NULL;
   }
 
-  inline uintptr_t AlignedPosition( const char* aAddr ) 
+  inline void ConfigureAsReceiveBuffer()
   {
-  uintptr_t base = (uintptr_t)aAddr;
-  return ( (base - 1) & (~IWARPEM_SOCKET_BUFFER_ALIGNMENT_MASK )) + IWARPEM_SOCKET_BUFFER_ALIGNMENT;
+    mIsRecvBuffer = true;
+    mBufferEnd = mBuffer;
+    mAllowCopy = false; 
   }
   inline size_t GetRemainingSize() const { return (size_t)(mBufferEnd - mCurrentPosition); }
-  inline void SetHeader( const it_api_multiplexed_socket_message_header_t &aHdr )
+  // inserts the data at the next header-aligned position and returns the destination pointer
+  inline void* AddHdr( const char* aHdrPtr, const size_t aSize )
   {
-    mHeader->MsgType = aHdr.MsgType;
-    mHeader->ProtocolVersion = aHdr.ProtocolVersion;
-  }
-  inline void SetHeader( const unsigned char aProtocolVersion, const unsigned char aMsgType )
-  {
-    mHeader->MsgType = aMsgType;
-    mHeader->ProtocolVersion = aProtocolVersion;
-  }
-  inline void AddClientHdr( uint16_t aClient )
-  {
-    BegLogLine( (uintptr_t)mCurrentPosition % IWARPEM_SOCKET_BUFFER_ALIGNMENT != 0 )
-      << " Buffer Pointer alignment problem: " << (void*)mCurrentPosition
-      << " alignment required: " << offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg )
+    mCurrentPosition = (char*)AlignedHeaderPosition( mCurrentPosition );
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Injecting header @0x" << (void*)mCurrentPosition
+      << " aSize=" << aSize
+      << " BufferOffset=" << GetDataLen()
       << EndLogLine;
 
-    iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)AlignedPosition( mCurrentPosition );
-    mCurrentPosition = (char*)MultHdr;
-
-    MultHdr->ClientID = htons( aClient );
-
-    mCurrentPosition += offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg );
+    if( GetRemainingSize() < aSize )
+      return NULL;
+    if( mAllowCopy )
+    {
+      memcpy( mCurrentPosition, aHdrPtr, aSize );
+    }
+    void* retval = (void*)mCurrentPosition;
+    mCurrentPosition += aSize;
+    return retval;
   }
   inline void AddData( const char* aBuffer, const size_t aSize )
   {
@@ -125,37 +175,202 @@ public:
       << " request size was: " << aSize
       << EndLogLine;
 
+    mCurrentPosition = (char*)AlignedDataPosition( mCurrentPosition );
+
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Injecting data @0x" << (void*)mCurrentPosition
+      << " BufferOffset=" << GetDataLen()
+      << " aSize=" << aSize
+      << EndLogLine;
+
     if(( mAllowCopy ) && ( aBuffer != mCurrentPosition ))
       memcpy( mCurrentPosition, aBuffer, aSize );
 
     mCurrentPosition += aSize;
   }
-  inline void AddData( const struct iovec &aIOV )
+  // inject data to the current position without watching alignment
+  // required to transmit io-vectors properly
+  inline void AddDataContigous( const char *aBuffer, const size_t aSize )
   {
-    if(( mAllowCopy ) && ( aIOV.iov_base != mCurrentPosition ))
-      memcpy( mCurrentPosition, aIOV.iov_base, aIOV.iov_len );
+    StrongAssertLogLine( (mAllowCopy) || (aBuffer == mCurrentPosition ) )
+      << "Socket buffer configured without memcpy. But src and dest buffer differ:"
+      << "@" << (void*)aBuffer
+      << " vs. @" << (void*)mCurrentPosition
+      << " request size was: " << aSize
+      << EndLogLine;
 
-    mCurrentPosition += aIOV.iov_len;
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Injecting data @0x" << (void*)mCurrentPosition
+      << " BufferOffset=" << GetDataLen()
+      << " aSize=" << aSize
+      << EndLogLine;
+
+    if(( mAllowCopy ) && ( aBuffer != mCurrentPosition ))
+      memcpy( mCurrentPosition, aBuffer, aSize );
+
+    mCurrentPosition += aSize;
+  }
+  // returns pointer to potential header data at next header-aligned location
+  // forwards the currentposition!
+  char* GetHdrPtr( size_t *aSize, uintptr_t aAdvancePos = 1 )
+  {
+    mCurrentPosition = (char*)AlignedHeaderPosition( mCurrentPosition );
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Start header retrieval @0x" << (void*)mCurrentPosition
+      << " aSize=" << *aSize
+      << " available=" << RecvDataAvailable()
+      << " advance=" << aAdvancePos
+      << EndLogLine;
+    if( *aSize > RecvDataAvailable() )
+      *aSize = RecvDataAvailable();
+
+    char *retval = mCurrentPosition;
+    mCurrentPosition += (*aSize) * ( aAdvancePos & 1 );
+    return retval;
+  }
+  size_t GetData( char ** aBuffer, size_t *aSize )
+  {
+    mCurrentPosition = (char*)AlignedDataPosition( mCurrentPosition );
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Start data retrieval @0x" << (void*)mCurrentPosition
+      << " aSize=" << *aSize
+      << " available=" << RecvDataAvailable()
+      << EndLogLine;
+    if( *aSize > RecvDataAvailable() )
+      *aSize = RecvDataAvailable();
+
+    if( mAllowCopy )
+      memcpy( *aBuffer, mCurrentPosition, *aSize );
+    else
+      *aBuffer = mCurrentPosition;
+
+    mCurrentPosition += (*aSize);
+    return *aSize;
   }
   inline size_t GetDataLen() const
   {
-    return (size_t)(mCurrentPosition - mBuffer - sizeof( it_api_multiplexed_socket_message_header_t ));
+    return (size_t)(mCurrentPosition - mBuffer);
+  }
+  inline bool FlushRecommended() const { return GetDataLen() > ( mBufferSize - (mBufferSize >> 3) ); }
+  inline size_t RecvDataAvailable() const
+  {
+    if( mBufferEnd < mCurrentPosition )
+      return 0;
+    return ( ((uintptr_t)mBufferEnd - (uintptr_t)mCurrentPosition) );
   }
   inline iWARPEM_Status_t FlushToSocket( const int aSocket, int *wlen )
   {
     UpdateHeaderLen( GetDataLen() );
-    return write_to_socket( aSocket, mBuffer, mCurrentPosition - mBuffer, wlen );
+    iWARPEM_Status_t rc = write_to_socket( aSocket, (char*)mHeader, mCurrentPosition - (char*)mHeader, wlen );
+    if( *wlen > mHeadSpace )
+      *wlen -= mHeadSpace;
+    return rc;
   }
+
+  inline bool ReceiveProtocolHeader( int aSocket )
+  {
+    bool HdrCorrect = false;
+    int rlen_expected;
+    int rlen = mHeadSpace;
+
+    iWARPEM_Status_t istatus = read_from_socket( aSocket,
+                                                 (char *) mHeader,
+                                                 rlen,
+                                                 & rlen_expected );
+
+    if(( istatus != IWARPEM_SUCCESS ) || ( rlen != rlen_expected ))
+    {
+      BegLogLine(rlen == rlen_expected)
+        << "Short read, rlen=" << rlen
+        << " rlen_expected=" << rlen_expected
+        << " Peer has probably gone down"
+        << EndLogLine ;
+
+      return false;
+    }
+
+    StrongAssertLogLine( mHeader->ProtocolVersion == IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION )
+      << "Protocol version mismatch. Recompile client and/or server to match."
+      << " server: " << IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION
+      << " client: " << mHeader->ProtocolVersion
+      << EndLogLine;
+
+    HdrCorrect = ( mHeader->ProtocolVersion == IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION );
+    HdrCorrect &= ( istatus == IWARPEM_SUCCESS || ( rlen == rlen_expected ) );
+
+    int ReceiveDataLen = mHeader->DataLen;
+
+    StrongAssertLogLine( ReceiveDataLen <= IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE )
+      << "iWARPEM_Router_Endpoint_t: data length will exceed the buffer size"
+      << " max: " << IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE
+      << " actual: " << ReceiveDataLen
+      << EndLogLine;
+
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Received multiplex header: "
+      << " socket: " << aSocket
+      << " version: " << mHeader->ProtocolVersion
+      << " datalen: " << mHeader->DataLen
+      << EndLogLine;
+
+    return HdrCorrect;
+  }
+
+  inline iWARPEM_Status_t FillFromSocket( const int aSocket )
+  {
+    if( ! ReceiveProtocolHeader( aSocket ) )
+    {
+      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+        << "iWARPEM_Router_Endpoint_t:: Error receiving protocol header."
+        << EndLogLine;
+      return IWARPEM_ERRNO_CONNECTION_RESET;
+    }
+
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Refilling recv buffer for socket: " << aSocket
+      << " expecting datalen: " << mHeader->DataLen
+      << EndLogLine;
+
+    int len;
+    iWARPEM_Status_t istatus = read_from_socket( aSocket,
+                                                 mBuffer,
+                                                 mHeader->DataLen,
+                                                 &len );
+    if( ( istatus != IWARPEM_SUCCESS ) || ( len != mHeader->DataLen )  )
+    {
+      BegLogLine( 1 )
+        << "iWARPEM_Router_Endpoint_t: error reading from socket or data length mismatch:"
+        << " status: " << (int)istatus
+        << " expected: " << mHeader->DataLen
+        << " actual: " << len
+        << EndLogLine;
+
+      return IWARPEM_ERRNO_CONNECTION_RESET;
+    }
+
+    mCurrentPosition = mBuffer;
+    mBufferEnd = mCurrentPosition + len;
+
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Refilled recv buffer for socket: " << aSocket
+      << " datalen: " << mHeader->DataLen
+      << EndLogLine;
+
+    return IWARPEM_SUCCESS;
+  }
+
   inline void Reset()
   {
     UpdateHeaderLen( 0 );
-    mCurrentPosition = mBuffer + sizeof( it_api_multiplexed_socket_message_header_t );
+    mCurrentPosition = mBuffer;
+    if( mIsRecvBuffer )
+      mBufferEnd = mBuffer;
   }
 };
 
-#define IWARPEM_MAX_VECTOR_COUNT ( 256 )
+#define IWARPEM_MAX_VECTOR_COUNT ( 128 * 1024 )
 
-class iWARPEM_WriteV_Socket_Buffer_t : protected iWARPEM_Socket_Buffer_t
+class iWARPEM_WriteV_Socket_Buffer_t : public iWARPEM_Socket_Buffer_t
 {
   struct iovec *mVector;
   size_t mVectorCount;
@@ -163,120 +378,215 @@ class iWARPEM_WriteV_Socket_Buffer_t : protected iWARPEM_Socket_Buffer_t
 
   size_t mDataSize;
 
+  char *mShadowBufferStart;
   char *mIntBuffer;
   char *mIntBufferPosition;
   size_t mIntBufferSize;
-
 
   bool mAllowCopy;
 
 public:
   iWARPEM_WriteV_Socket_Buffer_t( const size_t aBufferSize = IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE,
-                                  const bool aAllowCopy = false )
+                                  const bool aAllowCopy = true )
   {
-    mVectorMax = IWARPEM_MAX_VECTOR_COUNT;
-    mVector = new struct iovec[ IWARPEM_MAX_VECTOR_COUNT ];
+    BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+      << "Creating Internal Data Buffer for headers and gaps. size=" << aBufferSize
+      << EndLogLine;
 
     // prepare internal buffer space for on-the-fly vectors by AddData() (e.g. for headers)
     mIntBufferSize = aBufferSize;
-    mIntBuffer = (char*)new uintptr_t[ mIntBufferSize / sizeof(uintptr_t) ];
+    size_t AllocSize = mIntBufferSize
+        + mHeadSpace
+        + 2*IWARPEM_SOCKET_DATA_ALIGNMENT   // room for alignment shift
+        + sizeof(uintptr_t);
 
-    AssertLogLine( ((uintptr_t)mIntBuffer & IWARPEM_SOCKET_BUFFER_ALIGNMENT_MASK ) == 0 )
-      << "Buffer is not aligned to " << IWARPEM_SOCKET_BUFFER_ALIGNMENT << " Bytes."
+    mShadowBufferStart = (char*)new uintptr_t[ AllocSize / sizeof(uintptr_t) ];
+
+    mHeader = (struct it_api_multiplexed_socket_message_header_t*)AlignedDataPosition( mShadowBufferStart );
+    bzero( mHeader, IWARPEM_SOCKET_DATA_ALIGNMENT );
+
+    mIntBuffer = (char*)mHeader + mHeadSpace;
+
+    AssertLogLine( ((uintptr_t)mIntBuffer & IWARPEM_SOCKET_HEADER_ALIGNMENT_MASK ) == 0 )
+      << "Buffer is not aligned to " << IWARPEM_SOCKET_HEADER_ALIGNMENT << " Bytes."
       << " @: " << (void*)mIntBuffer
       << EndLogLine;
 
     mAllowCopy = aAllowCopy;
-    mHeader = ( it_api_multiplexed_socket_message_header_t* )mIntBuffer;
+
+    mVectorMax = IWARPEM_MAX_VECTOR_COUNT;
+    mVector = new struct iovec[ IWARPEM_MAX_VECTOR_COUNT ];
 
     Reset();
-
-    struct iovec *iov = &(mVector[ 0 ]);
-    iov->iov_base = mHeader;
-    iov->iov_len = sizeof( it_api_multiplexed_socket_message_header_t );
   }
   ~iWARPEM_WriteV_Socket_Buffer_t()
   {
-    delete mIntBuffer;
+    delete mShadowBufferStart;
     delete mVector;
   }
 
-  inline uintptr_t AlignedPosition( const char* aAddr ) 
+  void ConfigureAsReceiveBuffer()
   {
-    uintptr_t base = (uintptr_t)aAddr;
-    return ( (base - 1) & (~IWARPEM_SOCKET_BUFFER_ALIGNMENT_MASK )) + IWARPEM_SOCKET_BUFFER_ALIGNMENT;
+    StrongAssertLogLine( 1 )
+      << "WriteV based buffer not possible to use as receive buffer!"
+      << EndLogLine;
   }
   inline size_t GetRemainingSize() const { return mIntBufferSize - (mIntBufferPosition - mIntBuffer); }
-  inline void SkipToNextAlignment()
+  inline void InjectPaddingVector( const size_t aPaddingSize )
   {
-    uintptr_t fill_size = (uintptr_t)AlignedPosition( mIntBufferPosition ) - (uintptr_t)mIntBufferPosition;
-    if( fill_size > 0 )
+    mIntBufferPosition = (char*)AlignedDataPosition( mIntBufferPosition );
+    if( aPaddingSize > 0 )
     {
       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
-        << "Need to skip to next aligned spot (injecting iov @" << mVectorCount
+        << "Need to skip to next aligned spot. injecting "
+        << " vector #" << mVectorCount
+        << " padding=" << aPaddingSize
+        << " offset=" << mDataSize
         << EndLogLine;
 
       struct iovec *iov = &(mVector[ mVectorCount ]);
       iov->iov_base = mIntBufferPosition;
-      iov->iov_len = fill_size;
-      mDataSize += fill_size;
-      mIntBufferPosition += fill_size;
+      iov->iov_len = aPaddingSize;
+      mDataSize += aPaddingSize;
       mVectorCount++;
+      // no need to advance the IntBufferPosition for padding!
     }
   }
-  inline void AddClientHdr( uint16_t aClient )
+  inline void SkipToNextHeaderAlignment()
   {
-    SkipToNextAlignment();
+    size_t padding = AlignedHeaderPosition( (char*)mDataSize ) - mDataSize;
+    InjectPaddingVector( padding );
+  }
+  inline void SkipToNextDataAlignment()
+  {
+    size_t padding = AlignedDataPosition( (char*)mDataSize ) - mDataSize;
+    InjectPaddingVector( padding );
+  }
+
+  virtual void* AddHdr( const char* aHdrPtr, const size_t aSize )
+  {
+    AssertLogLine( mVectorCount < mVectorMax - 2 )
+      << "VectorCount exceeds limit: mVectorCount=" << mVectorCount
+      << " mVectorMax=" << mVectorMax
+      << " need at least 2 space"
+      << EndLogLine;
+
+    SkipToNextHeaderAlignment();
+
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Injecting header @0x" << (void*)mIntBufferPosition
+      << " aSize=" << aSize
+      << " vector #" << mVectorCount
+      << " BufferOffset=" << GetDataLen()
+      << " mAllowCopy=" << mAllowCopy
+      << EndLogLine;
+
     struct iovec *iov = &(mVector[ mVectorCount ]);
-    iov->iov_base = (void*)AlignedPosition( mIntBufferPosition );
-    iov->iov_len = offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg );
+    iov->iov_len = aSize;
+    if( mAllowCopy )
+    {
+      iov->iov_base = (void*)mIntBufferPosition;
+      memcpy( mIntBufferPosition, aHdrPtr, aSize );
+      mIntBufferPosition += aSize;
+    }
+    else
+      iov->iov_base = (void*)aHdrPtr;
 
-    iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)iov->iov_base;
-    MultHdr->ClientID = htons( aClient );
-
-    mIntBufferPosition += offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg );
-    mDataSize += offsetof( iWARPEM_Multiplexed_Msg_Hdr_t, ClientMsg );
+    mDataSize += aSize;
     mVectorCount++;
+    return NULL;
   }
   virtual void AddData( const char* aBuffer, const size_t aSize )
   {
+    AssertLogLine( mVectorCount < mVectorMax - 2 )
+      << "VectorCount exceeds limit: mVectorCount=" << mVectorCount
+      << " mVectorMax=" << mVectorMax
+      << " need at least 2 space"
+      << EndLogLine;
+
+    SkipToNextDataAlignment();
+
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Injecting data @0x" << (void*)aBuffer
+      << " aSize=" << aSize
+      << " vector #" << mVectorCount
+      << " BufferOffset=" << GetDataLen()
+      << EndLogLine;
+
     struct iovec *iov = &(mVector[ mVectorCount ]);
     iov->iov_base = (void*)aBuffer;
     iov->iov_len = aSize;
     mDataSize += aSize;
     mVectorCount++;
   }
-  virtual void AddData( const struct iovec &aIOV )
+  virtual void AddDataContigous( const char *aBuffer, const size_t aSize )
   {
+    AssertLogLine( mVectorCount < mVectorMax - 1 )
+      << "VectorCount exceeds limit: mVectorCount=" << mVectorCount
+      << " mVectorMax=" << mVectorMax
+      << " need at least 1 space"
+      << EndLogLine;
+
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG)
+      << " Injecting data @0x" << (void*)aBuffer
+      << " aSize=" << aSize
+      << " vector #" << mVectorCount
+      << " BufferOffset=" << GetDataLen()
+      << EndLogLine;
+
     struct iovec *iov = &(mVector[ mVectorCount ]);
-    iov->iov_base = aIOV.iov_base;
-    iov->iov_len = aIOV.iov_len;
-    mDataSize += aIOV.iov_len;
+    iov->iov_base = (void*)aBuffer;
+    iov->iov_len = aSize;
+    mDataSize += aSize;
     mVectorCount++;
   }
-  inline size_t GetDataLen() const { return mDataSize; }
+  inline size_t GetDataLen() const { return mDataSize - mHeadSpace; }
+  inline bool FlushRecommended() const
+  {
+    return ( (mVectorCount > ( mVectorMax - (mVectorMax >> 3) ))
+        || ( (mIntBufferPosition + (mIntBufferSize>>3)) > (mIntBuffer + mIntBufferSize) ) ); }
   virtual iWARPEM_Status_t FlushToSocket( const int aSocket, int *wlen )
   {
     UpdateHeaderLen( GetDataLen() );
-    return write_to_socket( aSocket, mVector, mVectorCount, wlen );
+    AssertLogLine(( mHeader->ProtocolVersion == IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION ) &&
+                  (mHeader->MsgType == MULTIPLEXED_SOCKET_MSG_TYPE_DATA))
+      << "Something has modified the header before sending."
+      << " Protocol=" << mHeader->ProtocolVersion
+      << " MsgType=" << mHeader->MsgType
+      << " DataLen=" << mHeader->DataLen
+      << EndLogLine;
+
+    iWARPEM_Status_t rc = write_to_socket( aSocket, mVector, mVectorCount, mDataSize, wlen );
+
+    AssertLogLine( *wlen == (mHeader->DataLen + mHeadSpace) )
+      << "WriteV reports wrong data length sent=" << *wlen
+      << " expected=" << mHeader->DataLen + mHeadSpace
+      << EndLogLine;
+
+    if( *wlen > mHeadSpace )
+      *wlen -= mHeadSpace;
+    return rc;
   }
   inline void Reset()
   {
+    StrongAssertLogLine( mHeadSpace == AlignedHeaderPosition( (const char *)sizeof( it_api_multiplexed_socket_message_header_t ) ) )
+      << "ERROR: Something has stomped on WriteV-Buffer Memory. "
+      << " mHeadSpace=" << mHeadSpace
+      << " expected=" << AlignedHeaderPosition( (const char*)sizeof( it_api_multiplexed_socket_message_header_t ) )
+      << EndLogLine;
+
+    struct iovec *iov = &(mVector[ 0 ]);
+    iov->iov_base = mHeader;
+    iov->iov_len = mHeadSpace;
+
     mVectorCount = 1;
-    mDataSize = 0;
+    mDataSize = mHeadSpace;
     UpdateHeaderLen( 0 );
-    mIntBufferPosition = mIntBuffer + sizeof( it_api_multiplexed_socket_message_header_t );
+    mIntBufferPosition = mIntBuffer;
   }
-  inline void SetHeader( const it_api_multiplexed_socket_message_header_t &aHdr )
-  {
-    mHeader->MsgType = aHdr.MsgType;
-    mHeader->ProtocolVersion = aHdr.ProtocolVersion;
-  }
-  inline void SetHeader( const unsigned char aProtocolVersion, const unsigned char aMsgType )
-  {
-    mHeader->MsgType = aMsgType;
-    mHeader->ProtocolVersion = aProtocolVersion;
-  }
+  virtual char* GetHdrPtr( size_t *aSize, uintptr_t aAdvancePos = 1 ) { return NULL; }
+  virtual size_t GetData( char ** aBuffer, size_t *aSize ) { return 0; }
+  virtual iWARPEM_Status_t FillFromSocket( const int aSocket ) { return IWARPEM_ERRNO_CONNECTION_RESET; }
 };
 
 #endif /* IT_API_CNK_ROUTER_IT_API_CNK_ROUTER_EP_BUFFER_HPP_ */

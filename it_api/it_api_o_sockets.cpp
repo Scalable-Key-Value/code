@@ -968,7 +968,7 @@ iwarpem_generate_conn_termination_event( int aSocketId )
 
 #ifdef WITH_CNK_ROUTER
 #include <cnk_router/it_api_cnk_router_ep.hpp>
-typedef iWARPEM_Multiplexed_Endpoint_t<iWARPEM_Object_EndPoint_t> iWARPEM_Router_Endpoint_t;
+typedef iWARPEM_Multiplexed_Endpoint_t<iWARPEM_Object_EndPoint_t, iWARPEM_Memory_Socket_Buffer_t> iWARPEM_Router_Endpoint_t;
 #include <cnk_router/iwarpem_multiplex_ep_access.hpp>
 #endif
 
@@ -989,11 +989,32 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
 #endif
     << EndLogLine;
 
-  iWARPEM_Status_t istatus = RecvRaw( LocalEndPoint,
-                                      (char *) &Hdr,
-                                      rlen,
-                                      & rlen_expected,
-                                      true );
+  iWARPEM_Message_Hdr_t *HdrPtr = &Hdr;
+  iWARPEM_Status_t istatus = IWARPEM_SUCCESS;
+
+  bool EPisVirtual = false;
+  char *DataPtr = NULL;
+#ifdef WITH_CNK_ROUTER
+  EPisVirtual = ( LocalEndPoint->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL );
+  iWARPEM_StreamId_t ClientId;
+
+  if( EPisVirtual )
+  {
+    iWARPEM_StreamId_t client;
+    iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ LocalEndPoint->ConnFd ]->connect_sevd_handle );
+    istatus = rEP->ExtractNextMessage( &HdrPtr, &DataPtr, &ClientId );
+    if( istatus == IWARPEM_SUCCESS)
+      rlen_expected = sizeof( iWARPEM_Message_Hdr_t );
+  }
+  else
+#endif
+  {
+    istatus = RecvRaw( LocalEndPoint,
+                       (char *) HdrPtr,
+                       rlen,
+                       & rlen_expected,
+                       true );
+  }
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS | FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
     << "iWARPEM_DataReceiverThread:: read_from_socket() for header"
@@ -1022,17 +1043,17 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
     return;
   }
   //            Hdr.mMsg_Type=ntohl(Hdr.mMsg_Type) ;
-  Hdr.EndianConvert() ;
-  Hdr.mTotalDataLen=ntohl(Hdr.mTotalDataLen) ;
+  HdrPtr->EndianConvert() ;
+  HdrPtr->mTotalDataLen=ntohl(HdrPtr->mTotalDataLen) ;
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS | FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
     << "iWARPEM_DataReceiverThread:: read_from_socket() for header"
     << " SocketFd: " << SocketFd
-    << " Hdr.mMsg_Type: " << Hdr.mMsg_Type
-    << " Hdr.mTotalDataLen: " << Hdr.mTotalDataLen
+    << " Hdr.mMsg_Type: " << HdrPtr->mMsg_Type
+    << " Hdr.mTotalDataLen: " << HdrPtr->mTotalDataLen
     << EndLogLine;
 
-  switch( Hdr.mMsg_Type )
+  switch( HdrPtr->mMsg_Type )
   {
     case iWARPEM_DISCONNECT_RESP_TYPE:
     {
@@ -1043,8 +1064,8 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
         << " SocketFd: " << SocketFd
         << EndLogLine;
 
-      AssertLogLine(Hdr.mTotalDataLen == 0)
-        << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+      AssertLogLine(HdrPtr->mTotalDataLen == 0)
+        << "Hdr.mTotalDataLen=" << HdrPtr->mTotalDataLen
         << " should have been 0"
         << EndLogLine ;
 
@@ -1111,8 +1132,8 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
     }
     case iWARPEM_DISCONNECT_REQ_TYPE:
     {
-      AssertLogLine(Hdr.mTotalDataLen == 0)
-        << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+      AssertLogLine(HdrPtr->mTotalDataLen == 0)
+        << "Hdr.mTotalDataLen=" << HdrPtr->mTotalDataLen
         << " should have been 0"
         << EndLogLine ;
 
@@ -1166,7 +1187,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
             << " RecvWR->num_segments: " << RecvWR->num_segments
             << EndLogLine;
 
-          int BytesLeftToRead = Hdr.mTotalDataLen;
+          int BytesLeftToRead = HdrPtr->mTotalDataLen;
 
 #if IT_API_CHECKSUM
           uint64_t HdrChecksum = Hdr.mChecksum;
@@ -1206,7 +1227,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
                 << " SocketFd: " << SocketFd
                 << " i: " << i
                 << " AddrMode: " << AddrMode
-                << " Hdr.mTotalDataLen: " << Hdr.mTotalDataLen
+                << " Hdr.mTotalDataLen: " << HdrPtr->mTotalDataLen
                 << " DestAddr: " << (void *) DestAddr
                 << " length: " << length
                 << EndLogLine;
@@ -1214,17 +1235,19 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
               AssertLogLine(length <= BytesLeftToRead)
                 << " length=" << length
                 << " exceeds BytesLeftToRead=" << BytesLeftToRead
-                << " Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+                << " Hdr.mTotalDataLen=" << HdrPtr->mTotalDataLen
                 << EndLogLine ;
 
               int ReadLength = min( length, BytesLeftToRead );
 
-              int rlen;
-              iWARPEM_Status_t istatus = RecvRaw( LocalEndPoint,
-                                                  DestAddr,
-                                                  ReadLength,
-                                                  & rlen, false );
-              if( istatus != IWARPEM_SUCCESS )
+              if( !EPisVirtual )
+              {
+                int rlen;
+                iWARPEM_Status_t istatus = RecvRaw( LocalEndPoint,
+                                                    DestAddr,
+                                                    ReadLength,
+                                                    & rlen, false );
+                if( istatus != IWARPEM_SUCCESS )
                 {
                   struct epoll_event EP_Event;
                   EP_Event.events = EPOLLIN;
@@ -1244,6 +1267,12 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
                   error = 1;
                   break;
                 }
+              }
+              else
+              {
+                memcpy( DestAddr, DataPtr, ReadLength );
+                DataPtr += ReadLength;
+              }
 
               if( error )
                 continue;
@@ -1264,7 +1293,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
                 << " SocketFd: " << SocketFd
                 << " i: " << i
                 << " AddrMode: " << AddrMode
-                << " Hdr.mTotalDataLen: " << Hdr.mTotalDataLen
+                << " Hdr.mTotalDataLen: " << HdrPtr->mTotalDataLen
                 << " DestAddr: " << (void *) DestAddr
                 << " length: " << length
                 << EndLogLine;
@@ -1284,7 +1313,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
             << "iWARPEM_DataReceiverThread:: in SEND_TYPE case: ERROR:: "
             << " Posted Receive does not provide enough space"
             << " BytesLeftToRead=" << BytesLeftToRead
-            << " Hdr.mTotalDataLen: " << Hdr.mTotalDataLen
+            << " Hdr.mTotalDataLen: " << HdrPtr->mTotalDataLen
             << EndLogLine;
 
 
@@ -1350,11 +1379,11 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
       uint64_t NewChecksum = 0;
 #endif
       BegLogLine(FXLOG_IT_API_O_SOCKETS)
-        << "Endian-converting from mRMRAddr=" << (void *) Hdr.mOpType.mRdmaWrite.mRMRAddr
-        << " mRMRContext=" << (void *) Hdr.mOpType.mRdmaWrite.mRMRContext
+        << "Endian-converting from mRMRAddr=" << (void *) HdrPtr->mOpType.mRdmaWrite.mRMRAddr
+        << " mRMRContext=" << (void *) HdrPtr->mOpType.mRdmaWrite.mRMRContext
         << EndLogLine
-        it_rdma_addr_t   RMRAddr    = be64toh(Hdr.mOpType.mRdmaWrite.mRMRAddr);
-      it_rmr_context_t RMRContext = be64toh(Hdr.mOpType.mRdmaWrite.mRMRContext);
+        it_rdma_addr_t   RMRAddr    = be64toh(HdrPtr->mOpType.mRdmaWrite.mRMRAddr);
+      it_rmr_context_t RMRContext = be64toh(HdrPtr->mOpType.mRdmaWrite.mRMRContext);
 //        it_rdma_addr_t   RMRAddr    = Hdr.mOpType.mRdmaWrite.mRMRAddr;
 //        it_rmr_context_t RMRContext = Hdr.mOpType.mRdmaWrite.mRMRContext;
 
@@ -1379,17 +1408,19 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
         << "iWARPEM_DataReceiverThread:: in RDMA_WRITE case: before read_from_socket()"
         << " SocketFd: " << SocketFd
         << " RMRAddr: " << (void *) RMRAddr
-        << " Hdr.mTotalDataLen: " << Hdr.mTotalDataLen
+        << " Hdr.mTotalDataLen: " << HdrPtr->mTotalDataLen
         << " RMRContext: " << RMRContext
         << EndLogLine;
 
-      int rlen;
-      iWARPEM_Status_t istatus = RecvRaw( LocalEndPoint,
-                                          DestAddr,
-                                          Hdr.mTotalDataLen,
-                                          &rlen, false );
+      if( !EPisVirtual )
+      {
+        int rlen;
+        iWARPEM_Status_t istatus = RecvRaw( LocalEndPoint,
+                                            DestAddr,
+                                            HdrPtr->mTotalDataLen,
+                                            &rlen, false );
 
-      if(( istatus != IWARPEM_SUCCESS ) || ( rlen != Hdr.mTotalDataLen ))
+        if(( istatus != IWARPEM_SUCCESS ) || ( rlen != HdrPtr->mTotalDataLen ))
         {
           struct epoll_event EP_Event;
           EP_Event.events = EPOLLIN;
@@ -1408,12 +1439,16 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
           iwarpem_generate_conn_termination_event( SocketFd );
           return;
         }
-
+      }
+      else
+      {
+        memcpy( DestAddr, DataPtr, HdrPtr->mTotalDataLen );
+      }
       BegLogLine( FXLOG_IT_API_O_SOCKETS )
         << "iWARPEM_DataReceiverThread:: in RDMA_WRITE case: after read_from_socket()"
         << " SocketFd: " << SocketFd
         << " RMRAddr: " << (void *) RMRAddr
-        << " Hdr.mTotalDataLen: " << Hdr.mTotalDataLen
+        << " Hdr.mTotalDataLen: " << HdrPtr->mTotalDataLen
         << " recvd_len: " << rlen
         << " RMRContext: " << RMRContext
         << EndLogLine;
@@ -1441,9 +1476,9 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
     case iWARPEM_DTO_RDMA_READ_RESP_TYPE:
     {
       iWARPEM_Object_WorkRequest_t * LocalRdmaReadState =
-        (iWARPEM_Object_WorkRequest_t * ) (Hdr.mOpType.mRdmaReadResp.mPrivatePtr);
+        (iWARPEM_Object_WorkRequest_t * ) (HdrPtr->mOpType.mRdmaReadResp.mPrivatePtr);
 
-      int TotalLeft = Hdr.mTotalDataLen;
+      int TotalLeft = HdrPtr->mTotalDataLen;
 
       LocalRdmaReadState->mMessageHdr.mTotalDataLen = TotalLeft;
 
@@ -1477,7 +1512,7 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
           AssertLogLine(TotalLeft >= (int) LMRHdl->length)
             << "Not enough data in socket, TotalLeft=" << TotalLeft
             << " LMRHdl->length=" << LMRHdl->length
-            << " Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+            << " Hdr.mTotalDataLen=" << HdrPtr->mTotalDataLen
             << EndLogLine ;
 
           int ToReadFromSocket = min( TotalLeft,
@@ -1493,12 +1528,14 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
             << EndLogLine;
 
           int BytesRead;
-          iWARPEM_Status_t istatus =  RecvRaw( LocalEndPoint,
-                                               DestAddr,
-                                               ToReadFromSocket,
-                                               & BytesRead, false );
+          if( ! EPisVirtual )
+          {
+            iWARPEM_Status_t istatus =  RecvRaw( LocalEndPoint,
+                                                 DestAddr,
+                                                 ToReadFromSocket,
+                                                 & BytesRead, false );
 
-          if( istatus != IWARPEM_SUCCESS )
+            if( istatus != IWARPEM_SUCCESS )
             {
               struct epoll_event EP_Event;
               EP_Event.events = EPOLLIN;
@@ -1518,7 +1555,13 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
               error = 1;
               break;
             }
-
+          }
+          else
+          {
+            memcpy( DestAddr, DataPtr, ToReadFromSocket );
+            DataPtr += ToReadFromSocket;
+            BytesRead = ToReadFromSocket;
+          }
           BegLogLine( FXLOG_IT_API_O_SOCKETS )
             << "iWARPEM_DataReceiverThread:: in RDMA_READ_RESP case: after read_from_socket()"
             << " LocalEndPoint: " << *LocalEndPoint
@@ -1558,7 +1601,7 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
       AssertLogLine( TotalLeft == 0 )
         << "iWARPEM_DataReceiverThread:: in RDMA_READ_RESP case: "
         << " TotalLeft: " << TotalLeft
-        << " Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+        << " Hdr.mTotalDataLen=" << HdrPtr->mTotalDataLen
         << EndLogLine;
 
       iwarpem_generate_rdma_read_cmpl_event( LocalRdmaReadState );
@@ -1568,12 +1611,12 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
     case iWARPEM_DTO_RDMA_READ_REQ_TYPE:
     {
       // Post Rdma Write
-      it_rdma_addr_t   RMRAddr    = Hdr.mOpType.mRdmaReadReq.mRMRAddr;
-      it_rmr_context_t RMRContext = Hdr.mOpType.mRdmaReadReq.mRMRContext;
-      int              ReadLen    = Hdr.mOpType.mRdmaReadReq.mDataToReadLen;
+      it_rdma_addr_t   RMRAddr    = HdrPtr->mOpType.mRdmaReadReq.mRMRAddr;
+      it_rmr_context_t RMRContext = HdrPtr->mOpType.mRdmaReadReq.mRMRContext;
+      int              ReadLen    = HdrPtr->mOpType.mRdmaReadReq.mDataToReadLen;
 
       iWARPEM_Object_WorkRequest_t * RdmaReadClientWorkRequestState =
-       (iWARPEM_Object_WorkRequest_t *) Hdr.mOpType.mRdmaReadReq.mPrivatePtr;
+       (iWARPEM_Object_WorkRequest_t *) HdrPtr->mOpType.mRdmaReadReq.mPrivatePtr;
 
       BegLogLine( FXLOG_IT_API_O_SOCKETS )
         << "iWARPEM_DataReceiverThread(): case iWARPEM_DTO_RDMA_READ_REQ_TYPE "
@@ -1582,8 +1625,8 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
         << " ReadLen: " << ReadLen
         << EndLogLine;
 
-      AssertLogLine(Hdr.mTotalDataLen == 0)
-        << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+      AssertLogLine(HdrPtr->mTotalDataLen == 0)
+        << "Hdr.mTotalDataLen=" << HdrPtr->mTotalDataLen
         << " should have been 0"
         << EndLogLine ;
 
@@ -1602,7 +1645,7 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
     {
       StrongAssertLogLine( 0 )
         << "iWARPEM_DataReceiverThread:: ERROR:: case not recognized: "
-        << " Hdr.mMsg_Type=0x" << (void *) Hdr.mMsg_Type
+        << " Hdr.mMsg_Type=0x" << (void *) HdrPtr->mMsg_Type
         << EndLogLine;
     }
   } // switch msg.type
@@ -1850,10 +1893,11 @@ iWARPEM_DataReceiverThread( void* args )
                 iWARPEM_Router_Endpoint_t *RouterEP = (iWARPEM_Router_Endpoint_t*)LocalEndPoint->connect_sevd_handle;
 
                 iWARPEM_Status_t status = IWARPEM_SUCCESS;
-                uint16_t Client;
+                iWARPEM_StreamId_t Client;
                 do
                 {
-                  iWARPEM_Msg_Type_t msg_type = RouterEP->GetNextMessageType( &Client );
+                  iWARPEM_Msg_Type_t msg_type;
+                  status = RouterEP->GetNextMessageType( &msg_type, &Client );
 
                   // handle connects and disconnects of clients here
                   switch( msg_type )
@@ -2068,7 +2112,6 @@ iWARPEM_DataReceiverThread( void* args )
                         << " client: " << Client
                         << " type: " << msg_type
                         << EndLogLine;
-                      status = IWARPEM_ERRNO_CONNECTION_CLOSED;
                       break;
                   }
                   if( status != IWARPEM_SUCCESS )
@@ -2405,6 +2448,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             istatus = SendVec( EP,
                                iov,
                                SendWR->num_segments+1,
+                               SendWR->mMessageHdr.mTotalDataLen + sizeof(SendWR->mMessageHdr),
                                & wlen );
             if( istatus != IWARPEM_SUCCESS )
               {
@@ -2556,7 +2600,7 @@ iWARPEM_FlushActiveSockets( ActiveSocketsQueue_t &aASQ )
       int sock = EP->ConnFd;
       iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
 
-      if( rEP != NULL )
+      if(( rEP != NULL ) && (rEP->NeedsFlush() ))
         status = rEP->FlushSendBuffer();
     }
     else
@@ -4210,6 +4254,7 @@ it_status_t it_ep_connect (
 
     int wLen;
     int SizeToSend = sizeof( iWARPEM_Private_Data_t );
+    // todo: this current SendMsg will not work with Multiplexed buffers (needs separation of hdr+data)
     iWARPEM_Status_t wstat = SendMsg( LocalEndPoint,
                                       (char *) & PrivateData,
                                       SizeToSend,
@@ -5570,6 +5615,7 @@ it_status_t itx_ep_accept_with_rmr (
 #endif
     int wLen;
     int SizeToSend = sizeof( iWARPEM_Private_Data_t );
+    // todo: this current SendMsg will not work with Multiplexed buffers (needs separation of hdr+data)
     iWARPEM_Status_t wstat = SendMsg( LocalEndPoint,
                                       (char *) & PrivateData,
                                       SizeToSend,
@@ -6113,6 +6159,7 @@ it_status_t itx_ep_connect_with_rmr (
 
   int wLen;
   int SizeToSend = sizeof( iWARPEM_Private_Data_t );
+  // todo: this current SendMsg will not work with Multiplexed buffers (needs separation of hdr+data)
   iWARPEM_Status_t wstat = SendMsg( LocalEndPoint,
                                     (char *) & PrivateData,
                                     SizeToSend,

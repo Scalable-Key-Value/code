@@ -41,10 +41,11 @@ struct it_api_multiplexed_socket_message_header_t
   unsigned char MsgType;
 };
 
+typedef uintptr_t iWARPEM_StreamId_t;
+
 struct iWARPEM_Multiplexed_Msg_Hdr_t
 {
-  uint16_t ClientID;
-  iWARPEM_Message_Hdr_t ClientMsg;
+  iWARPEM_StreamId_t ClientID;
 };
 
 #endif /* IT_API_IT_API_CNK_ROUTER_TYPES_HPP_ */

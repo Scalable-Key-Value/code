@@ -26,7 +26,7 @@ RecvRaw( iWARPEM_Object_EndPoint_t *aEP, char *buff, int len, int* wlen, bool aW
 
   if( aEP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL )
   {
-    uint16_t client;
+    iWARPEM_StreamId_t client;
     iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
     if( aWithClientHdr )
       status = rEP->ExtractRawData( buff, len, wlen, &client );
@@ -49,7 +49,9 @@ SendMsg( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const 
   if( aEP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL )
   {
     iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
-    status = rEP->InsertMessage( aEP->ClientId, buff, len );
+    iWARPEM_Message_Hdr_t *hdr = (iWARPEM_Message_Hdr_t*)buff;
+    char *data = buff + sizeof( iWARPEM_Message_Hdr_t );
+    status = rEP->InsertMessage( aEP->ClientId, hdr, buff, len );
     if( status == IWARPEM_SUCCESS )
       *wlen = len;
     else
@@ -65,7 +67,7 @@ SendMsg( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const 
 static
 inline
 iWARPEM_Status_t
-SendVec( iWARPEM_Object_EndPoint_t *aEP, struct iovec *iov, int iov_count, int* wlen, const bool aFlush = false )
+SendVec( iWARPEM_Object_EndPoint_t *aEP, struct iovec *iov, int iov_count, size_t totalen, int* wlen, const bool aFlush = false )
 {
   iWARPEM_Status_t status = IWARPEM_SUCCESS;
   int sock = aEP->ConnFd;
@@ -73,12 +75,12 @@ SendVec( iWARPEM_Object_EndPoint_t *aEP, struct iovec *iov, int iov_count, int* 
   if( aEP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL )
   {
     iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
-    status = rEP->InsertMessageVector( aEP->ClientId, iov, iov_count, wlen );
+    status = rEP->InsertMessageVector( aEP->ClientId, iov, iov_count, wlen, true );
     if( aFlush )
       rEP->FlushSendBuffer();
   }
   else
-    status = write_to_socket( sock, iov, iov_count, wlen );
+    status = write_to_socket( sock, iov, iov_count, totalen, wlen );
   return status;
 }
 

@@ -198,9 +198,9 @@ SendMsg( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const 
 static
 inline
 iWARPEM_Status_t
-SendVec( iWARPEM_Object_EndPoint_t *aEP, struct iovec *iov, int iov_count, int* wlen, const bool aFlush = false )
+SendVec( iWARPEM_Object_EndPoint_t *aEP, struct iovec *iov, int iov_count, size_t totalen, int* wlen, const bool aFlush = false )
 {
-  return write_to_socket( aEP->ConnFd, iov, iov_count, wlen );
+  return write_to_socket( aEP->ConnFd, iov, iov_count, totalen, wlen );
 }
 #endif
 
