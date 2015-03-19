@@ -10,6 +10,28 @@
 #define WITH_CNK_ROUTER
 #endif
 
+#ifndef FXLOG_ITAPI_ROUTER
+#define FXLOG_ITAPI_ROUTER ( 0 )
+#endif
+
+#ifndef FXLOG_ITAPI_ROUTER_DETAIL
+#define FXLOG_ITAPI_ROUTER_DETAIL ( 0 )
+#endif
+
+#ifndef FXLOG_ITAPI_ROUTER_LW
+#define FXLOG_ITAPI_ROUTER_LW ( 0 )
+#endif
+#ifndef FXLOG_ITAPI_ROUTER_SPIN
+#define FXLOG_ITAPI_ROUTER_SPIN ( 0 )
+#endif
+#ifndef FXLOG_ITAPI_ROUTER_EPOLL_SPIN
+#define FXLOG_ITAPI_ROUTER_EPOLL_SPIN ( 0 )
+#endif
+
+#ifndef FXLOG_ITAPI_ROUTER_CLEANUP
+#define FXLOG_ITAPI_ROUTER_CLEANUP ( 0 | FXLOG_ITAPI_ROUTER )
+#endif
+
 #include <mpi.h>
 #include <FxLogger.hpp>
 #include <Histogram.hpp>
@@ -212,24 +234,6 @@ struct iWARPEM_MultiplexedSocketControl_Hdr_t
 #define TEST_NZ(x) do { if ( (x)) die("error: " #x " failed (returned non-zero)." ); } while (0)
 #define TEST_Z(x)  do { if (!(x)) die("error: " #x " failed (returned zero/null)."); } while (0)
 
-#ifndef FXLOG_ITAPI_ROUTER
-#define FXLOG_ITAPI_ROUTER ( 0 )
-#endif
-
-#ifndef FXLOG_ITAPI_ROUTER_DETAIL
-#define FXLOG_ITAPI_ROUTER_DETAIL ( 0 )
-#endif
-
-#ifndef FXLOG_ITAPI_ROUTER_LW
-#define FXLOG_ITAPI_ROUTER_LW ( 0 )
-#endif
-#ifndef FXLOG_ITAPI_ROUTER_SPIN
-#define FXLOG_ITAPI_ROUTER_SPIN ( 0 )
-#endif
-#ifndef FXLOG_ITAPI_ROUTER_EPOLL_SPIN
-#define FXLOG_ITAPI_ROUTER_EPOLL_SPIN ( 0 )
-#endif
-
 //const int BUFFER_SIZE = SENDSIZE;
 static int received = 0;
 
@@ -242,7 +246,7 @@ struct context {
 };
 
 enum {
-  k_LocalEndpointCount = 64
+  k_LocalEndpointCount = IT_API_MAX_ROUTER_SOCKETS
 };
 //static pthread_mutex_t allConnectionMutex ;
 struct connection {
@@ -287,6 +291,12 @@ struct connection {
   class ion_cn_all_buffer mBuffer ;
 };
 
+struct termination_entry_t
+{
+  struct connection *mConn;
+  struct rdma_cm_id *mRdmaId;
+};
+
 static void add_conn_to_flush_queue(struct connection *conn);
 static void add_conn_to_deferred_ack( struct connection *conn, bool aDownStreamWaitFlush = false );
 
@@ -295,6 +305,7 @@ void ion_cn_buffer::PostReceive(struct connection *conn)
     BegLogLine(FXLOG_IONCN_BUFFER)
         << " Receive buffer at 0x" << (void *) this
         << EndLogLine ;
+
     struct ibv_recv_wr wr, *bad_wr = NULL;
     struct ibv_sge sge;
     int rc;
@@ -447,7 +458,7 @@ static void AckConnection(struct connection *conn)
   }
   else
     {
-    BegLogLine( FXLOG_ITAPI_ROUTER )
+    BegLogLine( (FXLOG_ITAPI_ROUTER || ( FXLOG_ITAPI_ROUTER_CLEANUP && conn->mDisconnecting )) )
       << "NOT FLUSHING because: " 
       << " mSendAck=" << conn->mSendAck
       << " needtr=" << conn->mBuffer.NeedsAnyTransmit()
@@ -462,7 +473,6 @@ static void AckAllConnections(void)
     << "Flushing all, first_connection_to_flush=0x" << (void *)gFirstConnToAck
     << " Index: " << gFlushListIndex
     << EndLogLine ;
-  gAckConnectionCount++;
   struct connection * ConnToAck=gFirstConnToAck ;
   gFirstConnToAck= FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR ;
 
@@ -470,6 +480,7 @@ static void AckAllConnections(void)
   gFlushListIndex = 1 - gFlushListIndex;
   UnlockDownStreamFlush();
 
+  gAckConnectionCount++;
   while( (ConnToAck != NULL) && (ConnToAck != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR) )
   {
     struct connection *NextConnection = ConnToAck->mNextConnToAck[ ThisFlushListIndex ];
@@ -481,7 +492,6 @@ static void AckAllConnections(void)
     AckConnection(ConnToAck);
     ConnToAck->mNextConnToAck[ ThisFlushListIndex ] = NULL;
     ConnToAck = NextConnection;
-
   }
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "All connections acknowledged"
@@ -516,24 +526,24 @@ void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn, bool contained
     char * bufferPtr = mApplicationBuffer ;
     while ( bufferPtr < &(mApplicationBuffer[ BytesInThisCall ]))
     {
-        unsigned int LocalEndpointIndex = * (unsigned int *) bufferPtr ;
-        bufferPtr +=  sizeof(unsigned int) ;
-        struct iWARPEM_Message_Hdr_t * Hdr = (struct iWARPEM_Message_Hdr_t *) bufferPtr;
-        char *nextBufferPtr = bufferPtr + sizeof(struct iWARPEM_Message_Hdr_t) + Hdr->mTotalDataLen ;
-        BegLogLine(FXLOG_ITAPI_ROUTER)
-            << " LocalEndpointIndex=" << LocalEndpointIndex
-            << " bufferPtr=0x" << (void *) bufferPtr
-            << " nextBufferPtr=0x" << (void*)nextBufferPtr
-            << EndLogLine ;
-        report_hdr(*Hdr) ;
-        StrongAssertLogLine(nextBufferPtr <= &mApplicationBuffer[ k_ApplicationBufferSize ] )
-          << "Message overflows buffer, Hdr->mTotalDataLen=" << Hdr->mTotalDataLen
-          << " nextBufferPtr=" << nextBufferPtr
-          << " BytesInThisCall=" << BytesInThisCall
-          << EndLogLine ;
-        process_uplink_element(conn,LocalEndpointIndex,*Hdr,(void *)(bufferPtr+sizeof(struct iWARPEM_Message_Hdr_t))) ;
-        bufferPtr = nextBufferPtr ;
-      }
+      unsigned int LocalEndpointIndex = * (unsigned int *) bufferPtr ;
+      bufferPtr +=  sizeof(unsigned int) ;
+      struct iWARPEM_Message_Hdr_t * Hdr = (struct iWARPEM_Message_Hdr_t *) bufferPtr;
+      char *nextBufferPtr = bufferPtr + sizeof(struct iWARPEM_Message_Hdr_t) + Hdr->mTotalDataLen ;
+      BegLogLine(FXLOG_ITAPI_ROUTER)
+        << " LocalEndpointIndex=" << LocalEndpointIndex
+        << " bufferPtr=0x" << (void *) bufferPtr
+        << " nextBufferPtr=0x" << (void*)nextBufferPtr
+        << EndLogLine ;
+      report_hdr(*Hdr) ;
+      StrongAssertLogLine(nextBufferPtr <= &mApplicationBuffer[ k_ApplicationBufferSize ] )
+        << "Message overflows buffer, Hdr->mTotalDataLen=" << Hdr->mTotalDataLen
+        << " nextBufferPtr=" << nextBufferPtr
+        << " BytesInThisCall=" << BytesInThisCall
+        << EndLogLine ;
+      process_uplink_element(conn,LocalEndpointIndex,*Hdr,(void *)(bufferPtr+sizeof(struct iWARPEM_Message_Hdr_t))) ;
+      bufferPtr = nextBufferPtr ;
+    }
     StrongAssertLogLine(bufferPtr == &mApplicationBuffer[ BytesInThisCall ])
       << "bufferPtr=0x" << (void*)bufferPtr
       << " disagrees with BytesInThisCall=" << BytesInThisCall
@@ -554,6 +564,7 @@ void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn, bool contained
       << " buffer->mReceivedBytes=" << buffer->mReceivedBytes
       << " buffer->mSentBytesPrevious=" << buffer->mSentBytesPrevious
       << " buffer->mAckedSentBytes=" << buffer->mAckedSentBytes
+      << " BytesInThisCall=" << BytesInThisCall
       << " RequiresFlush=" << RequiresFlush
       << " AckRequest=" << contained_ack
       << EndLogLine ;
@@ -561,7 +572,7 @@ void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn, bool contained
     if( RequiresFlush )
     {
       add_conn_to_deferred_ack( conn, true );
-      if ( 0 == k_LazyFlushUplinks)
+      if(( 0 == k_LazyFlushUplinks) && ( BytesInThisCall > 0 ))
       {
         FlushMarkedUplinks();
       }
@@ -574,7 +585,9 @@ void ion_cn_buffer::ProcessReceiveBuffer(struct connection *conn, bool contained
 int ion_cn_buffer::ProcessCall(struct connection *conn)
   {
      class ion_cn_all_buffer *buffer=&conn->mBuffer ;
-     bool ack_advanced = buffer->AdvanceAcked(mReceivedBytes);
+     // check if client has any new sent bytes to ACK
+     bool requires_ack = buffer->AdvanceAcked(mReceivedBytes) && buffer->NeedsAnyTransmit();
+
      unsigned long BytesInThisCall=mSentBytes - buffer->mReceivedBytes ;
      if ( BytesInThisCall > k_LargestRDMASend-(sizeof(class ion_cn_buffer)-k_ApplicationBufferSize))
        {
@@ -603,8 +616,9 @@ int ion_cn_buffer::ProcessCall(struct connection *conn)
              << " BytesInThisCall=" << BytesInThisCall
              << " RDMA receive is complete, processing ..."
              << EndLogLine ;
-         ProcessReceiveBuffer(conn, ack_advanced ) ;
-         buffer->PostReceive(conn) ;
+         ProcessReceiveBuffer(conn, requires_ack ) ;
+         if( ! conn->mDisconnecting )
+           buffer->PostReceive(conn) ;
          BegLogLine(FXLOG_ITAPI_ROUTER)
            << "Completed RDMA_Recv processing. this=0x" << (void *) this
            << " conn=0x" << (void *) conn
@@ -616,7 +630,8 @@ int ion_cn_buffer::ProcessCall(struct connection *conn)
 void ion_cn_buffer::ProcessRead( struct connection *conn)
 {
   class ion_cn_all_buffer *buffer=&conn->mBuffer ;
-  bool ack_advanced = buffer->AdvanceAcked(mReceivedBytes);
+  // check if client has any new sent bytes to ACK
+  bool requires_ack = buffer->AdvanceAcked(mReceivedBytes) && buffer->NeedsAnyTransmit();
   unsigned long BytesInThisCall=mSentBytes - buffer->mReceivedBytes ;
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "this=0x" << (void *) this
@@ -624,8 +639,9 @@ void ion_cn_buffer::ProcessRead( struct connection *conn)
     << " BytesInThisCall=" << BytesInThisCall
     << " RDMA receive is complete, processing ..."
     << EndLogLine ;
-  ProcessReceiveBuffer(conn, ack_advanced ) ;
-  buffer->PostReceive(conn) ;
+  ProcessReceiveBuffer(conn, requires_ack ) ;
+  if( ! conn->mDisconnecting )
+    buffer->PostReceive(conn) ;
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "Completed RDMA_Read processing. this=0x" << (void *) this
     << " conn=0x" << (void *) conn
@@ -773,7 +789,8 @@ static int on_event(struct rdma_cm_event *event);
 static void wc_stat_echo(struct ibv_wc *wc);
 static struct context *s_ctx = NULL;
 
-static void setup_polling_thread(void) ;
+static pthread_t setup_polling_thread(void) ;
+static void FreeClientId( const iWARPEM_StreamId_t aClient );
 static int ConnectToServers( int aMyRank );
 
 enum {
@@ -805,7 +822,11 @@ int main(int argc, char **argv)
 
 //  pthread_mutex_init(&allConnectionMutex, NULL) ;
 
-  setup_polling_thread() ;
+  pthread_t socket_poll_thread = setup_polling_thread() ;
+  if( socket_poll_thread == 0 )
+  {
+    die( "Error: Could not create socket polling thread.");
+  }
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
@@ -818,17 +839,14 @@ int main(int argc, char **argv)
   rc = ConnectToServers( Rank );
   if( rc != 0 )
   {
-    printf("Error: Could not create connections to SKV Servers. rc = %d\n", rc);
-    exit( rc );
+    die("Error: Could not create connections to SKV Servers.");
   }
 
   ec = rdma_create_event_channel();
   rdma_create_id(ec, &listener, NULL, RDMA_PS_TCP);
   rc = rdma_bind_addr(listener, (struct sockaddr *)&addr);
   if (rc != 0) {
-      printf("Error: Could not bind to port %i\n", port);
-      fflush(stdout) ;
-      exit(rc);
+    die("Error: Could not bind to port");
   }
 
   rdma_listen(listener, k_ListenQueueLength);
@@ -860,7 +878,12 @@ int main(int argc, char **argv)
 void die(const char *reason)
 {
   fprintf(stderr, "%s\n", reason);
-  exit(EXIT_FAILURE);
+  int yesno = 0;
+  MPI_Initialized( &yesno );
+  if( yesno != 0 )
+    MPI_Abort( MPI_COMM_WORLD, EXIT_FAILURE );
+  else
+    exit(EXIT_FAILURE);
 }
 
 void wc_stat_echo(struct ibv_wc *wc)
@@ -1076,9 +1099,10 @@ static inline void add_conn_to_flush_queue_locked( struct connection *conn )
   // it's part of the list if the next ptr is != NULL
   if((conn != gFirstConnToAck) &&
      (conn->mNextConnToAck[ ThisFlushListIndex ] == NULL) &&
-     (conn->mWaitForUpstreamFlush == false ))
+     (conn->mWaitForUpstreamFlush == false ) &&
+     (conn->mDisconnecting == false))
   {
-    BegLogLine(0|FXLOG_ITAPI_ROUTER)
+    BegLogLine(FXLOG_ITAPI_ROUTER)
       << "conn=0x" << (void *) conn
       << " clientId=" << conn->clientId
       << " gFirstConnToAck=0x" << (void*)gFirstConnToAck
@@ -1242,7 +1266,7 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
     cb = aServerEP->GetClientEP( client );
   else
     {
-    BegLogLine( 1 )
+    BegLogLine( 0 )
       << "client=" << client
       << " has no crossbar entry"
       << EndLogLine ;
@@ -1297,12 +1321,17 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
     {
       BegLogLine(FXLOG_ITAPI_ROUTER)
         << "Forwarded a DISCONNECT RESPONSE message"
+        << " Removing Crossbar entry for client=" << client
+        << " server=" << cb->getServerId()
         << EndLogLine ;
+      aServerEP->RemoveClient( client );
+      ((struct connection*)cb->getDownLink())->socket_fds[ cb->getServerId() ] = NULL;
+      FreeClientId( client );
     }
   }
   else
   {
-    aServerEP->CloseAllClients();  // needs more work...
+    aServerEP->CloseAllClients();  // needs more work... (send downstream close for all clients of the broken serverEP)
 
     int fd = aServerEP->GetRouterFd();
     BegLogLine(FXLOG_ITAPI_ROUTER)
@@ -1430,7 +1459,7 @@ void * polling_thread(void *arg)
   }
   return NULL ;
 }
-static void setup_polling_thread(void)
+static pthread_t setup_polling_thread(void)
   {
     epoll_fd=epoll_create(4097) ;
     AssertLogLine(epoll_fd >= 0 )
@@ -1469,7 +1498,7 @@ static void setup_polling_thread(void)
       perror("getsockname()");
       close( drc_serv_socket );
 
-      StrongAssertLogLine( 0 ) << EndLogLine;
+      return 0;
       }
 
     int drc_serv_port = drc_serv_addr.sin_port;
@@ -1509,10 +1538,7 @@ static void setup_polling_thread(void)
     if( listen( drc_serv_socket, 5 ) < 0 )
       {
         perror( "listen failed" );
-
-        StrongAssertLogLine( 0 ) << EndLogLine;
-
-        exit( -1 );
+        die( "Listen Failed" );
       }
     BegLogLine(FXLOG_ITAPI_ROUTER)
       << "Listening"
@@ -1575,7 +1601,10 @@ static void setup_polling_thread(void)
     StrongAssertLogLine(rc == 0 )
       << "pthread_create rc=" << rc
       << EndLogLine ;
-
+    if( ! rc )
+      return DataReceiverTID;
+    else
+      return 0;
   }
 static void add_socket_to_poll(iWARPEM_Router_Endpoint_t *conn )
   {
@@ -1949,6 +1978,7 @@ int ConnectToServers( int aMyRank )
 }
 
 static struct ThreadSafeQueue_t<struct endiorec *, 0> cqSlihQueue ;
+static struct ThreadSafeQueue_t<struct termination_entry_t *, 0> gTerminationQueue;
 
 static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlushUplinks)
 {
@@ -2032,6 +2062,9 @@ static void do_cq_processing(struct ibv_wc& wc)
     << " ibv_poll_cq_send_count=" << conn->ibv_poll_cq_send_count
     << " ibv_send_last_optype=" << conn->ibv_send_last_optype
     << EndLogLine ;
+
+  if( conn->mDisconnecting )
+    return;
 
   conn->sequence_in += 1 ;
   switch(optype)
@@ -2167,6 +2200,48 @@ static void AddAckCandidatesToQueue()
   }
   UnlockDownStreamFlush();
 }
+static inline
+void TerminateConnection( struct termination_entry_t *aTerm )
+{
+  struct connection *conn = aTerm->mConn;
+  struct rdma_cm_id *id = aTerm->mRdmaId;
+
+  BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+    << "Starting deferred cleanup of conn=0x" << (void*)conn
+    << " aTerm=0x" << (void*)aTerm
+    << EndLogLine;
+
+  // disconnect all Crossbar entries of conn
+  for( int n=0; n < IT_API_MAX_ROUTER_SOCKETS; n++ )
+  {
+    Crossbar_Entry_t *cb = conn->socket_fds[ n ];
+    if( cb != NULL )
+    {
+      iWARPEM_StreamId_t client = cb->getClientId();
+      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+        << "Cleaning up Crossbar between client=" << client
+        << " and server=" << cb->getServerId()
+        << EndLogLine;
+
+      // send a disconnect via multiplexed endpoint
+      iWARPEM_Router_Endpoint_t *srv = (iWARPEM_Router_Endpoint_t*)cb->getUpLink();
+      srv->InsertCloseRequest( client );
+
+      // remove from connection list
+      conn->socket_fds[ n ] = NULL;
+
+      // clear the occupied clientId(s)
+      FreeClientId( cb->getClientId() );
+    }
+  }
+
+  conn->mBuffer.Term() ;
+
+  rdma_destroy_qp(id);
+  ibv_dereg_mr(conn->mr) ;
+  free((void *)conn);
+  rdma_destroy_id(id);
+}
 
 static void * poll_cq(void *ctx)
 {
@@ -2174,6 +2249,7 @@ static void * poll_cq(void *ctx)
   struct ibv_wc wc[k_wc_array_size];
 
   cqSlihQueue.Init(k_CompletionQueueSize) ;
+  gTerminationQueue.Init(k_CompletionQueueSize);
   cq=s_ctx->cq ;
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "cq=" << (void *) cq
@@ -2185,35 +2261,55 @@ static void * poll_cq(void *ctx)
   {
     int rv ;
 
-    rearm:
+rearm:
     if ( 0 == k_spin_poll)
       ibv_req_notify_cq(cq, 0) ;
 
-    again:
-    rv = ibv_poll_cq(cq, k_wc_array_size, wc) ;
-    BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
-      << "rv=" << rv
-      << " idlecount=" << idlecount
-      << EndLogLine ;
-    if ( rv < 0 )
+again:
+    while( gTerminationQueue.GetCount() )
     {
-      StrongAssertLogLine(0)
+      struct termination_entry_t *ConnToTerm = NULL;
+      rv = gTerminationQueue.Dequeue( &ConnToTerm );
+      if(( rv == 0 ) && ( ConnToTerm ))
+      {
+        drain_cq();
+
+        BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+          << "Retrieving TermEntry=0x" << (void*)ConnToTerm
+          << " conn=0x" << (void*)ConnToTerm->mConn
+          << " id=0x" << (void*)ConnToTerm->mRdmaId
+          << EndLogLine;
+        TerminateConnection( ConnToTerm );
+      }
+    }
+
+#define UPSTREAM_BURSTLEN ( 32 )
+    int requests_count = 0;
+    while( requests_count < UPSTREAM_BURSTLEN )
+    {
+      rv = ibv_poll_cq(cq, k_wc_array_size, wc) ;
+      BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
+        << "rv=" << rv
+        << " idlecount=" << idlecount
+        << EndLogLine ;
+      StrongAssertLogLine( rv >= 0 )
         << "poll_cq processing ends because ibv_poll_cq returns with rv=" << rv
         << EndLogLine ;
-      break ;
-    }
-    // if there are events: process them - i.e. Queue them for slih-processing
-    if ( rv > 0 )
-    {
-      idlecount = 0 ;
-      for ( unsigned int wc_index=0; wc_index<rv;wc_index+=1)
+
+      // if there are events: process them - i.e. Queue them for slih-processing
+      if ( rv > 0 )
       {
-        do_cq_processing( wc[wc_index]) ;
+        idlecount = 0 ;
+        requests_count += rv;
+        for ( unsigned int wc_index=0; wc_index<rv;wc_index+=1)
+          do_cq_processing( wc[wc_index]) ;
       }
-      goto again ;
+      else
+        break; // switch to other phase
     }
-    else
-      // if there are no events, process the slih-queue - i.e. push data into upstream buffers
+
+    requests_count = 0;
+    while( requests_count < UPSTREAM_BURSTLEN )
     {
       struct endiorec * endiorec ;
       int rc=cqSlihQueue.Dequeue(&endiorec) ;
@@ -2222,28 +2318,32 @@ static void * poll_cq(void *ctx)
         int flushUplinks = 0;
         do_cq_slih_processing(endiorec, &flushUplinks);
         requireFlushUplinks |= flushUplinks;
+        requests_count ++;
+        idlecount = 0;
       }
       else
-        // if slih-queue is empty, check if there's anything to flush upstream or ack downstream
-      {
-        idlecount += 1 ;
-        BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
-          << "idlecount=" << idlecount
-          << EndLogLine ;
-        if ( k_LazyFlushUplinks && 0 != requireFlushUplinks )
-        {
-          BegLogLine( 0 )
-            << " UpLinkFlush -----------------------------------------------------------------"
-            << EndLogLine;
-          FlushMarkedUplinks();
-          requireFlushUplinks = 0 ;
-        }
-        // first get any waiting connections into the main ACK list...
-        if( gDeferredAckList != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
-          AddAckCandidatesToQueue();
-        AckAllConnections();
-      }
+        break;
     }
+    idlecount += 1;
+
+    if ( k_LazyFlushUplinks && 0 != requireFlushUplinks )
+    {
+      BegLogLine( 0 )
+        << " UpLinkFlush -----------------------------------------------------------------"
+        << EndLogLine;
+      FlushMarkedUplinks();
+      requireFlushUplinks = 0 ;
+    }
+    // first get any waiting connections into the main ACK list...
+    if( gDeferredAckList != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
+      AddAckCandidatesToQueue();
+
+    if( gFirstConnToAck != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
+      AckAllConnections();
+
+    if( idlecount > 200 )
+      usleep( (unsigned int)std::min( (const unsigned long)idlecount, (const unsigned long)500000 ) );
+
     if ( 0 == k_spin_poll)
     {
       struct ibv_cq *next_cq ;
@@ -2297,6 +2397,16 @@ iWARPEM_StreamId_t GetFreeClientId( void )
   }
   return IWARPEM_INVALID_CLIENT_ID;
 }
+static void FreeClientId( const iWARPEM_StreamId_t aClient )
+{
+  if(( aClient>=0 ) && ( aClient<IT_API_MAX_ROUTER_SOCKETS ))
+  {
+    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+      << "Returning clientId=" << aClient
+      << EndLogLine;
+    gClientIdMap[ aClient ] = IWARPEM_INVALID_CLIENT_ID;
+  }
+}
 
 int on_connect_request(struct rdma_cm_id *id)
 {
@@ -2313,6 +2423,8 @@ int on_connect_request(struct rdma_cm_id *id)
   TEST_NZ(rdma_create_qp(id, s_ctx->pd, &qp_attr));
 
   conn = (struct connection *)malloc(sizeof(struct connection));
+  bzero( conn, sizeof( struct connection ) );
+
   id->context = (void *) conn ;
 //  pthread_mutex_init((pthread_mutex_t *) &conn->qp_write_mutex, NULL) ;
 #if 0
@@ -2383,33 +2495,112 @@ int on_connection(void *context)
   return 0;
 }
 
+// assumes external locking...
+static inline
+void RemoveFromAckQueue( struct connection *conn )
+{
+  struct connection *conn_ptr = gDeferredAckList;
+
+  BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
+    << "Removing conn=0x" << (void *)conn
+    << " from gDeferredAckList=0x" << (void *) gDeferredAckList
+    << EndLogLine ;
+
+  // first entry?
+  if( conn == conn_ptr )
+  {
+    gDeferredAckList = conn->mNextDeferredAck;
+    return;
+  }
+  // search entry
+  while( (conn_ptr != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR) &&
+      ( conn_ptr->mNextDeferredAck != NULL ) &&
+      ( conn_ptr->mNextDeferredAck != conn ) )
+  {
+    conn_ptr = conn_ptr->mNextDeferredAck;
+  }
+  // remove from list
+  if( conn_ptr->mNextDeferredAck == conn )
+  {
+    conn_ptr->mNextDeferredAck = conn->mNextDeferredAck;
+    conn->mNextDeferredAck = NULL;
+  }
+}
+static inline
+void RemoveFromFlushList( struct connection * conn, const int aListIndex )
+{
+  BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
+    << "Removing conn=0x" << (void *)conn
+    << " from gFirstConnToAck=0x" << (void *) gFirstConnToAck
+    << " aListIndex=" << aListIndex
+    << EndLogLine ;
+
+  struct connection *conn_ptr = gFirstConnToAck;
+  // first entry?
+  if( conn == conn_ptr )
+  {
+    gFirstConnToAck = conn->mNextConnToAck[ aListIndex ];
+    return;
+  }
+  // search entry
+  while( (conn_ptr != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR) &&
+      ( conn_ptr->mNextConnToAck[ aListIndex ] != NULL ) &&
+      ( conn_ptr->mNextConnToAck[ aListIndex ] != conn ) )
+  {
+    conn_ptr = conn_ptr->mNextConnToAck[ aListIndex ];
+  }
+  // remove from list
+  if( conn_ptr->mNextConnToAck[ aListIndex ] == conn )
+  {
+    conn_ptr->mNextConnToAck[ aListIndex ] = conn->mNextConnToAck[ aListIndex ];
+    conn->mNextConnToAck[ aListIndex ] = NULL;
+  }
+}
 int on_disconnect(struct rdma_cm_id *id)
 {
   struct connection *conn = (struct connection *)id->context;
 
-  // on a disconnect, make sure we flush everything else before destroying the endpoints
-  LockDownStreamFlush();
-  conn->mDisconnecting = true ;
-  flush_all_downstream();
-  UnlockDownStreamFlush();
-
-  BegLogLine(FXLOG_ITAPI_ROUTER)
+  BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
     << "Peer disconnected. Msgs received=" << received
     << " conn=0x" << (void *) conn
     << EndLogLine ;
+
+  // on a disconnect, we can't send any more data over the IO-link
+  conn->mDisconnecting = true ;
+  LockDownStreamFlush();
+
+  drain_cq();
+
+  // remove conn from all Ack and Flush lists
+  if( conn->mNextDeferredAck != NULL )
+    RemoveFromAckQueue( conn );
+  // remove from the inactive Flush list (the list that's currently filled)
+  if(( conn->mNextConnToAck[ gFlushListIndex ] != NULL ) )
+    RemoveFromFlushList( conn, gFlushListIndex );
+
+  UnlockDownStreamFlush();
+
+  // make sure we flush the active FlushQueue to remove conn from the active list
+  AckAllConnections();
 
   BegLogLine( 1 )
     << "Flush stats: "
     << " AckConn: " << gAckConnectionCount
     << " FlushConn: " << gFlushConnectionCount
     << EndLogLine;
-  conn->mBuffer.Term() ;
 
-  rdma_destroy_qp(id);
-  ibv_dereg_mr(conn->mr) ;
-  free((void *)conn);
-  rdma_destroy_id(id);
+  struct termination_entry_t *ConnToTerm = new struct termination_entry_t;
 
+  ConnToTerm->mConn = conn;
+  ConnToTerm->mRdmaId = id;
+
+  BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+    << "Queuing TermEntry=0x" << (void*)ConnToTerm
+    << " conn=0x" << (void*)conn
+    << " id=0x" << (void*)id
+    << EndLogLine;
+
+  gTerminationQueue.Enqueue( ConnToTerm );
   return 0;
 }
 
@@ -2422,7 +2613,6 @@ int on_event(struct rdma_cm_event *event)
   else if (event->event == RDMA_CM_EVENT_ESTABLISHED)
     r = on_connection(event->id->context);
   else if (event->event == RDMA_CM_EVENT_DISCONNECTED) {
-      sleep(2);
       r = on_disconnect(event->id);
   }
   else

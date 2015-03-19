@@ -567,6 +567,15 @@ public:
     return InsertMessage( aClientId, &Hdr, data, 0 );
   }
 
+  iWARPEM_Status_t InsertDisconnectRequest( const iWARPEM_StreamId_t aClientId )
+  {
+    iWARPEM_Message_Hdr_t Hdr;
+    Hdr.mMsg_Type = iWARPEM_DISCONNECT_REQ_TYPE;
+    Hdr.mTotalDataLen = 0;
+    char *data = (char*)&Hdr.mTotalDataLen;
+    return InsertMessage( aClientId, &Hdr, data, 0 );
+  }
+
   inline bool NeedsFlush() const { return mNeedsBufferFlush; }
 
   void CloseAllClients()

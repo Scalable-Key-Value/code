@@ -518,16 +518,29 @@ static int my_rank(void)
 
 static void *rdma_responder(void *voidVC) ;
 
+#define VERBS_CHANNEL_UNINITIALIZED ( -1 )
+
 class VerbsChannel
   {
-public:
-  int mRdmaSocket ;
-  unsigned long mRdmaSendBlocks ;
   enum {
     k_RdmaSendReapModulo=8
   };
+
+public:
   class ion_cn_all_buffer mBuffer;
+  int mRdmaSocket ;
+  unsigned long mRdmaSendBlocks ;
+  pthread_t mRdmaResponderThread ;
+  volatile bool mResponderKeepRunning;
   bool mEven ;
+
+  VerbsChannel() : mRdmaSocket( VERBS_CHANNEL_UNINITIALIZED ),
+      mEven( false ),
+      mRdmaSendBlocks( 0 ),
+      mRdmaResponderThread( VERBS_CHANNEL_UNINITIALIZED ),
+      mResponderKeepRunning( false ) {}
+
+  ~VerbsChannel() { Terminate(); }
   void Init(void) ;
   void Respond(void) ;
   bool Receive(void) { return mBuffer.Receive() ; }
@@ -586,11 +599,11 @@ void VerbsChannel::Init(void)
      mBuffer.AppendToBuffer(&Hdr,sizeof(Hdr)) ;
      mBuffer.UnlockTransmit();
      mBuffer.Transmit() ;
-     pthread_t rdma_responder_thread ;
      BegLogLine(FXLOG_IONCN_BUFFER)
        << "Creating the RDMA responder thread"
        << EndLogLine ;
-     int rc=pthread_create(&rdma_responder_thread,NULL, rdma_responder, this) ;
+     mResponderKeepRunning = true;
+     int rc=pthread_create(&mRdmaResponderThread,NULL, rdma_responder, this) ;
      StrongAssertLogLine(rc == 0)
        << "pthread_create failed, rc=" << rc
        << EndLogLine ;
@@ -607,6 +620,15 @@ bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
         << " iov=0x" << (void *) iov
         << " iovec_length=" << iovec_length
         << EndLogLine ;
+
+    if( mRdmaSocket == VERBS_CHANNEL_UNINITIALIZED )
+    {
+      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        << "IO-link connection has gone down. Won't queue request for transmission."
+        << EndLogLine;
+      return false;
+    }
+
     unsigned int TotalDataLen = Hdr.mTotalDataLen ;
     unsigned long RequiredSpace=sizeof(LocalEndpointIndex) + sizeof(Hdr) + TotalDataLen ;
     AssertLogLine(RequiredSpace < k_ApplicationBufferSize-1 )
@@ -668,7 +690,7 @@ bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
       << "Header data length=" << TotalDataLen
       << " does not match iovec data length=" << ActualDataLength
       << EndLogLine ;
-    return RequireFlush ;
+    return true ;
   }
 bool VerbsChannel::FlushTransmit(void)
   {
@@ -751,7 +773,7 @@ void VerbsChannel::Respond(void)
       << "RDMA responder thread"
       << EndLogLine ;
     static bool still_needs_flush = false;
-    for(;;)
+    while( mResponderKeepRunning )
       {
           bool rc_receive=Receive() ;
           if ( rc_receive )
@@ -764,7 +786,7 @@ void VerbsChannel::Respond(void)
           bool Progressed ;
           pthread_mutex_lock(&gSendUpstreamLock) ;
           bool rc_sender=DataSender_OnePass(&Progressed) ;
-          while (Progressed)
+          while (Progressed && ( mRdmaSocket != VERBS_CHANNEL_UNINITIALIZED ))
             {
               rc_sender = DataSender_OnePass(&Progressed) ;
             }
@@ -784,19 +806,36 @@ void VerbsChannel::Respond(void)
 //                  << " mBuffer.mReceiveBuffer.mAckedReceiveBytes=" << mBuffer.mReceiveBuffer.mAckedReceiveBytes
 //                  << " mBuffer.mTransmitBuffer.mAckedReceiveBytes=" << mBuffer.mTransmitBuffer.mAckedReceiveBytes
                   << EndLogLine ;
-              still_needs_flush = ( ! FlushTransmit() );
+              still_needs_flush = ( ( mRdmaSocket != VERBS_CHANNEL_UNINITIALIZED ) && (! FlushTransmit()) );
             }
       }
 
   }
 
 void VerbsChannel::Terminate(void)
+{
+  if( mRdmaSocket != VERBS_CHANNEL_UNINITIALIZED )
   {
     int rc_close=close(mRdmaSocket) ;
     BegLogLine(FXLOG_IONCN_BUFFER)
       << "close rc=" << rc_close
       << EndLogLine ;
+    mRdmaSocket = VERBS_CHANNEL_UNINITIALIZED;
   }
+  else{
+    BegLogLine( FXLOG_IONCN_BUFFER)
+      << "socket already closed."
+      << EndLogLine;
+  }
+  // is the responder thread still running? stop it...
+  if( mResponderKeepRunning )
+  {
+    mResponderKeepRunning = false;
+    VerbsChannel *VC = this;
+    void *retval = ( void* )VC;
+    pthread_join( mRdmaResponderThread, &retval);
+  }
+}
 
 static VerbsChannel VC ;
 
@@ -889,52 +928,6 @@ bool ion_cn_buffer::rawTransmit(unsigned long aTransmitCount, uint32_t aLkey)
       << "RDMASendRC=" << RDMASendRC
       << EndLogLine ;
     VC.ReapSendCompletionsConditional() ;
-//    // Spin here until the RDMA send is complete. This can be optimised by deferring the spin until we
-//    // need the buffer again.
-//    int entries ;
-//    Kernel_RDMAWorkCompletion_t compList[1];
-//    do
-//    {
-//        entries = 1;  // needs to be set for some reason before the poll
-//        Kernel_RDMAPollCQ(VC.mRdmaSocket, &entries, compList);
-//    } while ( entries == 0 ) ;
-//    BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//      << "Kernel_RDMAPollCQ returns with entries=" << entries
-//      << EndLogLine ;
-//    for(unsigned int x=0;x<entries;x+=1)
-//      {
-//        BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//          << "Work completion[" << x
-//          << "] buf=0x" << compList[x].buf
-//          << " len=" << compList[x].len
-//          << " opcode=" << compList[x].opcode
-//          << " status=" << compList[x].status
-//          << " flags=0x" << (void *) compList[x].flags
-//          << " reserved=0x"<< (void *) compList[x].reserved
-//          << EndLogLine ;
-//      }
-
-//    // We seem to get ENOMEM here if the host hasn't posted a receive buffer
-//    if ( RDMASendRC == ENOMEM)
-//      {
-//        BegLogLine(FXLOG_IONCN_BUFFER)
-//          << "Kernel_RDMASend(" << VC.mRdmaSocket
-//          << ",0x" << this
-//          << "," << RDMASendCount
-//          << ",0x" << (void *) aLkey
-//          << ") returned ENOMEM"
-//          << EndLogLine ;
-//        do {
-//            RDMASendRC=Kernel_RDMASend(VC.mRdmaSocket, this, RDMASendCount,aLkey) ;
-//        } while  (RDMASendRC == ENOMEM ) ;
-//      }
-//    BegLogLine(FXLOG_IONCN_BUFFER)
-//      << "Kernel_RDMASend(" << VC.mRdmaSocket
-//      << ",0x" << this
-//      << "," << RDMASendCount
-//      << ",0x" << (void *) aLkey
-//      << ") rc=" << RDMASendRC
-//      << EndLogLine ;
     return true ;
   }
 
@@ -3218,23 +3211,12 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
         case iWARPEM_DISCONNECT_REQ_TYPE:
           {
             rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
-//            int wlen = 0;
-//            SendWR->mMessageHdr.EndianConvert() ;
-//            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
-//                                                        (char *) & SendWR->mMessageHdr,
-//                                                        LenToSend,
-//                                                        & wlen );
-//            if( istatus != IWARPEM_SUCCESS )
-//              {
-//                iwarpem_generate_conn_termination_event( SocketFD );
-//                return;
-//              }
 
-//            AssertLogLine( wlen == LenToSend )
-//              << "iWARPEM_ProcessSendWR(): ERROR: "
-//              << " LenToSend: " << LenToSend
-//              << " wlen: " << wlen
-//              << EndLogLine;
+            if( ! rc )
+            {
+              iwarpem_generate_conn_termination_event( SocketFD );
+              return true;
+            }
 
             BegLogLine( FXLOG_IT_API_O_SOCKETS )
               << "iWARPEM_ProcessSendWR(): About to call free(): " 
@@ -3250,23 +3232,12 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
         case iWARPEM_DISCONNECT_RESP_TYPE:
           {		
             rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
-//            int wlen = 0;
-//            SendWR->mMessageHdr.EndianConvert() ;
-//            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
-//                                                        (char *) & SendWR->mMessageHdr,
-//                                                        LenToSend,
-//                                                        & wlen );
-//            if( istatus != IWARPEM_SUCCESS )
-//              {
-//                iwarpem_generate_conn_termination_event( SocketFD );
-//                return;
-//              }
 
-//            AssertLogLine( wlen == LenToSend )
-//              << "iWARPEM_ProcessSendWR(): ERROR: "
-//              << " LenToSend: " << LenToSend
-//              << " wlen: " << wlen
-//              << EndLogLine;
+            if( ! rc )
+            {
+              iwarpem_generate_conn_termination_event( SocketFD );
+              return true;
+            }
 
             BegLogLine( FXLOG_IT_API_O_SOCKETS )
               << "About to call free(): "
@@ -3284,23 +3255,12 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
         case iWARPEM_DTO_RDMA_READ_REQ_TYPE:
           {
             rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
-//            int wlen = 0;
-//            SendWR->mMessageHdr.EndianConvert() ;
-//            iWARPEM_Status_t istatus = write_to_socket( SocketFD,
-//                                                        (char *) & SendWR->mMessageHdr,
-//                                                        LenToSend,
-//                                                        & wlen );
-//            if( istatus != IWARPEM_SUCCESS )
-//              {
-//                iwarpem_generate_conn_termination_event( SocketFD );
-//                return;
-//              }
 
-//            AssertLogLine( wlen == LenToSend )
-//              << "iWARPEM_ProcessSendWR(): ERROR: "
-//              << " LenToSend: " << LenToSend
-//              << " wlen: " << wlen
-//              << EndLogLine;
+            if( ! rc )
+            {
+              iwarpem_generate_conn_termination_event( SocketFD );
+              return true;
+            }
 
             // Freeing of the SendWR happens in the ReceiverThread when the RDMA_READ_RESP is processed.
             // WARNING: WARNING: WARNING: 
@@ -3382,24 +3342,15 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                 iov[i].iov_len = ntohl(SendWR->segments_array[ i ].length) ;
               }
 		
-//            iWARPEM_Status_t istatus = IWARPEM_SUCCESS;
-
-//            if( error )
-//              {
-//                goto free_WR_and_break;
-//              }
-
-//            istatus = write_to_socket( SocketFD,
-//                                       iov,
-//                                       SendWR->num_segments+1,
-//                                       & wlen );
             rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr,iov,SendWR->num_segments) ;
-//            if( istatus != IWARPEM_SUCCESS )
-//              {
-//                iwarpem_generate_conn_termination_event( SocketFD );
-//                error = 1;
-//                break;
-//              }
+
+            if( ! rc )
+            {
+              iwarpem_generate_conn_termination_event( SocketFD );
+              error = 1;
+              break;
+            }
+
 #if IT_API_CHECKSUM
             StrongAssertLogLine( Checksum == SendWR->mMessageHdr.mChecksum )
               << "ERROR: "
@@ -5039,76 +4990,6 @@ it_status_t it_ep_connect (
   s = LocalEndpointSequenceLimit ;
   LocalEndpointSequenceLimit += 1 ;
   
-//  if((s = socket(IT_API_SOCKET_FAMILY, SOCK_STREAM, 0)) < 0)
-//    {
-//    perror("it_ep_connect socket() open");
-//    }
-//
-//#ifdef IT_API_OVER_UNIX_DOMAIN_SOCKETS
-//  struct sockaddr_un serv_addr;
-//
-//  memset( &serv_addr, 0, sizeof( serv_addr ) );
-//  serv_addr.sun_family      = IT_API_SOCKET_FAMILY;
-//
-//  sprintf( serv_addr.sun_path,
-//           "%s.%d",
-//           IT_API_UNIX_SOCKET_PREFIX_PATH,
-//           connect_qual->conn_qual.lr_port.remote );
-//
-//  socklen_t serv_addr_len = sizeof( serv_addr.sun_family ) + strlen( serv_addr.sun_path );
-//#else
-//  struct sockaddr_in serv_addr;
-//
-//  memset( &serv_addr, 0, sizeof( serv_addr ) );
-//  serv_addr.sin_family      = IT_API_SOCKET_FAMILY;
-//  serv_addr.sin_port        = connect_qual->conn_qual.lr_port.remote;
-//  serv_addr.sin_addr.s_addr = path->u.iwarp.raddr.ipv4.s_addr;
-//
-//  socklen_t serv_addr_len = sizeof( serv_addr );
-//#endif
-//
-//  int SockSendBuffSize = -1;
-//  int SockRecvBuffSize = -1;
-//  //BGF size_t ArgSize = sizeof( int );
-//  socklen_t ArgSize = sizeof( int );
-//  getsockopt( s, SOL_SOCKET, SO_SNDBUF, (int *) & SockSendBuffSize, & ArgSize );
-//  getsockopt( s, SOL_SOCKET, SO_RCVBUF, (int *) & SockRecvBuffSize, & ArgSize );
-//
-//  BegLogLine( 0 )
-//    << "it_ep_connect(): "
-//    << " SockSendBuffSize: " << SockSendBuffSize
-//    << " SockRecvBuffSize: " << SockRecvBuffSize
-//    << EndLogLine;
-//
-//  SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
-//  SockRecvBuffSize = IT_API_SOCKET_BUFF_SIZE;
-//  setsockopt( s, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
-//  setsockopt( s, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
-//
-//  while( 1 )
-//    {
-//      int ConnRc = connect( s,
-//			    (struct sockaddr *) & serv_addr,
-//			    serv_addr_len );
-//
-//      if( ConnRc < 0 )
-//	{
-//	if( errno != EAGAIN )
-//	  {
-//	    perror("Connection failed") ;
-//	    StrongAssertLogLine( 0 )
-//	      << "it_ep_connect:: Connection failed "
-//	      << " errno: " << errno
-//	      << EndLogLine;
-//	  }
-//	}
-//      else if( ConnRc == 0 )
-//	break;
-//    }
-//#if defined(SPINNING_RECEIVE)
-//  socket_nonblock_on(s) ;
-//#endif
-//  socket_nodelay_on(s) ;
   
   
   iWARPEM_Private_Data_t PrivateData;
@@ -5116,18 +4997,6 @@ it_status_t it_ep_connect (
   memcpy( PrivateData.mData, 
 	  private_data,
 	  private_data_length);
-
-//  int wLen;
-//  int SizeToSend = sizeof( iWARPEM_Private_Data_t );
-//  iWARPEM_Status_t wstat = write_to_socket( s,
-//					    (char *) & PrivateData,
-//					    SizeToSend,
-//					    & wLen );
-//  AssertLogLine( wLen == SizeToSend )
-//    << "it_ep_connect(): ERROR: "
-//    << " wLen: " << wLen
-//    << " SizeToSend: " << SizeToSend
-//    << EndLogLine;
 
   struct iWARPEM_Message_Hdr_t Hdr ;
   Hdr.mMsg_Type = iWARPEM_SOCKET_CONNECT_REQ_TYPE ;
@@ -5139,8 +5008,12 @@ it_status_t it_ep_connect (
   iov[0].iov_len = sizeof( iWARPEM_Private_Data_t );
 
   pthread_mutex_lock(&gSendUpstreamLock) ;
-  iWARPEM_SendUpstream(s,Hdr,iov,1) ;
+  bool rc = iWARPEM_SendUpstream(s,Hdr,iov,1) ;
   pthread_mutex_unlock(&gSendUpstreamLock) ;
+
+  StrongAssertLogLine( rc == true )
+    << "it_ep_connect(): ERROR: upstream link is not able to send data. IO-link disconnected?"
+    << EndLogLine;
 
   LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_CONNECTED;
   LocalEndPoint->ConnFd        = s;
@@ -6483,8 +6356,13 @@ it_status_t itx_ep_connect_with_rmr (
   iWARPEM_Private_Data_t PrivateDataIn;
   expectedPrivateDataPtr = &PrivateDataIn ;
   pthread_mutex_lock(&gSendUpstreamLock) ;
-  iWARPEM_SendUpstream(s,Hdr,iov,1) ;
+  bool rc = iWARPEM_SendUpstream(s,Hdr,iov,1) ;
   pthread_mutex_unlock(&gSendUpstreamLock) ;
+
+  StrongAssertLogLine( rc == true )
+    << "it_ep_connect(): ERROR: upstream link is not able to send data. IO-link disconnected?"
+    << " rc=" << rc
+    << EndLogLine;
 
   LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_CONNECTED;
   LocalEndPoint->ConnFd        = s;

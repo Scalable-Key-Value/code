@@ -2096,6 +2096,7 @@ iWARPEM_DataReceiverThread( void* args )
 
                       LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
 
+                      RouterEP->RemoveClient( Client );
                       status = IWARPEM_ERRNO_CONNECTION_CLOSED;
                       break;
                     }
@@ -2103,6 +2104,15 @@ iWARPEM_DataReceiverThread( void* args )
                       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
                         << "Received DISCONNECT_RESP_TYPE on socket " << SocketFd
                         << EndLogLine;
+                      RouterEP->RemoveClient( Client );
+                      status = IWARPEM_ERRNO_CONNECTION_CLOSED;
+                      break;
+
+                    case iWARPEM_SOCKET_CLOSE_TYPE:
+                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                        << "Received CLOSE_TYPE on socket " << SocketFd
+                        << EndLogLine;
+                      RouterEP->RemoveClient( Client );
                       status = IWARPEM_ERRNO_CONNECTION_CLOSED;
                       break;
 
@@ -2305,11 +2315,6 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                 return;
               }
 
-#ifdef WITH_CNK_ROUTER
-            if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
-              gActiveSocketsQueue.push( EP );
-#endif
-
             AssertLogLine( wlen == LenToSend )
               << "iWARPEM_ProcessSendWR(): ERROR: "
               << " LenToSend: " << LenToSend
@@ -2324,6 +2329,14 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
               << EndLogLine;
 
             iwarpem_flush_queue( (iWARPEM_Object_EndPoint_t *) SendWR->ep_handle, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
+
+#ifdef WITH_CNK_ROUTER
+            if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
+              gActiveSocketsQueue.push( EP );
+
+            iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ EP->ConnFd ]->connect_sevd_handle );
+            rEP->RemoveClient( EP->ClientId );
+#endif
 
             free( SendWR );
                 

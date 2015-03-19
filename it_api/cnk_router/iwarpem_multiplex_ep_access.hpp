@@ -51,9 +51,11 @@ SendMsg( iWARPEM_Object_EndPoint_t *aEP, char * buff, int len, int* wlen, const 
     iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
     iWARPEM_Message_Hdr_t *hdr = (iWARPEM_Message_Hdr_t*)buff;
     char *data = buff + sizeof( iWARPEM_Message_Hdr_t );
+    len -= sizeof( iWARPEM_Message_Hdr_t );
+
     status = rEP->InsertMessage( aEP->ClientId, hdr, buff, len );
     if( status == IWARPEM_SUCCESS )
-      *wlen = len;
+      *wlen = len + sizeof( iWARPEM_Message_Hdr_t );
     else
       *wlen = 0;
     if( aFlush )
