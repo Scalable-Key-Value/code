@@ -15,7 +15,7 @@
 #define __SKV_SERVER_ESTABLISH_CLIENT_CONNECTION_FLOW_HPP__
 
 #ifndef SKV_SERVER_CLIENT_CONN_EST_LOG
-#define SKV_SERVER_CLIENT_CONN_EST_LOG      ( 0 )
+#define SKV_SERVER_CLIENT_CONN_EST_LOG      ( 0 | SKV_LOGGING_ALL )
 #endif
 
 #include <skv/common/skv_types.hpp>
@@ -50,6 +50,7 @@ public:
       {
         switch( EventType )
         {
+          case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_BROKEN:
           case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_DISCONNECT:
           {
             BegLogLine( SKV_SERVER_CLIENT_CONN_EST_LOG )

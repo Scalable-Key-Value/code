@@ -431,7 +431,7 @@ public:
       << "WriteV based buffer not possible to use as receive buffer!"
       << EndLogLine;
   }
-  inline size_t GetRemainingSize() const { return mIntBufferSize - (mIntBufferPosition - mIntBuffer); }
+  inline size_t GetRemainingSize() const { return mIntBufferSize - mDataSize; }
   inline void InjectPaddingVector( const size_t aPaddingSize )
   {
     mIntBufferPosition = (char*)AlignedDataPosition( mIntBufferPosition );
@@ -544,9 +544,16 @@ public:
   inline bool FlushRecommended() const
   {
     return ( (mVectorCount > ( mVectorMax - (mVectorMax >> 3) ))
-        || ( (mIntBufferPosition + (mIntBufferSize>>3)) > (mIntBuffer + mIntBufferSize) ) ); }
+        || ( (mDataSize > ( mIntBufferSize - (mIntBufferSize>>3 )) )) );
+  }
   virtual iWARPEM_Status_t FlushToSocket( const int aSocket, int *wlen )
   {
+    AssertLogLine( GetDataLen() < IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE )
+      << "Send data size will be too large for the receiver"
+      << " len=" << GetDataLen()
+      << " max=" << IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE
+      << EndLogLine;
+
     UpdateHeaderLen( GetDataLen() );
     AssertLogLine(( mHeader->ProtocolVersion == IWARPEM_MULTIPLEXED_SOCKET_PROTOCOL_VERSION ) &&
                   (mHeader->MsgType == MULTIPLEXED_SOCKET_MSG_TYPE_DATA))

@@ -304,9 +304,9 @@ writev_next:
   struct iovec *send_iov = &( iov[ completed_vectors ] );
 
   // at least linux seems to have a writev limit, so we send things in chunks here...
-  if( send_iov_count > 128 )
+  if( send_iov_count > 1024 )
   {
-    send_iov_count = 128;
+    send_iov_count = 1024;
 
     // recalculate the total length for this writev attempt
     send_totalen = 0;

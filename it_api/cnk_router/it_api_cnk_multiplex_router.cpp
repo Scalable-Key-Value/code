@@ -164,15 +164,25 @@ public:
   {
     mUpLink = aUpLink;
     mDownLink = aDownLink;
-    BegLogLine( 1 )
+    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
       << "Creating new Crossbar_Entry. "
+      << " this=0x" << (void*)this
       << " client: " << aClientId
       << " conn: 0x" << (void*)aDownLink
       << " server: " << aServerId
       << " srvEP: 0x" << (void*)aUpLink
       << EndLogLine;
   }
-  ~Crossbar_Entry_t() {}
+  ~Crossbar_Entry_t()
+  {
+    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+      << "Destroying Crossbar_Entry. "
+      << " client: " << mClientId
+      << " conn: 0x" << (void*)mDownLink
+      << " server: " << mServerId
+      << " srvEP: 0x" << (void*)mUpLink
+      << EndLogLine;
+  }
 
   inline
   iWARPEM_StreamId_t getClientId() const
@@ -376,10 +386,9 @@ void ion_cn_buffer::IssueRDMARead(struct connection *conn, unsigned long Offset,
     conn->ibv_post_send_count += 1 ;
     conn->ibv_send_last_optype = k_wc_uplink ;
     int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
-    StrongAssertLogLine(rc == 0)
+    BegLogLine( rc != 0 )
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
-
   }
 
 static void process_uplink_element(struct connection *conn, unsigned int LocalEndpointIndex, const struct iWARPEM_Message_Hdr_t& Hdr, const void * message) ;
@@ -701,7 +710,7 @@ bool ion_cn_buffer::pushAckOnly( struct connection *conn, unsigned long aSentByt
   conn->ibv_send_last_optype = k_wc_ack;
   conn->ibv_post_send_count += 1 ;
   int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
-  StrongAssertLogLine(rc == 0)
+  BegLogLine( rc != 0 )
     << "ibv_post_send fails, rc=" << rc
     << EndLogLine ;
 
@@ -766,7 +775,7 @@ bool ion_cn_buffer::rawTransmit(struct connection *conn, unsigned long aTransmit
     conn->ibv_send_last_optype = k_wc_downlink ;
     conn->ibv_post_send_count += 1 ;
     int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
-    StrongAssertLogLine(rc == 0)
+    BegLogLine( rc != 0 )
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
 
@@ -1245,6 +1254,31 @@ static void queue_downstream(struct connection *conn,unsigned int LocalEndpointI
   add_conn_to_deferred_ack(conn) ;
 }
 
+static void close_crossbar_link(struct connection *conn, unsigned int LocalEndpointIndex)
+  {
+    BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
+        << "conn=0x" << (void *) conn
+        << " LocalEndpointIndex=" << LocalEndpointIndex
+        << EndLogLine ;
+    StrongAssertLogLine(LocalEndpointIndex < k_LocalEndpointCount)
+      << "LocalEndpointIndex=" << LocalEndpointIndex
+      << " is too large"
+      << EndLogLine ;
+
+    Crossbar_Entry_t *cb = conn->socket_fds[LocalEndpointIndex];
+    iWARPEM_Router_Endpoint_t *ServerEP = (iWARPEM_Router_Endpoint_t*)cb->getUpLink();
+
+//    ServerEP->InsertDisconnectMessage();
+    ServerEP->RemoveClient( cb->getClientId() ) ;
+
+    conn->socket_fds[LocalEndpointIndex] = NULL ;
+    delete cb;
+
+    BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
+      << "Removed serverId/LocalEndpointIndex " << LocalEndpointIndex
+      << " from uplink and downlink lists."
+      << EndLogLine ;
+  }
 static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
 {
   StrongAssertLogLine( aServerEP != NULL )
@@ -1252,6 +1286,8 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
     << EndLogLine ;
   iWARPEM_StreamId_t client;
   iWARPEM_Msg_Type_t msg_type;
+  struct iWARPEM_Message_Hdr_t *rHdr;
+  char *rData;
 
   iWARPEM_Status_t status = aServerEP->GetNextMessageType( &msg_type, &client );
 
@@ -1266,10 +1302,13 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
     cb = aServerEP->GetClientEP( client );
   else
     {
-    BegLogLine( 0 )
+    BegLogLine( 1 )
       << "client=" << client
       << " has no crossbar entry"
+      << " message will be skipped/ignored"
       << EndLogLine ;
+    status = aServerEP->ExtractNextMessage( &rHdr, &rData, &client );
+
     return -1;
     }
 
@@ -1293,8 +1332,6 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
     << " client=" << client
     << " msg_type=" << msg_type
     << EndLogLine ;
-  struct iWARPEM_Message_Hdr_t *rHdr;
-  char *rData;
 
   status = aServerEP->ExtractNextMessage( &rHdr, &rData, &client );
 
@@ -1319,14 +1356,12 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
     report_hdr(*rHdr) ;
     if (msg_type == iWARPEM_DISCONNECT_RESP_TYPE)
     {
-      BegLogLine(FXLOG_ITAPI_ROUTER)
+      BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
         << "Forwarded a DISCONNECT RESPONSE message"
         << " Removing Crossbar entry for client=" << client
         << " server=" << cb->getServerId()
         << EndLogLine ;
-      aServerEP->RemoveClient( client );
-      ((struct connection*)cb->getDownLink())->socket_fds[ cb->getServerId() ] = NULL;
-      FreeClientId( client );
+      close_crossbar_link( conn, cb->getServerId() );
     }
   }
   else
@@ -1421,13 +1456,13 @@ void * polling_thread(void *arg)
     {
       struct epoll_record * ep = (struct epoll_record *)events[n].data.ptr ;
       uint32_t epoll_events = events[n].events ;
-      iWARPEM_Router_Endpoint_t *conn = ep->conn ;
+      iWARPEM_Router_Endpoint_t *rEP = ep->conn ;
       int fd=ep->fd ;
       BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *) conn
+        << "conn=0x" << (void *) rEP
         << " fd=" << fd
         << EndLogLine ;
-      if ( conn == NULL)
+      if ( rEP == NULL)
       {
         StrongAssertLogLine( fd == new_drc_serv_socket )
           << "Receiving data on an unknown and/or unconnected socket. Cannot proceed."
@@ -1449,8 +1484,8 @@ void * polling_thread(void *arg)
         int status;
         do
         {
-          status = process_downlink( conn ) ;
-        } while ( (status == 0) && conn->RecvDataAvailable() );
+          status = process_downlink( rEP ) ;
+        } while ( (status == 0) && rEP->RecvDataAvailable() );
       }
     }
 
@@ -1707,34 +1742,17 @@ static void open_socket_send_private_data( struct connection *conn,
     ServerEP->AddClient( conn->clientId, cb );
     conn->socket_fds[ LocalEndpointIndex ] = cb ;
 
+    BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
+        << "Opened: conn=0x" << (void *) conn
+        << " LocalEndpointIndex=" << LocalEndpointIndex
+        << " ipv4_address=0x" << (void*)SocketConnect.ipv4_address
+        << " ipv4_port=" << SocketConnect.ipv4_port
+        << " socket_fds[]=" << (void*) conn->socket_fds[ LocalEndpointIndex ]
+        << EndLogLine ;
+
 // We have an assertion to protect against the ServerEP being NULL
 //    if( ServerEP != NULL )
       ServerEP->InsertConnectRequest( conn->clientId, &Hdr, &PrivateData, cb );
-  }
-static void close_socket(struct connection *conn, unsigned int LocalEndpointIndex)
-  {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *) conn
-        << " LocalEndpointIndex=" << LocalEndpointIndex
-        << EndLogLine ;
-    StrongAssertLogLine(LocalEndpointIndex < k_LocalEndpointCount)
-      << "LocalEndpointIndex=" << LocalEndpointIndex
-      << " is too large"
-      << EndLogLine ;
-
-    Crossbar_Entry_t *cb = conn->socket_fds[LocalEndpointIndex];
-    iWARPEM_Router_Endpoint_t *ServerEP = (iWARPEM_Router_Endpoint_t*)cb->getUpLink();
-
-//    ServerEP->InsertDisconnectMessage();
-    ServerEP->RemoveClient( cb->getClientId() ) ;
-
-    conn->socket_fds[LocalEndpointIndex] = NULL ;
-    delete cb;
-
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "Removed client " << LocalEndpointIndex
-      << " from ServerEP and ClientEP lists."
-      << EndLogLine ;
   }
 static void drain_cq(void) ;
 
@@ -1830,7 +1848,7 @@ static void process_uplink_element(struct connection *conn, unsigned int LocalEn
       open_socket_send_private_data(conn,LocalEndpointIndex,Hdr.mOpType.mSocketConnect,*(const iWARPEM_Private_Data_t *)message);
       break ;
     case iWARPEM_SOCKET_CLOSE_REQ_TYPE:
-      close_socket(conn,LocalEndpointIndex) ;
+      close_crossbar_link(conn,LocalEndpointIndex) ;
       break ;
     default:
       StrongAssertLogLine(Msg_Type >= iWARPEM_DTO_SEND_TYPE && Msg_Type <= iWARPEM_DISCONNECT_RESP_TYPE)
@@ -2227,17 +2245,14 @@ void TerminateConnection( struct termination_entry_t *aTerm )
       iWARPEM_Router_Endpoint_t *srv = (iWARPEM_Router_Endpoint_t*)cb->getUpLink();
       srv->InsertCloseRequest( client );
 
-      // remove from connection list
-      conn->socket_fds[ n ] = NULL;
-
-      // clear the occupied clientId(s)
-      FreeClientId( cb->getClientId() );
+      close_crossbar_link(conn, cb->getServerId() );
     }
   }
 
   conn->mBuffer.Term() ;
 
   rdma_destroy_qp(id);
+  FreeClientId( conn->clientId );
   ibv_dereg_mr(conn->mr) ;
   free((void *)conn);
   rdma_destroy_id(id);
@@ -2341,8 +2356,14 @@ again:
     if( gFirstConnToAck != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
       AckAllConnections();
 
-    if( idlecount > 200 )
-      usleep( (unsigned int)std::min( (const unsigned long)idlecount, (const unsigned long)500000 ) );
+    if( idlecount > 200000 )
+      {
+      idlecount--;
+      BegLogLine( 0 )
+        << "usleep hit: idlecount=" << idlecount
+        << EndLogLine;
+      usleep( idlecount );
+      }
 
     if ( 0 == k_spin_poll)
     {

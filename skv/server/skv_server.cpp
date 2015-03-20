@@ -515,30 +515,6 @@ ProcessEvent( skv_server_state_t  aState,
 
           break;
         }
-        case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_BROKEN:
-        {
-          // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
-          // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
-          // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
-
-          // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
-          // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
-          // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
-
-          BegLogLine( 1 )
-            << "skv_server_t::ProcessEvent(): BROKEN CONNECTION: WARNING!!! BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES"
-            << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
-            << EndLogLine;
-
-          SetState( SKV_SERVER_STATE_EXIT );
-
-//          StrongAssertLogLine( 0 )
-//            << "skv_server_t::ProcessEvent(): BROKEN CONNECTION: WARNING!!! BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES"
-//            << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
-//            << EndLogLine;
-
-          break;
-        }
         case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_ACCEPT_ARRIVAL:
         {
           BegLogLine( SKV_PROCESS_IT_EVENT_LOG )
@@ -549,22 +525,33 @@ ProcessEvent( skv_server_state_t  aState,
 
           break;
         }
+        case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_BROKEN:
+        {
+          // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
+          BegLogLine( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLIENT_CONN_EST_LOG )
+            << "skv_server_t::ProcessEvent(): BROKEN CONNECTION: WARNING!!! BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES"
+            << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
+            << EndLogLine;
+          // NO BREAK HERE - JUST CONTINUE PROCESSING WITH CM-state machine
+        }
         case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_DISCONNECT:
         {
-          BegLogLine( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLIENT_CONN_EST_LOG )
+          BegLogLine(( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLIENT_CONN_EST_LOG ) &&
+                     (aEvent->mEventType != SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_BROKEN) )
             << "skv_server_t::ProcessEvent(): DISCONNECTED CONNECTION: "
             << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
 #ifdef SKV_SERVER_LOOP_STATISTICS
             << SERVER_STATS_ECHO( ServerStatistics )
 #endif
             << EndLogLine;
+          // NO BREAK HERE - JUST CONTINUE PROCESSING WITH CM-state machine
         }
         case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_ESTABLISHED:
         {
           skv_server_ep_state_t* StateForEP = GetEPStateForEPHdl( aEvent->mEventMetadata.mEP.mIT_EP );
 
           BegLogLine( SKV_PROCESS_IT_EVENT_LOG )
-            << "skv_server_t::ProcessEvent:: SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_ESTABLISHED action block: "
+            << "skv_server_t::ProcessEvent:: SKV_SERVER_EVENT_TYPE_IT_CMM action block: "
             << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
             << " StateForEP: " << (void *) StateForEP
             << EndLogLine;
@@ -587,7 +574,7 @@ ProcessEvent( skv_server_state_t  aState,
             << " status: " << skv_status_to_string( status )
             << EndLogLine;
 
-          if( aEvent->mEventType == SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_DISCONNECT )
+          if( aEvent->mEventType != SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_ESTABLISHED )
           {
             // This should normally happen in the state machine.
             // THINK about how to get the data structures there.

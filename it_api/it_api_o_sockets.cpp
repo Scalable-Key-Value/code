@@ -944,7 +944,7 @@ iwarpem_generate_conn_termination_event( int aSocketId )
   
   int enqrc = ConnCmplEventQueue->Enqueue( CompletetionEvent );
   
-  BegLogLine(FXLOG_IT_API_O_SOCKETS)
+  BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
     << "ConnCmplEventQueue=" << ConnCmplEventQueue
     << " conne->event_number=" << conne->event_number
     << " conne->evd=" << conne->evd
@@ -954,6 +954,8 @@ iwarpem_generate_conn_termination_event( int aSocketId )
   StrongAssertLogLine( enqrc == 0 ) 
     << "iWARPEM_DataReceiverThread()::Failed to enqueue connection request event" 
     << EndLogLine;	  
+
+  it_api_o_sockets_signal_accept();
   /*********************************************/
   
   LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
@@ -2155,22 +2157,24 @@ iWARPEM_DataReceiverThread( void* args )
 }
 
 static void validate_hdr(const iWARPEM_Message_Hdr_t& Hdr, size_t expected_length)
-  {
-    AssertLogLine(Hdr.mMsg_Type >= iWARPEM_DTO_SEND_TYPE && Hdr.mMsg_Type <= iWARPEM_DISCONNECT_RESP_TYPE)
-        << "Hdr.mMsg_Type=" << Hdr.mMsg_Type
-        << " is out of range. Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
-        << " expected_length=" << expected_length
-        << EndLogLine ;
-    AssertLogLine(Hdr.mTotalDataLen == expected_length)
-      << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
-      << " disagrees with expected_length=" << expected_length
-      << " Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
-      << EndLogLine ;
-    AssertLogLine(expected_length < 1048576)
-      << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
-      << " will overflow buffer in forwarder. Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
-      << EndLogLine ;
-  }
+{
+  AssertLogLine(Hdr.mMsg_Type >= iWARPEM_DTO_SEND_TYPE && Hdr.mMsg_Type <= iWARPEM_DISCONNECT_RESP_TYPE)
+    << "Hdr.mMsg_Type=" << Hdr.mMsg_Type
+    << " is out of range. Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+    << " expected_length=" << expected_length
+    << EndLogLine ;
+  AssertLogLine(Hdr.mTotalDataLen == expected_length)
+    << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+    << " disagrees with expected_length=" << expected_length
+    << " Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+    << EndLogLine ;
+#ifdef WITH_CNK_ROUTER
+  AssertLogLine(expected_length < IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE)
+    << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+    << " will overflow buffer in forwarder. Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+    << EndLogLine ;
+#endif
+}
 
 void
 iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
@@ -3680,7 +3684,7 @@ iWARPEM_AcceptThread( void* args )
     {
       socklen_t cliaddrlen = sizeof( cliaddr );
       
-      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
 	<< "iWARPEM_AcceptThread(): "
 	<< " AcceptObject " << (void*) AcceptObject
 	<< " Before accept() "
@@ -3732,7 +3736,7 @@ iWARPEM_AcceptThread( void* args )
 
       it_conn_request_event_t* icre = (it_conn_request_event_t*) &ConReqEvent->mEvent;
 
-      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
         << "ConReqEvent=" << ConReqEvent
         << " icre=" << icre
         << " event_number=" << IT_CM_REQ_CONN_REQUEST_EVENT
@@ -3751,7 +3755,7 @@ iWARPEM_AcceptThread( void* args )
 
       if ( rstat == IWARPEM_ERRNO_CONNECTION_CLOSED)
       {
-        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
           << "Connection closed after accept"
           << " closing fd=" << ConnFd
           << EndLogLine ;
@@ -3766,7 +3770,7 @@ iWARPEM_AcceptThread( void* args )
           << " rstat: " << rstat
           << EndLogLine;
 
-        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
           << "PrivateDataLen=" << PrivateDataLen
           << EndLogLine ;
 
@@ -3839,7 +3843,7 @@ iWARPEM_AcceptThread( void* args )
                   (char *) icre->private_data,
                   IT_MAX_PRIV_DATA,
                   & rlen );
-          BegLogLine(FXLOG_IT_API_O_SOCKETS)
+          BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
             << "private_data=" << HexDump( icre->private_data, IT_MAX_PRIV_DATA)
             << EndLogLine ;
 
@@ -3854,19 +3858,19 @@ iWARPEM_AcceptThread( void* args )
         // post this to the connection queue for the listen
         iWARPEM_Object_EventQueue_t* ConnectEventQueuePtr = (iWARPEM_Object_EventQueue_t*)AcceptObject->connect_evd;
   //     ConnectEventQueuePtr doesn't seeem initialised
-        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
           << "ConnectEventQueuePtr=" << ConnectEventQueuePtr
           << " ConReqEvent=" << ConReqEvent
           << EndLogLine ;
         int enqrc = ConnectEventQueuePtr->Enqueue( ConReqEvent );
 
         StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
-        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
           << "iWARPEM_AcceptThread(): "
           << " ConReqInfo@ "    << (void*) ConReqInfo
           << " Posted to connect_evd@ " << (void*) AcceptObject->connect_evd
           << EndLogLine;
-        BegLogLine(FXLOG_IT_API_O_SOCKETS)
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
           << "Posted to CMQueue=" << CMQueue
           << EndLogLine ;
   //      it_event_t *event =(it_event_t *)malloc(sizeof(it_event_t));
@@ -5119,7 +5123,6 @@ static void it_api_o_sockets_signal_accept(void)
     (gAEVD->mEventCounter)++;
     pthread_cond_signal( &gAEVD->mMainCond );
     pthread_mutex_unlock( &gAEVD->mEventCounterMutex );
-
   }
 it_status_t
 itx_aevd_wait( IN  it_evd_handle_t evd_handle,     
@@ -5156,9 +5159,9 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
         // early exit if there are no events yet
         if( AEVD->mEventCounter == 0 )
           {
-            // pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
-            // *events_count = 0;
-            // return IT_SUCCESS;
+            pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
+            *events_count = 0;
+            return IT_SUCCESS;
           }
       }
     else if( (timeout == IT_TIMEOUT_INFINITE) )
@@ -5199,89 +5202,25 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
     pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
     /************************************************************/
 
+    // take a current snapshot of the event counter and only process this number regardless of counter updates
+    int storedCount = AEVD->mEventCounter;
     int gatheredEventCount = 0;
 
 //    /***********************************************************************************
 //     * Dequeue AFF Events
 //     ***********************************************************************************/
     int availableEventSlotsCount = max_event_count;
-//    int deviceCount = AEVD->mDevice->devices_count;
     int deviceCount = 1 ;
-//    for( int deviceOrd = 0; deviceOrd < deviceCount; deviceOrd++ )
-//      {
-//        int eventCountInQueue = AEVD->mAffQueues[ deviceOrd ].GetCount();
-//        if( eventCountInQueue > 0 )
-//          {
-//            int eventCount = min( availableEventSlotsCount, eventCountInQueue );
-//
-//            for( int i = 0; i < eventCount; i++ )
-//              {
-//                AEVD->mAffQueues[ deviceOrd ].Dequeue( & events[ gatheredEventCount ] );
-//                gatheredEventCount++;
-//                availableEventSlotsCount--;
-//              }
-//          }
-//      }
-//    /***********************************************************************************/
-//
-//
-//
-//
-//    /***********************************************************************************
-//     * Dequeue CM Events
-//     ***********************************************************************************/
-//    AssertLogLine( availableEventSlotsCount >= 0 )
-//      << "ERROR: "
-//      << " availableEventSlotsCount: " << availableEventSlotsCount
-//      << EndLogLine;
-//
-//    int eventCountInCMQueue = AEVD->mCMQueue.GetCount();
-//    BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-//      << "&AEVD->mCMQueue=" << &AEVD->mCMQueue
-//      << " eventCountInCMQueue=" << eventCountInCMQueue
-//      << EndLogLine ;
-//    if( eventCountInCMQueue > 0 )
-//      {
-//        int eventCount = min( availableEventSlotsCount, eventCountInCMQueue );
-//
-//        for( int i = 0; i < eventCount; i++ )
-//          {
-//            AEVD->mCMQueue.Dequeue( & events[ gatheredEventCount ] );
-//            gatheredEventCount++;
-//            availableEventSlotsCount--;
-//          }
-//      }
-//    /***********************************************************************************/
-//    static unsigned long loopCount ;
-//    loopCount += 1 ;
     /*
      * Dequeue CMM events
      */
     BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
       << "AEVD->mCMQueue=" << AEVD->mCMMEVQObj
       << EndLogLine ;
-//    iWARPEM_Object_EventQueue_t* CMMEVQObj = (iWARPEM_Object_EventQueue_t *) evd_cmm_handle;
     iWARPEM_Object_EventQueue_t* CMMEVQObj = AEVD->mCMMEVQObj;
 
     iWARPEM_Object_Event_t *EventPtr;
 
-//    int rc = EVQObj->Dequeue( &EventPtr );
-//
-//    if( rc == 0 )
-//      {
-//        AssertLogLine( EventPtr != NULL )
-//          << "it_evd_dequeue(): ERROR: EventPtr is NULL"
-//          << " EVQObj: " << (void *) EVQObj
-//          << " EVQObj->Queue: " << (void *) &(EVQObj->mQueue)
-//          << EndLogLine;
-//
-//      *event = EventPtr->mEvent;
-//
-//      BegLogLine( FXLOG_IT_API_O_SOCKETS )
-//        << "About to call free( " << (void *) EventPtr << " )"
-//        << EndLogLine;
-//
-//      free( EventPtr );
         int rc = CMMEVQObj->Dequeue( & EventPtr );
         int eventCountInCMMQueue = ( rc == 0 ) ? 1 : 0 ;
         if ( eventCountInCMMQueue != 0 )
@@ -5296,10 +5235,8 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
         if( eventCountInCMMQueue > 0 )
           {
             int eventCount = min( availableEventSlotsCount, eventCountInCMMQueue );
+//            eventCount = min( eventCount, (storedCount - gatheredEventCount) );
 
-//            for( int i = 0; i < eventCount; i++ )
-//              {
-//                CMMEVQObj->Dequeue( & EventPtr );
                 events[ gatheredEventCount ] = EventPtr->mEvent;
                 BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
                   << "events[" << gatheredEventCount
@@ -5312,10 +5249,6 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 
                 gatheredEventCount++;
                 availableEventSlotsCount--;
-//              }
-                pthread_mutex_lock( & ( AEVD->mEventCounterMutex ) );
-                AEVD->mEventCounter += eventCountInCMMQueue;
-                pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
           }
 
     /*
@@ -5334,6 +5267,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
           if( eventCountInCMQueue > 0 )
             {
               int eventCount = min( availableEventSlotsCount, eventCountInCMQueue );
+//              eventCount = min( eventCount, (storedCount - gatheredEventCount) );
 
               for( int i = 0; i < eventCount; i++ )
                 {
@@ -5346,8 +5280,6 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
                   availableEventSlotsCount--;
                 }
             }
-
-
 
 
     /***********************************************************************************
@@ -5368,6 +5300,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
         if( eventCountInQueue > 0 )
           {
             int eventCount = min( availableEventSlotsCount, eventCountInQueue );
+//            eventCount = min( eventCount, (storedCount - gatheredEventCount) );
 
             BegLogLine( FXLOG_IT_API_O_SOCKETS_QUEUE_LENGTHS_LOG )
               << "itx_aevd_wait():: send events: " << eventCount
@@ -5441,6 +5374,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
         if( eventCountInQueue > 0 )
           {
             int eventCount = min( availableEventSlotsCount, eventCountInQueue );
+//            eventCount = min( eventCount, (storedCount - gatheredEventCount) );
 
             BegLogLine( FXLOG_IT_API_O_SOCKETS_QUEUE_LENGTHS_LOG )
               << "itx_aevd_wait():: recv events: " << eventCount
@@ -5478,6 +5412,11 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
     pthread_mutex_lock( & ( AEVD->mEventCounterMutex ) );
     AEVD->mEventCounter -= gatheredEventCount;
     pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
+    BegLogLine( gatheredEventCount != storedCount )
+      << "WARNING: not all events processed: "
+      << " counter=" << storedCount
+      << " processed=" << gatheredEventCount
+      << EndLogLine;
 
     *events_count = gatheredEventCount;
 
@@ -6195,7 +6134,7 @@ it_status_t itx_ep_connect_with_rmr (
   iWARPEM_Private_Data_t PrivateDataIn;
   int rlen ;
   BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-    << "About to pol for private data from socket " << s
+    << "About to poll for private data from socket " << s
     << EndLogLine ;
   struct pollfd pollfds[1] ;
   pollfds[0].fd = s ;

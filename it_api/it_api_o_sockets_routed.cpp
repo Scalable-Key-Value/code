@@ -638,6 +638,11 @@ bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
     bool RequireFlush=RequiredSpace > mBuffer.SpaceInBuffer() ;
     if(RequireFlush)
       {
+      BegLogLine(FXLOG_IONCN_BUFFER)
+        << "Need to Flush the upstream buffer..."
+        << " RequiredSpace=" << RequiredSpace
+        << " available=" << mBuffer.SpaceInBuffer()
+        << EndLogLine;
         bool rc_flush=FlushTransmit() ;
         if ( ! rc_flush)
           {
@@ -653,8 +658,8 @@ bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
                       << "Block received"
                       << EndLogLine ;
                     HandleBuffer() ;
-                    rc_flush=FlushTransmit() ;
                   }
+                rc_flush=FlushTransmit() ;
               } while (! rc_flush) ;
             BegLogLine(FXLOG_IONCN_BUFFER)
                 << "We have upstream space now, continuing"
@@ -5505,6 +5510,7 @@ it_status_t iwarpem_it_post_rdma_read_resp (
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
     << "iwarpem_it_post_rdma_read_resp(): Enqueued a SendWR request on: " 
     << " ep_handle: " << *LocalEndPoint
+    << " mTotalDataLen:" << SendWR->mMessageHdr.mTotalDataLen
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
 

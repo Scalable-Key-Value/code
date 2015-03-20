@@ -281,7 +281,8 @@ public:
       memcpy( aBuffer, databuf, hdrlen );
     }
     else
-      mReceiveBuffer->GetData( &aBuffer, (size_t*)&aSize );
+      if( aSize )
+        mReceiveBuffer->GetData( &aBuffer, (size_t*)&aSize );
 
     return IWARPEM_SUCCESS;
   }
@@ -376,7 +377,8 @@ public:
     (*aHdr)->EndianConvert();
 
     rlen = (*aHdr)->mTotalDataLen;
-    rlen = mReceiveBuffer->GetData( aData, &rlen );
+    if( rlen )
+      rlen = mReceiveBuffer->GetData( aData, &rlen );
     AssertLogLine( rlen == (*aHdr)->mTotalDataLen )
       << "Retrieval of HdrPtr failed: len=" << rlen
       << " expected=" << sizeof(iWARPEM_Multiplexed_Msg_Hdr_t)
@@ -441,6 +443,12 @@ public:
     iWARPEM_Status_t status = IWARPEM_SUCCESS;
     if( GetSendSpace() < aSize )
     {
+      AssertLogLine( aForceNoFlush == false )
+        << "Remaining size too small for message but parameters prevent flush."
+        << " remaining=" << GetSendSpace()
+        << " aSize=" << aSize
+        << EndLogLine;
+
       status = FlushSendBuffer();
       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
         << "Remaining space is too small. Sending existing data first.."
@@ -482,7 +490,12 @@ public:
 
     // initiate a send of data once we've filled up the buffer beyond a threshold
     if( (!aForceNoFlush) && ( mSendBuffer->FlushRecommended() ) )
+      {
+      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+        << "Buffer reached threshold fill state. Flushing..."
+        << EndLogLine;
       status = FlushSendBuffer();
+      }
     return status;
   }
   iWARPEM_Status_t InsertMessageVector( const iWARPEM_StreamId_t aClientId,
@@ -505,6 +518,17 @@ public:
     }
 
     int send_size = aIOV[ i ].iov_len;
+
+    if( GetSendSpace() < send_size )
+    {
+      status = FlushSendBuffer();
+      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+        << "Remaining space is too small. Sending existing data first.."
+        << " req_size: " << send_size
+        << " rem_space: " << GetSendSpace()
+        << EndLogLine;
+    }
+
     status = InsertMessage( aClientId, hdr, (char*)(aIOV[ i ].iov_base), aIOV[ i ].iov_len, true );
     if( status == IWARPEM_SUCCESS )
       *aLen += send_size;
