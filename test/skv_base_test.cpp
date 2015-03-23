@@ -25,6 +25,7 @@
 #include <math.h>
 #include <iostream>
 #include <string>
+#include <algorithm>
 
 enum skv_test_mode_t
 {

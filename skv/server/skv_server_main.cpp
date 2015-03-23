@@ -27,6 +27,23 @@
 
 #include <skv/server/skv_server.hpp>
 
+#if SKV_USE_VERBS
+#include <rdma/rdma_cma.h>
+#define ofed_bgvrnic_workaround() \
+{ \
+  struct rdma_event_channel *ch = rdma_create_event_channel (); \
+  if( !ch )\
+  { \
+    std::cout << "rdma_create_event_channel failed. returned: " << (void*)ch << std::endl; \
+    return -1; \
+  } \
+  rdma_destroy_event_channel( ch );  \
+}
+#else
+#define ofed_bgvrnic_workaround()
+#endif
+
+
 #if defined(USE_MTRACE)
 #include <mcheck.h>
 #endif
@@ -39,6 +56,8 @@ main(int argc, char **argv)
 #if defined(USE_MTRACE)
     mtrace() ;
 #endif
+
+  ofed_bgvrnic_workaround();
 
   /************************************************************
    * Initialize MPI

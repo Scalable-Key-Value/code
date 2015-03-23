@@ -879,7 +879,8 @@ skv_local_kv_asyncmem::PerformBulkInsert( skv_local_kv_request_t *aReq )
                                                      &ValuePtr,
                                                      ValueSize );
 
-    AssertLogLine( ( KeySize > 0 ) && ( KeySize <= SKV_KEY_LIMIT ) )
+    AssertLogLine( ( KeySize > 0 ) && ( KeySize <= SKV_KEY_LIMIT ) &&
+                   ( KeyPtr >= LocalBufferAddr ) && ( KeyPtr < LocalBufferAddr + LocalBufferSize ) )
       << "skv_local_kv_asyncmem: ERROR: "
       << " KeySize: " << KeySize
       << " SKV_KEY_LIMIT: " << SKV_KEY_LIMIT

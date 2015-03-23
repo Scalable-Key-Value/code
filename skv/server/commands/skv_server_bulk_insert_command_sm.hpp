@@ -48,7 +48,7 @@ public:
      * Save local command state
      ******************************************************************/
     aCommand->mCommandState.mCommandBulkInsert.mHdr             = aReq->mHdr;
-    aCommand->mCommandState.mCommandBulkInsert.mLocalBuffer     = *aNewRecordAllocRep;
+    aCommand->mCommandState.mCommandBulkInsert.mLocalBuffer.Init( *aNewRecordAllocRep );
     aCommand->mCommandState.mCommandBulkInsert.mPDSId           = aReq->mPDSId;
 
     // This is for debugging

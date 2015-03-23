@@ -1237,14 +1237,17 @@ it_status_t it_ia_create (
   bzero( deviceMgr, sizeof( it_api_o_verbs_device_mgr_t ) );
 
   // CM CHANNEL & ID
+  void *tmp = malloc( 1024 );
   deviceMgr->cm_channel = rdma_create_event_channel();
   if (! deviceMgr->cm_channel )
     {
       BegLogLine( 1 )
         << "it_ia_create(): ERROR: "
+        << " echo:" << tmp
         << EndLogLine;
       return IT_ERR_ABORT;
     }
+  free(tmp);
 
 #if 0
   it_status_t istatus = socket_nonblock_on( deviceMgr->cm_channel->fd );

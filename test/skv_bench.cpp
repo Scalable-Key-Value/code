@@ -1189,6 +1189,7 @@ main(int argc, char **argv)
       }
     }
 
+  status = bench.Exit();
   MPI_Finalize();
   return 0;
 }
