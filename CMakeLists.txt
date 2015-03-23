@@ -1,14 +1,15 @@
+cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 project(skv)
-cmake_minimum_required(VERSION 2.8)
+
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake
+  ${PROJECT_SOURCE_DIR}/CMake/common)
+include(GitExternal)
 
 set(VERSION_MAJOR 0)
 set(VERSION_MINOR 1)
 set(VERSION_PATCH 0)
 set(VERSION_ABI 1)
 
-list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/CMake
-  ${CMAKE_SOURCE_DIR}/CMake/common)
-include(GitExternal)
 include(Common)
 
 # pick up any site specific configuration that might differ from default
@@ -222,4 +223,5 @@ foreach(_test ${TEST_MPI_SOURCES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
 
+include(CommonPackage)
 include(skvCPack)
