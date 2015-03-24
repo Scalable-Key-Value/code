@@ -19,28 +19,28 @@
 /* This is a dumb impl to encapsulate locking via pthread_mutex to work around old compilers not able to cope with C++11
  * This could be removed once we decide to require C++11 compiler support for whole SKV */
 class skv_mutex_t {
-  pthread_mutex_t mMutex;
+  pthread_spinlock_t mMutex;
 
 public:
   skv_mutex_t( const pthread_mutexattr_t *aAttributes = NULL )
   {
-    pthread_mutex_init( &mMutex, aAttributes );
+    pthread_spin_init( &mMutex, 0 );
   }
   ~skv_mutex_t()
   {
-    pthread_mutex_destroy( &mMutex );
+    pthread_spin_destroy( &mMutex );
   }
   inline int lock()
   {
-    return pthread_mutex_lock( &mMutex );
+    return pthread_spin_lock( &mMutex );
   }
   inline int unlock()
   {
-    return pthread_mutex_unlock( &mMutex );
+    return pthread_spin_unlock( &mMutex );
   }
   inline int trylock()
   {
-    return pthread_mutex_trylock( &mMutex );
+    return pthread_spin_trylock( &mMutex );
   }
 };
 

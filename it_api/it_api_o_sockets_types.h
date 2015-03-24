@@ -350,4 +350,319 @@ struct it_api_o_sockets_context_queue_t
     elem_buffer = NULL;
   }
 };
+
+struct iWARPEM_Private_Data_t
+{
+  int           mLen;
+  unsigned char mData[ IT_MAX_PRIV_DATA ]; /* NFD-Moved - see it_event_cm_any_t */
+};
+
+typedef enum
+  {
+    iWARPEM_UNKNOWN_REQ_TYPE = 0,
+    iWARPEM_DTO_SEND_TYPE = 1,
+    iWARPEM_DTO_RECV_TYPE,
+    iWARPEM_DTO_RDMA_WRITE_TYPE,
+    iWARPEM_DTO_RDMA_READ_REQ_TYPE,
+    iWARPEM_DTO_RDMA_READ_RESP_TYPE,
+    iWARPEM_DTO_RDMA_READ_CMPL_TYPE,
+    iWARPEM_DISCONNECT_REQ_TYPE,
+    iWARPEM_DISCONNECT_RESP_TYPE,
+
+    iWARPEM_SOCKET_CONNECT_REQ_TYPE,
+    iWARPEM_SOCKET_CONNECT_RESP_TYPE ,
+    iWARPEM_SOCKET_CLOSE_REQ_TYPE,
+    iWARPEM_SOCKET_CLOSE_TYPE,
+
+    iWARPEM_KERNEL_CONNECT_TYPE
+  } iWARPEM_Msg_Type_t;
+
+static
+const char* iWARPEM_Msg_Type_to_string( int /* iWARPEM_Msg_Type_t */ aType )
+{
+  switch( aType )
+    {
+    case iWARPEM_DTO_SEND_TYPE:           { return "iWARPEM_DTO_SEND_TYPE"; }
+    case iWARPEM_DTO_RECV_TYPE:           { return "iWARPEM_DTO_RECV_TYPE"; }
+    case iWARPEM_DTO_RDMA_WRITE_TYPE:     { return "iWARPEM_DTO_RDMA_WRITE_TYPE"; }
+    case iWARPEM_DTO_RDMA_READ_REQ_TYPE:  { return "iWARPEM_DTO_RDMA_READ_REQ_TYPE"; }
+    case iWARPEM_DTO_RDMA_READ_RESP_TYPE: { return "iWARPEM_DTO_RDMA_READ_RESP_TYPE"; }
+    case iWARPEM_DTO_RDMA_READ_CMPL_TYPE: { return "iWARPEM_DTO_RDMA_READ_CMPL_TYPE"; }
+    case iWARPEM_DISCONNECT_REQ_TYPE:     { return "iWARPEM_DISCONNECT_REQ_TYPE"; }
+    case iWARPEM_DISCONNECT_RESP_TYPE:    { return "iWARPEM_DISCONNECT_RESP_TYPE"; }
+    case iWARPEM_SOCKET_CONNECT_REQ_TYPE: { return "iWARPEM_SOCKET_CONNECT_REQ_TYPE"; }
+    case iWARPEM_SOCKET_CONNECT_RESP_TYPE:{ return "iWARPEM_SOCKET_CONNECT_RESP_TYPE"; }
+    case iWARPEM_SOCKET_CLOSE_REQ_TYPE:   { return "iWARPEM_SOCKET_CLOSE_REQ_TYPE"; }
+    case iWARPEM_SOCKET_CLOSE_TYPE:       { return "iWARPEM_SOCKET_CLOSE_TYPE"; }
+    case iWARPEM_KERNEL_CONNECT_TYPE:     { return "iWARPEM_KERNEL_CONNECT_TYPE"; }
+    default:
+      {
+        BegLogLine(1)
+            << "aType=" << aType
+            << " unknown"
+            << EndLogLine ;
+        return "iWARPEM_UNKNOWN_REQ_TYPE" ;
+//        StrongAssertLogLine( 0 )
+//          << "iWARPEM_Msg_Type_to_string(): "
+//          << " aType: " << aType
+//          << EndLogLine;
+      }
+    }
+
+  return NULL;
+}
+
+struct iWARPEM_RDMA_Write_t
+{
+  // Addr  (absolute or relative) in the memory region
+  // on the remote host
+  it_rdma_addr_t   mRMRAddr;
+
+  // Pointer to a memory region
+  it_rmr_context_t mRMRContext;
+};
+
+struct iWARPEM_RDMA_Read_Req_t
+{
+  // Addr  (absolute or relative) in the memory region
+  // on the remote host
+  it_rdma_addr_t                 mRMRAddr;
+
+  // Pointer to a memory region
+  it_rmr_context_t               mRMRContext;
+
+  int                            mDataToReadLen;
+
+  void *                         mPrivatePtr; // iWARPEM_Object_WorkRequest_t * mRdmaReadClientWorkRequestState;
+};
+
+struct iWARPEM_RDMA_Read_Resp_t
+{
+  void *                         mPrivatePtr; // iWARPEM_Object_WorkRequest_t * mRdmaReadClientWorkRequestState;
+};
+
+struct iWARPEM_Send_t
+{
+  // place holder
+};
+
+struct iWARPEM_Recv_t
+{
+  // place holder
+};
+
+struct iWARPEM_SocketConnect_t
+{
+  // Might change these to appropriate sockaddr types later
+  unsigned int ipv4_address ;
+  unsigned short ipv4_port ;
+};
+
+struct iWARPEM_SocketConnect_Resp_t
+  {
+//    struct iWARPEM_Private_Data_t PrivateData ;
+  };
+struct iWARPEM_SocketClose_t
+{
+  // place holder
+};
+struct iWARPEM_KernelConnect_t
+  {
+  uint64_t mRouterBuffer_addr ;
+  uint32_t mRoutermemreg_lkey ;
+  unsigned int mClientRank ;
+  };
+
+struct iWARPEM_Message_Hdr_t
+{
+  iWARPEM_Msg_Type_t     mMsg_Type;
+  unsigned int                    mTotalDataLen;
+
+#if IT_API_CHECKSUM
+  uint64_t               mChecksum;
+#endif
+
+  union
+  {
+    iWARPEM_RDMA_Write_t      mRdmaWrite;
+    iWARPEM_RDMA_Read_Req_t   mRdmaReadReq;
+    iWARPEM_RDMA_Read_Resp_t  mRdmaReadResp;
+    iWARPEM_Send_t            mSend;
+    iWARPEM_Recv_t            mRecv;
+    iWARPEM_SocketConnect_t   mSocketConnect;
+    iWARPEM_SocketConnect_Resp_t   mSocketConnectResp;
+    iWARPEM_SocketClose_t     mSocketClose;
+    iWARPEM_KernelConnect_t   mKernelConnect ;
+  } mOpType;
+  void EndianConvert(void)
+    {
+      mMsg_Type=(iWARPEM_Msg_Type_t)ntohl(mMsg_Type) ;
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+        << "mMsg_Type endian converted to " << mMsg_Type
+        << EndLogLine ;
+    }
+};
+
+static void report_it_rdma_addr_t(const it_rdma_addr_t& mRMRAddr)
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+      << "mRMRAddr=0x" << (void *) mRMRAddr
+      << EndLogLine ;
+  }
+static void report_it_rmr_context_t(const it_rmr_context_t& mRMRContext)
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+        << "mRMRContext=0x" << (void *) mRMRContext
+        << EndLogLine ;
+  }
+static void report_Send(const iWARPEM_Send_t& mSend)
+  {
+
+  }
+static void report_Recv(const iWARPEM_Recv_t& mRecv)
+  {
+
+  }
+static void report_RDMA_Write(const iWARPEM_RDMA_Write_t& mRdmaWrite)
+  {
+    report_it_rdma_addr_t(mRdmaWrite.mRMRAddr) ;
+    report_it_rmr_context_t(mRdmaWrite.mRMRContext) ;
+  }
+static void report_RDMA_Read_Req(const iWARPEM_RDMA_Read_Req_t& mRdmaReadReq)
+  {
+    report_it_rdma_addr_t(mRdmaReadReq.mRMRAddr) ;
+    report_it_rmr_context_t(mRdmaReadReq.mRMRContext) ;
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+      << "mDataToReadLen=" << mRdmaReadReq.mDataToReadLen
+      << " mPrivatePtr=" << mRdmaReadReq.mPrivatePtr
+      << EndLogLine ;
+  }
+static void report_RDMA_Read_Resp(const iWARPEM_RDMA_Read_Resp_t& mRdmaReadResp)
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+          << " mPrivatePtr=" << mRdmaReadResp.mPrivatePtr
+          << EndLogLine ;
+  }
+static void report_RDMA_Read_Cmpl(void)
+  {
+
+  }
+static void report_Disconnect_Req(void)
+  {
+
+  }
+static void report_Disconnect_Resp(void)
+  {
+
+  }
+static void report_Socket_Connect(void)
+  {
+
+  }
+static void report_Socket_Connect_Resp(void)
+  {
+
+  }
+static void report_Socket_Close_Req(void)
+  {
+
+  }
+static void report_Socket_Close(void)
+  {
+
+  }
+static void report_Kernel_Connect(const iWARPEM_KernelConnect_t& aKernelConnect)
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+          << "mRouterBuffer_addr=0x" << (void *) aKernelConnect.mRouterBuffer_addr
+          << " mRoutermemreg_lkey=0x" << (void *) aKernelConnect.mRoutermemreg_lkey
+          << " mClientRank=" << aKernelConnect.mClientRank
+          << EndLogLine ;
+  }
+
+static void report_hdr(const iWARPEM_Message_Hdr_t& Hdr)
+  {
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_TYPES)
+        << "mMsg_Type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+        << " mTotalDataLen=" << Hdr.mTotalDataLen
+        << EndLogLine ;
+    switch ( Hdr.mMsg_Type)
+      {
+    case iWARPEM_DTO_SEND_TYPE: report_Send(Hdr.mOpType.mSend) ;
+      StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+        << "Message length was " << Hdr.mTotalDataLen
+        << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+        << EndLogLine ;
+      break ;
+    case iWARPEM_DTO_RECV_TYPE: report_Recv(Hdr.mOpType.mRecv) ;
+      StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+        << "Message length was " << Hdr.mTotalDataLen
+        << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+        << EndLogLine ;
+      break ;
+    case iWARPEM_DTO_RDMA_WRITE_TYPE: report_RDMA_Write(Hdr.mOpType.mRdmaWrite) ; break ;
+    case iWARPEM_DTO_RDMA_READ_REQ_TYPE: report_RDMA_Read_Req(Hdr.mOpType.mRdmaReadReq) ;
+      StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+        << "Message length was " << Hdr.mTotalDataLen
+        << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+        << EndLogLine ;
+      break ;
+    case iWARPEM_DTO_RDMA_READ_RESP_TYPE: report_RDMA_Read_Resp(Hdr.mOpType.mRdmaReadResp) ; break ;
+    case iWARPEM_DTO_RDMA_READ_CMPL_TYPE: report_RDMA_Read_Cmpl() ;
+//      StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+//        << "Message length was " << Hdr.mTotalDataLen
+//        << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+//        << EndLogLine ;
+      break ;
+    case iWARPEM_DISCONNECT_REQ_TYPE: report_Disconnect_Req() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_DISCONNECT_RESP_TYPE: report_Disconnect_Resp() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_SOCKET_CONNECT_REQ_TYPE: report_Socket_Connect() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == sizeof( iWARPEM_Private_Data_t ) )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be " << sizeof( iWARPEM_Private_Data_t )
+      << " . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+    case iWARPEM_SOCKET_CONNECT_RESP_TYPE: report_Socket_Connect_Resp() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == sizeof( iWARPEM_Private_Data_t ) )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be " << sizeof( iWARPEM_Private_Data_t )
+      << " . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_SOCKET_CLOSE_REQ_TYPE: report_Socket_Close_Req() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0 . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_SOCKET_CLOSE_TYPE: report_Socket_Close() ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0 . mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    case iWARPEM_KERNEL_CONNECT_TYPE: report_Kernel_Connect(Hdr.mOpType.mKernelConnect) ;
+    StrongAssertLogLine(Hdr.mTotalDataLen == 0 )
+      << "Message length was " << Hdr.mTotalDataLen
+      << " should be 0. mMsgType=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+      << EndLogLine ;
+      break ;
+    default:
+      StrongAssertLogLine(0)
+        << "Unexpected message type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+        << " mTotalDataLen=" <<  Hdr. mTotalDataLen
+        << EndLogLine ;
+      }
+  }
+
 #endif

@@ -1,0 +1,1 @@
+set(WITH_CNK_ROUTER ON)

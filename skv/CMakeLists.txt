@@ -68,6 +68,7 @@ set(SKVSERVER_SOURCES
   server/skv_server_network_event_manager.cpp
   server/skv_server_tree_based_container.cpp
   server/skv_server_uber_pds.cpp
+  server/skv_server_command_event_buffer.cpp
 )
 set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES}
   ${MPI_CXX_LIBRARIES}  ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${ROCKSDB_LIBRARIES}

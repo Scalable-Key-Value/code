@@ -25,10 +25,10 @@
 #include <cstdio>
 #include <iostream>
 #include <FxLogger.hpp>
-#include "common/skv_types.hpp"
-#include "common/skv_mutex.hpp"
-#include "common/skv_array_queue.hpp"
-#include "server/skv_local_kv_rdma_data_buffer.hpp"
+#include "skv/common/skv_types.hpp"
+#include "skv/common/skv_mutex.hpp"
+#include "skv/common/skv_array_queue.hpp"
+#include "skv/server/skv_local_kv_rdma_data_buffer.hpp"
 
 using namespace std;
 

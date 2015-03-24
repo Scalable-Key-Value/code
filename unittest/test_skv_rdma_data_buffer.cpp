@@ -21,7 +21,9 @@
 #define SKV_NON_MPI
 #endif
 
+#ifndef SKV_UNIT_TEST
 #define SKV_UNIT_TEST
+#endif
 
 #define ITAPI_ENABLE_V21_BINDINGS
 #define VP_NAME "vp_softrdma"
@@ -31,10 +33,10 @@
 #include <iostream>
 #include <FxLogger.hpp>
 #include "it_api.h"
-#include "common/skv_types.hpp"
-#include "common/skv_mutex.hpp"
-#include "common/skv_array_queue.hpp"
-#include "server/skv_local_kv_rdma_data_buffer.hpp"
+#include "skv/common/skv_types.hpp"
+#include "skv/common/skv_mutex.hpp"
+#include "skv/common/skv_array_queue.hpp"
+#include "skv/server/skv_local_kv_rdma_data_buffer.hpp"
 
 using namespace std;
 

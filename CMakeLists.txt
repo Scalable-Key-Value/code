@@ -82,9 +82,9 @@ endif()
 
 
 set(SKV_COMM_API_TYPE "verbs" CACHE STRING
-  "Select a database backend {verbs, sockets}")
+  "Select a database backend {verbs, sockets, sockets_routed}")
 set_property(CACHE SKV_COMM_API_TYPE
-  PROPERTY STRINGS "verbs" "sockets")
+  PROPERTY STRINGS "verbs" "sockets", "sockets_routed")
 
 if(SKV_COMM_API_TYPE MATCHES "verbs")
   find_package(OFED REQUIRED)
@@ -102,7 +102,10 @@ endif()
 if(SKV_COMM_API_TYPE MATCHES "sockets")
   set( IT_API_LIBS pthread rt )
 endif()
-
+if(SKV_COMM_API_TYPE MATCHES "sockets_routed")
+  find_package(SPI REQUIRED)
+  set( IT_API_LIBS  pthread rt ${SPI_LIBRARIES} )
+endif()
 
 include(logtrace)
 set(GLOBAL_DEFS
@@ -175,6 +178,18 @@ set_target_properties(it_api PROPERTIES
   COMPILE_DEFINITIONS "${SKV_IT_API_LOGGING}" )
 add_subdirectory(skv)
 
+if(WITH_CNK_ROUTER)
+# OFED libs required for Router <-> CN communication
+  find_package(OFED REQUIRED)
+
+  add_subdirectory(it_api/cnk_router)
+  add_definitions(
+   -DWITH_CNK_ROUTER
+  )
+  set(CNK_ROUTER_TEST_SOURCES
+    unittest/test_skv_cnk_router_connector.cpp
+  )
+endif()
 #------------------------------------------------------------------------------
 # Define test source files
 #------------------------------------------------------------------------------
@@ -199,6 +214,8 @@ set(TEST_MPI_SOURCES
 set(UNITTEST_SOURCES
   unittest/test_skv_rdma_data_buffer.cpp
   unittest/test_skv_ringbuffer_ptr.cpp
+  unittest/test_skv_server_command_buffer.cpp
+  ${CNK_ROUTER_TEST_SOURCES}
 )
 
 #------------------------------------------------------------------------------
@@ -212,6 +229,16 @@ foreach(_test ${TEST_SOURCES})
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
     ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
+endforeach()
+
+foreach(_test ${UNITTEST_SOURCES})
+  get_filename_component(TEST_NAME ${_test} NAME_WE)
+  add_executable(${TEST_NAME} ${_test})
+  set_target_properties(${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS
+    "SKV_UNIT_TEST")
+  target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
+    ${SKV_COMMON_LINK_LIBRARIES})
+  install(TARGETS ${TEST_NAME} DESTINATION unittest)
 endforeach()
 
 foreach(_test ${TEST_MPI_SOURCES})
