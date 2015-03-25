@@ -1349,6 +1349,13 @@ struct skv_server_ep_state_t
   skv_status_t
   AddToFreeCommandSlots( skv_server_ccb_t *aCCB, int ord )
   {
+    BegLogLine( SKV_SERVER_BUFFER_AND_COMMAND_LOG )
+      << "skv_server_ep_state_t::AddToFreeCommandSlots:              "
+      << " #remaining free slots: " << mFreeCommandSlotList->size()
+      << " ord: " << ord
+      << " EP_client:" << mClientGroupOrdinal
+      << EndLogLine;
+
     mResourceLock.lock();
 
     // detach the command buffer from the CCB
@@ -1548,6 +1555,13 @@ struct skv_server_ep_state_t
     int CmdBuffOrdinal = GetNextUnusedCommandBufferOrd();
     int CmdOrd         = GetNextFreeCommandSlotOrdinal();
 
+    AssertLogLine( (CmdOrd >= 0) && (CmdOrd < SKV_COMMAND_TABLE_LEN) )
+      << "skv_server_ep_state_t::AcquireCCB:: ERROR:: "
+      << " CmdOrd: " << CmdOrd
+      << " SKV_COMMAND_TABLE_LEN: " << SKV_COMMAND_TABLE_LEN
+      << " free=" << mFreeCommandSlotList->size()
+      << EndLogLine;
+
     // retrieve the actual CCB handle from Cmd-ordinal
     CCB = (skv_server_ccb_t*)GetCommandForOrdinal( CmdOrd );
 
@@ -1556,7 +1570,6 @@ struct skv_server_ep_state_t
       << EndLogLine;
 
     int RecvBuffOrdinal = GetCurrentCommandSlot();
-
     mResourceLock.unlock();
 
     StrongAssertLogLine( RecvBuffOrdinal == CmdBuffOrdinal )

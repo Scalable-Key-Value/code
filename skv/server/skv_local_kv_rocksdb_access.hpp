@@ -52,6 +52,7 @@ public:
 
     rocksdb::Options dbopts = rocksdb::Options();
     dbopts.create_if_missing = true;
+    dbopts.use_adaptive_mutex = true;
 
     // open the node's PDS table for later retrieval of PDS metadata
     std::string PDSName = aPDSBaseName;
