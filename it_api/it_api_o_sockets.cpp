@@ -5412,7 +5412,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
     pthread_mutex_lock( & ( AEVD->mEventCounterMutex ) );
     AEVD->mEventCounter -= gatheredEventCount;
     pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
-    BegLogLine( gatheredEventCount != storedCount )
+    BegLogLine( (FXLOG_IT_API_O_SOCKETS_CONNECT) && (gatheredEventCount != storedCount) )
       << "WARNING: not all events processed: "
       << " counter=" << storedCount
       << " processed=" << gatheredEventCount
