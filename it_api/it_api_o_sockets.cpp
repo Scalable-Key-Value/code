@@ -1997,7 +1997,7 @@ iWARPEM_DataReceiverThread( void* args )
                         priv_data->mLen = ntohl( priv_data->mLen );
                         int priv_data_size = std::min( priv_data->mLen, IT_MAX_PRIV_DATA );
                         BegLogLine( (priv_data->mLen >= IT_MAX_PRIV_DATA) )
-                          << "WARNING: Client attempted to send send more private data than allowed! Trunkating private data.. "
+                          << "WARNING: Client attempted to send send more private data than allowed! Truncating private data.. "
                           << " MAX: " << IT_MAX_PRIV_DATA
                           << " actual: " << priv_data->mLen
                           << EndLogLine;
@@ -2902,7 +2902,7 @@ it_status_t it_ia_create (
   // Get the server port to connect on  
   int gsnrc;
   socklen_t drc_serv_addrlen = sizeof( drc_serv_addr );
-  if( gsnrc = getsockname(drc_serv_socket, drc_serv_saddr, &drc_serv_addrlen) != 0)
+  if( (gsnrc = getsockname(drc_serv_socket, drc_serv_saddr, &drc_serv_addrlen)) != 0)
     {
     perror("getsockname()");    
     close( drc_serv_socket );
@@ -3184,7 +3184,7 @@ it_status_t it_ep_rc_create (
 
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_ep_rc_create()" << EndLogLine;
 
-  /* TODO: Looks leaked */
+  /* Looks leaked here - will be freed via it_ep_free() via ep_handle */
   iWARPEM_Object_EndPoint_t* EPObj =
                   (iWARPEM_Object_EndPoint_t*) malloc( sizeof(iWARPEM_Object_EndPoint_t) );
 
@@ -3776,6 +3776,9 @@ iWARPEM_AcceptThread( void* args )
 
 #ifdef WITH_CNK_ROUTER
         iWARPEM_Router_Endpoint_t *iWARPEM_Router_EP = NULL;
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT && ( PrivateDataLen == IWARPEM_MULTIPLEXED_SOCKET_MAGIC ) )
+          << "It's Magic -> receiving a multiplexed connection.."
+          << EndLogLine;
 
         if( PrivateDataLen == IWARPEM_MULTIPLEXED_SOCKET_MAGIC )
         {
@@ -5114,10 +5117,11 @@ itx_bind_ep_to_device( IN  it_ep_handle_t          ep_handle,
 static it_api_o_sockets_aevd_mgr_t* gAEVD ;
 static void it_api_o_sockets_signal_accept(void)
   {
+    StrongAssertLogLine(gAEVD) << EndLogLine ;
     BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
         << "Signalling the main thread, gAEVD=" << gAEVD
+        << " event_count=" << gAEVD->mEventCounter+1
         << EndLogLine ;
-    StrongAssertLogLine(gAEVD) << EndLogLine ;
     // Signal the main thread
     pthread_mutex_lock( &gAEVD->mEventCounterMutex );
     (gAEVD->mEventCounter)++;
@@ -5206,6 +5210,11 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
     int storedCount = AEVD->mEventCounter;
     int gatheredEventCount = 0;
 
+    // check if we need a gathered counter correction for the send queue events
+    // - without AEVD, the send queue events are not counted/signaled to this thread/routine
+    // - only count corrections if there's no global send completion queue (e.g. at the client)
+    int sendQueueCorrectionIncrement = ( gSendCmplQueue == NULL ) ? 1 : 0;
+
 //    /***********************************************************************************
 //     * Dequeue AFF Events
 //     ***********************************************************************************/
@@ -5249,6 +5258,10 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 
                 gatheredEventCount++;
                 availableEventSlotsCount--;
+                BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+                  << "CMM-Event complete: "
+                  << " gathered: " << gatheredEventCount
+                  << EndLogLine;
           }
 
     /*
@@ -5278,6 +5291,11 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
                     << EndLogLine ;
                   gatheredEventCount++;
                   availableEventSlotsCount--;
+                  BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+                    << "CM-Event complete: "
+                    << " gathered: " << gatheredEventCount
+                    << EndLogLine;
+
                 }
             }
 
@@ -5290,6 +5308,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
       << " availableEventSlotsCount: " << availableEventSlotsCount
       << EndLogLine;
 
+    int sendQueueEventCount = 0;
     for( int deviceOrd = 0; deviceOrd < deviceCount; deviceOrd++ )
       {
         BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
@@ -5313,6 +5332,11 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
                 AEVD->mSendQueues[ deviceOrd ].Dequeue( ievent );
                 availableEventSlotsCount--;
                 gatheredEventCount++;
+                BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+                  << "SendQ-Event complete: "
+                  << " gathered: " << gatheredEventCount
+                  << EndLogLine;
+                sendQueueEventCount += sendQueueCorrectionIncrement;
 
                 switch( ievent->event_number )
                   {
@@ -5384,6 +5408,10 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
               {
                 AEVD->mRecvQueues[ deviceOrd ].Dequeue( & events[ gatheredEventCount ] );
                 gatheredEventCount++;
+                BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+                  << "RecvQ-Event complete: "
+                  << " gathered: " << gatheredEventCount
+                  << EndLogLine;
                 availableEventSlotsCount--;
 
 //                gITAPI_RECV_AT_WAIT.HitOE( IT_API_TRACE,
@@ -5410,14 +5438,23 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
       << EndLogLine ;
 
     pthread_mutex_lock( & ( AEVD->mEventCounterMutex ) );
-    AEVD->mEventCounter -= gatheredEventCount;
+    AEVD->mEventCounter -= (gatheredEventCount - sendQueueEventCount);
     pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
     BegLogLine( (FXLOG_IT_API_O_SOCKETS_CONNECT) && (gatheredEventCount != storedCount) )
       << "WARNING: not all events processed: "
       << " counter=" << storedCount
       << " processed=" << gatheredEventCount
+      << " event_count=" << AEVD->mEventCounter
+      << " not counted sends=" << sendQueueEventCount
       << EndLogLine;
 
+    BegLogLine( 0 )
+      << "Decreasing event_count:"
+      << " counter=" << storedCount
+      << " processed=" << gatheredEventCount
+      << " event_count=" << AEVD->mEventCounter
+      << " not counted sends=" << sendQueueEventCount
+      << EndLogLine;
     *events_count = gatheredEventCount;
 
     return IT_SUCCESS;
@@ -5612,6 +5649,7 @@ it_status_t itx_ep_accept_with_rmr (
     << EndLogLine ;
 // Don't seem to have a ConnectEventQueuePtr->
   int enqrc = ConnectEventQueuePtr->Enqueue( ConnEstablishedEvent );
+  it_api_o_sockets_signal_accept();
 
   StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
   
