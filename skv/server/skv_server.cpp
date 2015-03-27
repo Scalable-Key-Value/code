@@ -1486,7 +1486,8 @@ Init( int   aRank,
 
   struct ifaddrs *iflist, *ifent;
 
-  AssertLogLine( getifaddrs(&iflist) == 0 )
+  int rc = getifaddrs(&iflist);
+  StrongAssertLogLine( rc == 0 )
     << "Failed to obtain list of interfaces"
     << EndLogLine;
 
