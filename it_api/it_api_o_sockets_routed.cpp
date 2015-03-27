@@ -702,7 +702,7 @@ bool VerbsChannel::FlushTransmit(void)
     BegLogLine(FXLOG_IONCN_BUFFER)
             << EndLogLine ;
     // May need to hold here until the upstream buffer is available
-    if ( mBuffer.mSentBytes < mBuffer.mAckedSentBytes)
+    if ( (volatile unsigned long)mBuffer.mSentBytes < (volatile unsigned long)mBuffer.mAckedSentBytes)
       {
         BegLogLine(FXLOG_IONCN_BUFFER)
             << "May be no upstream space, mBuffer.mSentBytes=" << mBuffer.mSentBytes
@@ -791,7 +791,7 @@ void VerbsChannel::Respond(void)
           bool Progressed ;
           pthread_mutex_lock(&gSendUpstreamLock) ;
           bool rc_sender=DataSender_OnePass(&Progressed) ;
-          while (Progressed && ( mRdmaSocket != VERBS_CHANNEL_UNINITIALIZED ))
+          while (Progressed && ( (volatile int)mRdmaSocket != VERBS_CHANNEL_UNINITIALIZED ))
             {
               rc_sender = DataSender_OnePass(&Progressed) ;
             }
@@ -976,7 +976,7 @@ void ion_cn_buffer::HandleBuffer(unsigned long aLength)
 
   }
 
-static volatile iWARPEM_Private_Data_t *expectedPrivateDataPtr ;
+static iWARPEM_Private_Data_t * volatile expectedPrivateDataPtr ;
 static void process_disconnect_response(unsigned int LocalEndpointIndex)
   {
     StrongAssertLogLine(gSockFdToEndPointMap[ LocalEndpointIndex ] != NULL)

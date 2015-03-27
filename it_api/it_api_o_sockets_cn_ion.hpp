@@ -30,7 +30,7 @@ struct connection *conn ;
 class ion_cn_buffer
   {
 public:
-  unsigned long mSentBytes ;
+  volatile unsigned long mSentBytes ;
   volatile unsigned long mReceivedBytes ;
   char mApplicationBuffer[k_ApplicationBufferSize] ;
   void Init(void)
