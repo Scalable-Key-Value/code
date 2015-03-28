@@ -236,7 +236,8 @@ public:
     int cbi = mCurrentBufferIndex;
 
     int cmdCount = 0;
-    while( ( aEP->CheckForNewCommands() )   // got a valid command?
+    while( ( aEP->mEPState_status == SKV_SERVER_ENDPOINT_STATUS_ACTIVE )
+        && ( aEP->CheckForNewCommands() )   // got a valid command?
         && ( !CurrentBufferIsFull() )       // space to store event?
         && ( cmdCount < POLL_PER_EP ) )     // balance between EPs
     {

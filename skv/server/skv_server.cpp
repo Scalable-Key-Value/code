@@ -528,7 +528,7 @@ ProcessEvent( skv_server_state_t  aState,
         case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_BROKEN:
         {
           // BROKEN CONNECTION: WARNING BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES
-          BegLogLine( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLIENT_CONN_EST_LOG )
+          BegLogLine( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLIENT_CONN_EST_LOG | SKV_SERVER_CLEANUP_LOG )
             << "skv_server_t::ProcessEvent(): BROKEN CONNECTION: WARNING!!! BROKEN CONNECTIONS DO NOT FLUSH WR QUEUES"
             << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
             << EndLogLine;
@@ -536,7 +536,7 @@ ProcessEvent( skv_server_state_t  aState,
         }
         case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_DISCONNECT:
         {
-          BegLogLine(( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLIENT_CONN_EST_LOG ) &&
+          BegLogLine(( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLIENT_CONN_EST_LOG | SKV_SERVER_CLEANUP_LOG ) &&
                      (aEvent->mEventType != SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_BROKEN) )
             << "skv_server_t::ProcessEvent(): DISCONNECTED CONNECTION: "
             << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
@@ -550,7 +550,7 @@ ProcessEvent( skv_server_state_t  aState,
         {
           skv_server_ep_state_t* StateForEP = GetEPStateForEPHdl( aEvent->mEventMetadata.mEP.mIT_EP );
 
-          BegLogLine( SKV_PROCESS_IT_EVENT_LOG )
+          BegLogLine( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLEANUP_LOG  )
             << "skv_server_t::ProcessEvent:: SKV_SERVER_EVENT_TYPE_IT_CMM action block: "
             << " EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
             << " StateForEP: " << (void *) StateForEP

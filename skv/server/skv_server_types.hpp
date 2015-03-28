@@ -731,6 +731,12 @@ struct skv_server_queued_respcommand_rep_t
   uint64_t mSeqNo;
 };
 
+enum skv_server_endpoint_status_t {
+  SKV_SERVER_ENDPOINT_STATUS_UNKNOWN = 0x0,
+  SKV_SERVER_ENDPOINT_STATUS_ACTIVE = 0x1,
+  SKV_SERVER_ENDPOINT_STATUS_CLOSING = 0x2,
+  SKV_SERVER_ENDPOINT_STATUS_ERROR = 0x4
+};
 struct skv_server_ep_state_t
 {
   skv_server_ccb_t             mCCBTable[ SKV_COMMAND_TABLE_LEN ] CACHE_ALIGNED;
@@ -772,6 +778,7 @@ struct skv_server_ep_state_t
   int mResponseSegsCount;
 
   volatile int mCurrentCommandSlot;
+  volatile skv_server_endpoint_status_t mEPState_status;
 
   void
   SetClientInfo( int aClientOrdInGroup, skv_client_group_id_t aClientGroupId, it_rmr_triplet_t *aResponseRMR )
@@ -814,6 +821,8 @@ struct skv_server_ep_state_t
   void
   Finalize()
   {
+    mEPState_status = SKV_SERVER_ENDPOINT_STATUS_CLOSING;
+    mResourceLock.lock();
     BegLogLine( SKV_SERVER_CLEANUP_LOG )
       << "Finalizing EP: " << (void*)this
       << EndLogLine;
@@ -830,7 +839,7 @@ struct skv_server_ep_state_t
     delete mFreeCommandSlotList;
 
     delete mPendingEventsList;
-
+    mResourceLock.unlock();
   }
 
 
@@ -1125,7 +1134,7 @@ struct skv_server_ep_state_t
     }
 
     /******************************************************************/
-
+    mEPState_status = SKV_SERVER_ENDPOINT_STATUS_ACTIVE;
   }
 
   /******************************************************************
@@ -1306,7 +1315,7 @@ struct skv_server_ep_state_t
       return false;
     }
 
-    return true;
+    return ( mEPState_status == SKV_SERVER_ENDPOINT_STATUS_ACTIVE );
   }
 
   int
@@ -1406,7 +1415,7 @@ struct skv_server_ep_state_t
   bool
   CheckForNewCommands()
   {
-    if( EPisStalled() )
+    if( EPisStalled() || ( mEPState_status != SKV_SERVER_ENDPOINT_STATUS_ACTIVE ))
     {
       BegLogLine( SKV_SERVER_COMMAND_POLLING_LOG )
         << "skv_server_ep_state_t::CheckForNewCommands():"

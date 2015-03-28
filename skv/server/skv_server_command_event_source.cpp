@@ -137,8 +137,11 @@ void* skv_server_command_event_source_t::CommandFetchThread( void *aArgs )
 
     skv_server_ep_state_t *EPState = iter->second;
 
-    if( iter != CES->GetEventManager()->end() )
-      buffers->FillCurrentEventBuffer( EPState );
+    if(( iter != CES->GetEventManager()->end() ) &&
+        ( EPState->mEPState_status == SKV_SERVER_ENDPOINT_STATUS_ACTIVE ) )
+    {
+        buffers->FillCurrentEventBuffer( EPState );
+    }
 
     iter++;
   }
