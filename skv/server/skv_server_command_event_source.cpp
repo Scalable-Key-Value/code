@@ -59,6 +59,11 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
 
   skv_server_command_event_buffer_t *EventBuffer = mBufferList.GetAndFreezeReadyBuffer();
   *aEventCount = EventBuffer->GetEventCount();
+  StrongAssertLogLine( *aEventCount <= aMaxEventCount )
+    << "Too Many Events. Command_event_source is only capable of delivering the whole accumulated buffer. "
+    << " available=" << *aEventCount
+    << " limit=" << aMaxEventCount
+    << EndLogLine;
   if( *aEventCount > 0 )
   {
     BegLogLine( SKV_SERVER_COMMAND_POLLING_LOG )

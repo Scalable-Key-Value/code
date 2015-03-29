@@ -66,7 +66,7 @@ public:
       << EndLogLine;
     delete mEventBuffer;
   }
-  inline int GetSpace() const { return mEventEntries - mEventIndex; }
+  inline int GetSpace() const { return mEventEntries - mEventIndex - 1; }
   inline skv_server_event_t* GetEntry() const { return &( mEventBuffer[ mEventIndex ] ); }
   inline int GetEventCount() const { return mEventIndex; }
   inline skv_server_event_t* GetBuffer() const { return mEventBuffer; }

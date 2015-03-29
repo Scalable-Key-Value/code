@@ -421,11 +421,15 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
         << EndLogLine;
 
       skv_server_event_t *nextEventAddr = &(aEvents[*aEventCount]);
-      status = mEventSources[evt_src]->GetEvent( nextEventAddr, &evtCount, mMaxEventCounts[evt_src] );
+      int eventLimit = (aMaxEventCount - *aEventCount);
+      status = mEventSources[evt_src]->GetEvent( nextEventAddr, &evtCount, eventLimit );
 
       BegLogLine( SKV_GET_EVENT_LOG )
         << "skv_server_t::GetEvent(): "
         << " fetching complete: " << evtCount
+        << " srclimit=" << eventLimit
+        << " total=" << *aEventCount
+        << " limit=" << aMaxEventCount
         << EndLogLine;
 
       if( status == SKV_SUCCESS )
@@ -1271,7 +1275,7 @@ Run()
   int IterCount = 0;
   int PollLoops = 0;
 
-  skv_server_event_t *Events = new skv_server_event_t[ SKV_SERVER_EVENTS_MAX_COUNT ];
+  skv_server_event_t *Events = new skv_server_event_t[ SKV_SERVER_EVENTS_MAX_COUNT * SKV_SERVER_EVENT_SOURCES ];
   // skv_server_event_t PendingEvents[ SKV_SERVER_EVENTS_MAX_COUNT ];
   // int EventCount = 0;
   // int CommandCount = 0;
@@ -1310,7 +1314,7 @@ Run()
 
     // might look strange, but this allows to just exchange GetEvent and GetCommand without changing the parameters
     // Get event-based activities
-    status = GetEvent( &(Events[CommandCount]), &EventCount, SKV_SERVER_EVENTS_MAX_COUNT );
+    status = GetEvent( &(Events[CommandCount]), &EventCount, SKV_SERVER_EVENTS_MAX_COUNT * SKV_SERVER_EVENT_SOURCES );
 
     if( EventCount > 0 )
     {
