@@ -1,3 +1,4 @@
+
 /************************************************
  * Copyright (c) IBM Corp. 2014
  * All rights reserved. This program and the accompanying materials
@@ -105,7 +106,7 @@ public:
 
   int WaitForEvents( int aMaxEventCount )
   {
-    AssertLogLine( aMaxEventCount <= SKV_SERVER_AEVD_EVENTS_MAX_COUNT )
+    AssertLogLine( aMaxEventCount >= SKV_SERVER_AEVD_EVENTS_MAX_COUNT )
       << "ERROR: "
       << " aMaxEventCount: " << aMaxEventCount
       << " SKV_SERVER_AEVD_EVENTS_MAX_COUNT: " << SKV_SERVER_AEVD_EVENTS_MAX_COUNT
@@ -116,7 +117,7 @@ public:
     // \todo this is not the right place because we're in the event source here, not in the sink
     it_status_t istatus = itx_aevd_wait( mAevd_Hdl,
                                          0,
-                                         aMaxEventCount,   // SKV_SERVER_AEVD_EVENTS_MAX_COUNT,
+                                         SKV_SERVER_AEVD_EVENTS_MAX_COUNT,
                                          mAevdEvents,
                                          &itEventCount );
 
