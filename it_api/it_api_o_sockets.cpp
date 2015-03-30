@@ -2336,10 +2336,12 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 
 #ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
+            {
               gActiveSocketsQueue.push( EP );
 
-            iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ EP->ConnFd ]->connect_sevd_handle );
-            rEP->RemoveClient( EP->ClientId );
+              iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ EP->ConnFd ]->connect_sevd_handle );
+              rEP->RemoveClient( EP->ClientId );
+            }
 #endif
 
             free( SendWR );
