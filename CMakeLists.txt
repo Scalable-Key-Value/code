@@ -84,7 +84,7 @@ endif()
 set(SKV_COMM_API_TYPE "verbs" CACHE STRING
   "Select a database backend {verbs, sockets, sockets_routed}")
 set_property(CACHE SKV_COMM_API_TYPE
-  PROPERTY STRINGS "verbs" "sockets", "sockets_routed")
+  PROPERTY STRINGS "verbs" "sockets" "sockets_routed")
 
 if(SKV_COMM_API_TYPE MATCHES "verbs")
   find_package(OFED REQUIRED)
