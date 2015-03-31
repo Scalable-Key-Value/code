@@ -818,10 +818,14 @@ struct skv_server_ep_state_t
     return;
   }
 
+  void Closing()
+  {
+    mEPState_status = SKV_SERVER_ENDPOINT_STATUS_CLOSING;
+  }
+
   void
   Finalize()
   {
-    mEPState_status = SKV_SERVER_ENDPOINT_STATUS_CLOSING;
     mResourceLock.lock();
     BegLogLine( SKV_SERVER_CLEANUP_LOG )
       << "Finalizing EP: " << (void*)this
@@ -1878,7 +1882,7 @@ struct skv_cmd_retrieve_resp_t
   }
 };
 
-// the list of contexts (CCBs)
+// the list of Endpoints and ep handles for reverse lookup
 typedef std::map< it_ep_handle_t, skv_server_ep_state_t* > EPStateMap_T;
 
 class skv_server_internal_event_manager_if_t

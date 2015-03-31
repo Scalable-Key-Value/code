@@ -59,6 +59,7 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
 
   skv_server_command_event_buffer_t *EventBuffer = mBufferList.GetAndFreezeReadyBuffer();
   *aEventCount = EventBuffer->GetEventCount();
+  // todo: rebalance the priorities, the caller needs to make sure to have enough space for all elements of one full command-event-buffer
   StrongAssertLogLine( *aEventCount <= aMaxEventCount )
     << "Too Many Events. Command_event_source is only capable of delivering the whole accumulated buffer. "
     << " available=" << *aEventCount
@@ -135,19 +136,33 @@ void* skv_server_command_event_source_t::CommandFetchThread( void *aArgs )
     if( iter == CES->GetEventManager()->end() )
     {
       iter = CES->GetEventManager()->begin();
-//      // if there's nothing to do, then just block on a mutex instead of pulling endlessly...
-//      if ( iter == CES->GetEventManager()->end() )
-//        pthread_mutex_lock( &args->mMutex );
+
+
+      // if there's nothing to do, then just block on a mutex instead of pulling endlessly...
+      if ( iter == CES->GetEventManager()->end() )
+      {
+        usleep( 100000 );
+        continue;
+      }
     }
 
     skv_server_ep_state_t *EPState = iter->second;
 
-    if(( iter != CES->GetEventManager()->end() ) &&
+    if(( iter != CES->GetEventManager()->end() ) && ( EPState->mEPState_status != SKV_SERVER_ENDPOINT_STATUS_ACTIVE ))
+    {
+      BegLogLine( SKV_SERVER_CLEANUP_LOG )
+        << "EP 0x" << (void*)EPState << " is closing..."
+        << EndLogLine;
+
+      ++iter;
+      continue;
+    }
+
+    if(( iter != CES->GetEventManager()->end() ) && ( EPState ) &&
         ( EPState->mEPState_status == SKV_SERVER_ENDPOINT_STATUS_ACTIVE ) )
     {
         buffers->FillCurrentEventBuffer( EPState );
     }
-
     iter++;
   }
   return NULL;

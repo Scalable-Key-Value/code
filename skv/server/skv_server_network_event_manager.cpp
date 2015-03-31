@@ -324,6 +324,8 @@ FinalizeEPState(  EPStateMap_T*         aEPStateMap,
     << " aEP: " << (void *) aEP
     << EndLogLine;
 
+  aStateForEP->Closing();
+
   skv_server_finalizable_associated_ep_state_list_t::iterator iter = aStateForEP->mAssociatedStateList->begin();
   skv_server_finalizable_associated_ep_state_list_t::iterator end  = aStateForEP->mAssociatedStateList->end();
 
@@ -349,7 +351,7 @@ FinalizeEPState(  EPStateMap_T*         aEPStateMap,
     }
   }
 
-  aEPStateMap->erase( aEP );
+  aEPStateMap->erase( aEPStateMap->find( aEP ) );
 
   aStateForEP->Finalize();
 
