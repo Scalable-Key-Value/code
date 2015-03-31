@@ -1405,6 +1405,10 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
       else
         DestAddr = (char *) RMRAddr;
 
+      StrongAssertLogLine( (DestAddr >= MemRegPtr->addr) && (DestAddr < (MemRegPtr->addr + MemRegPtr->length)) )
+        << "RDMA_Write outside of memory region"
+        << EndLogLine;
+
 //                  Hdr.mTotalDataLen=ntohl(Hdr.mTotalDataLen) ;
       BegLogLine( FXLOG_IT_API_O_SOCKETS )
         << "iWARPEM_DataReceiverThread:: in RDMA_WRITE case: before read_from_socket()"
@@ -1669,33 +1673,6 @@ iWARPEM_DataReceiverThread( void* args )
    **********************************************/
   int drc_client_socket = DataReceiverThreadArgsPtr->drc_cli_socket;
 
-// Following chunk now done in mainline; a connected socket is passed in
-//  BegLogLine(FXLOG_IT_API_O_SOCKETS)
-//    << "iWARPEM_DataReceiverThread:: Before connect()"
-//    << " drc_client_socket: " << drc_client_socket
-//    << EndLogLine;
-//
-//  while( 1 )
-//    {
-//      int conn_rc = connect( drc_client_socket,
-//			     (struct sockaddr *) & (DataReceiverThreadArgsPtr->drc_cli_addr),
-//			     sizeof( DataReceiverThreadArgsPtr->drc_cli_addr ) );
-//
-//      if( conn_rc == 0 )
-//	break;
-//      else if( conn_rc < 0 )
-//	{
-//	  if( errno != EAGAIN )
-//	    {
-//	      perror( "connect failed" );
-//	      StrongAssertLogLine( 0 )
-//		<< "iWARPEM_DataReceiverThread:: Error after connect(): "
-//		<< " errno: " << errno
-//		<< " conn_rc: " << conn_rc
-//		<< EndLogLine;
-//	    }
-//	}
-//    }
 #if defined(SPINNING_RECEIVE)
   socket_nonblock_on(drc_client_socket) ;
 #endif
@@ -3260,6 +3237,7 @@ it_status_t it_ep_rc_create (
 
 #define APE_MAX_EVD_HANDLES 1024
 int ape_evd_handle_next = 0;
+static it_api_o_sockets_aevd_mgr_t* gAEVD = NULL;
 
 it_status_t it_evd_create (
   IN  it_ia_handle_t   ia_handle,
@@ -3427,7 +3405,7 @@ it_status_t it_evd_create (
 
       itov_aevd_defined = 1;
       *evd_handle = (it_evd_handle_t) CQ;
-
+      gAEVD = (it_api_o_sockets_aevd_mgr_t *)*evd_handle;
     }
   else if ( event_number == IT_CM_MSG_EVENT_STREAM)
     {
@@ -5116,7 +5094,6 @@ itx_bind_ep_to_device( IN  it_ep_handle_t          ep_handle,
   return IT_SUCCESS;
 }
 
-static it_api_o_sockets_aevd_mgr_t* gAEVD ;
 static void it_api_o_sockets_signal_accept(void)
   {
     StrongAssertLogLine(gAEVD) << EndLogLine ;
