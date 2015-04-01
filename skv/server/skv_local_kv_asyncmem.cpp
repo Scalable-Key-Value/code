@@ -184,7 +184,7 @@ skv_local_kv_asyncmem::PerformGetDistribution(skv_local_kv_request_t *aReq )
   if( dist == NULL )
     status = SKV_ERRNO_NO_BUFFER_AVAILABLE;
 
-  BegLogLine(1)
+  BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
     << "GET_DIST REQUEST"
     << " dist:" << (void*)dist
     << EndLogLine;

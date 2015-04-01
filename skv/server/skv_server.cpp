@@ -26,6 +26,7 @@
 #include <skv/common/skv_client_server_protocol.hpp>
 #include <skv/server/skv_server_types.hpp>
 
+#include <skv/server/skv_server_epstate_map.hpp>
 #include <skv/server/skv_server_network_event_manager.hpp>
 
 // include the implementations of the local kv backend
@@ -161,22 +162,6 @@ static TraceClient gSKVServerRunLoopStart;
 static TraceClient gSKVServerRunLoopFinis;
 static TraceClient gSKVServerEventOtherStart;
 static TraceClient gSKVServerEventOtherFinis;
-
-
-skv_server_ep_state_t*
-skv_server_t::
-GetEPStateForEPHdl( it_ep_handle_t aEP )
-{
-  EPStateMap_T::iterator iter = mEPStateMap->find( aEP );
-
-  if( iter != mEPStateMap->end() )
-  {
-    return iter->second;
-  }
-  else
-    return NULL;
-}
-
 
 // This is a dumb wrapper to be able to count rdma-write completions via function-ptr that is picked from the cookie
 void*
@@ -552,7 +537,7 @@ ProcessEvent( skv_server_state_t  aState,
         }
         case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_ESTABLISHED:
         {
-          skv_server_ep_state_t* StateForEP = GetEPStateForEPHdl( aEvent->mEventMetadata.mEP.mIT_EP );
+          skv_server_ep_state_t* StateForEP = (*mEPStateMap)[ aEvent->mEventMetadata.mEP.mIT_EP ];
 
           BegLogLine( SKV_PROCESS_IT_EVENT_LOG | SKV_SERVER_CLEANUP_LOG  )
             << "skv_server_t::ProcessEvent:: SKV_SERVER_EVENT_TYPE_IT_CMM action block: "
@@ -1229,33 +1214,6 @@ ProcessPendingEvents( skv_server_ep_state_t * aEPStatePtr )
   return SKV_SUCCESS;
 }
 
-skv_status_t
-skv_server_t::
-ProgressAnyEP()
-{
-  skv_status_t status = SKV_SUCCESS;
-
-  EPStateMap_T::iterator iter =  mEPStateMap->begin();
-
-  while( (iter != mEPStateMap->end()) &&
-         (status == SKV_SUCCESS) )
-  {
-    skv_server_ep_state_t *EPState = iter->second;
-
-    // if( !EPState->SendPostOverflow() )
-    //   {
-    //     BegLogLine( 1 )
-    //       << "CHECKING FOR PROGRESS ON EP. THERE WERE NO EVENTS FOR A WHILE"
-    //       << EndLogLine;
-
-    //     status = ProcessPendingEvents( EPState );
-    //   }
-
-    iter++;
-  }
-  return status;
-}
-
 /***
  * skv_server_t::Run::
  * Desc: Starts the state machine on the server
@@ -1425,7 +1383,7 @@ Init( int   aRank,
                                                                                                 SKV_SERVER_NETWORK_SRC_PRIORITY );
 
   // Initialize command fetching  (the "manager" for commands is the EPStateMap because the EPs are where the commands are fetched
-  mEPStateMap = new EPStateMap_T;
+  mEPStateMap = new skv_server_epstate_map_t;
   StrongAssertLogLine( mEPStateMap != NULL )
     << "skv_server_t::Init():: ERROR:: "
     << "mEPStateMap != NULL"

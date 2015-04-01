@@ -1548,8 +1548,6 @@ struct skv_server_ep_state_t
     int CmdBuffOrdinal = GetNextUnusedCommandBufferOrd();
     int CmdOrd         = GetNextFreeCommandSlotOrdinal();
 
-    mResourceLock.unlock();
-
     // retrieve the actual CCB handle from Cmd-ordinal
     CCB = (skv_server_ccb_t*)GetCommandForOrdinal( CmdOrd );
 
@@ -1558,6 +1556,8 @@ struct skv_server_ep_state_t
       << EndLogLine;
 
     int RecvBuffOrdinal = GetCurrentCommandSlot();
+
+    mResourceLock.unlock();
 
     StrongAssertLogLine( RecvBuffOrdinal == CmdBuffOrdinal )
       << " Command Ordinal Mismatch"
@@ -1881,9 +1881,6 @@ struct skv_cmd_retrieve_resp_t
     return status;
   }
 };
-
-// the list of Endpoints and ep handles for reverse lookup
-typedef std::map< it_ep_handle_t, skv_server_ep_state_t* > EPStateMap_T;
 
 class skv_server_internal_event_manager_if_t
 {

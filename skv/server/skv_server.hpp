@@ -108,7 +108,7 @@ public:
   ThreadArgs  mEvdPollThreadArgs[ SKV_EVD_THREAD_COUNT ];
 
   // The mighty context table.
-  EPStateMap_T*              mEPStateMap;
+  skv_server_epstate_map_t   *mEPStateMap;
 
   skv_server_state_t         mState;
 
