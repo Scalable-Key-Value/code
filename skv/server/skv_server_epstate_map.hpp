@@ -28,7 +28,7 @@
 #include <map>
 
 // the list of Endpoints and ep handles for reverse lookup
-typedef std::map< it_ep_handle_t, skv_server_ep_state_t* > EPStateMap_T;
+typedef std::map< it_ep_handle_t, skv_server_ep_state_t volatile* > EPStateMap_T;
 
 class skv_server_epstate_map_t
 {
@@ -61,7 +61,7 @@ public:
     mSequentializer.unlock();
     if( iter != mEPStateMap.end() )
     {
-      return iter->second;
+      return (skv_server_ep_state_t*)iter->second;
     }
     else
       return NULL;
@@ -82,6 +82,7 @@ public:
       << EndLogLine;
 
     int rc = mEPStateMap.insert( std::make_pair( (it_ep_handle_t)aEPHdl, (skv_server_ep_state_t*)aStateForEP ) ).second;
+    mIterator = mEPStateMap.begin();
     mSequentializer.unlock();
 
     BegLogLine( DSKV_SERVER_CLIENT_CONN_EST_LOG | SKV_SERVER_CLEANUP_LOG )
@@ -101,6 +102,7 @@ public:
       << EndLogLine;
 
     mEPStateMap.erase( mEPStateMap.find( aEPHdl ) );
+    mIterator = mEPStateMap.begin();
     mSequentializer.unlock();
 
     BegLogLine( SKV_SERVER_CLEANUP_LOG )
@@ -117,7 +119,7 @@ public:
   skv_server_ep_state_t *GetNextEPStateAndFreezeForProcessing()
   {
     mSequentializer.lock();
-    skv_server_ep_state_t *retval = NULL;
+    skv_server_ep_state_t volatile *retval = NULL;
     do
     {
       retval = AdvanceCurrentEPState();
@@ -132,7 +134,7 @@ public:
       }
     } while( retval == NULL );
 
-    return retval;
+    return (skv_server_ep_state_t*)retval;
   }
 
   inline void UnfreezeAfterProcessing()
@@ -141,7 +143,7 @@ public:
   }
 
 private:
-  inline skv_server_ep_state_t * AdvanceCurrentEPState()
+  inline skv_server_ep_state_t volatile * AdvanceCurrentEPState()
   {
     // reset iterator when we reached the end
     if( mIterator == mEPStateMap.end() )

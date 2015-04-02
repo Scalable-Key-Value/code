@@ -361,7 +361,8 @@ FinalizeEPState( skv_server_epstate_map_t *aEPStateMap,
       << " )"
       << EndLogLine ;
 
-  free( aStateForEP );
+  bzero( aStateForEP, sizeof( skv_server_ep_state_t ) );
+  delete aStateForEP;
 
   it_ep_free( aEP );
 
@@ -426,7 +427,7 @@ InitNewStateForEP( skv_server_epstate_map_t* aEPStateMap,
     << " status: " << status
     << EndLogLine;
 
-  *aStateForEP = (skv_server_ep_state_t *) malloc( sizeof( skv_server_ep_state_t ) );
+  *aStateForEP = new skv_server_ep_state_t;
 
   BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
     << "malloc *aStateForEP -> " << (void *) *aStateForEP
