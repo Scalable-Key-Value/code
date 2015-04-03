@@ -20,6 +20,8 @@
 
 typedef basic_string< char, char_traits<char>, skv_rdma_buffer_allocator_t<char>> skv_rdma_string;
 
+#include <rocksdb/table.h>
+
 class skv_local_kv_rocksdb_access_t {
 
   rocksdb::DB *mPDSDBHndl;   // handle for server PDS to maintain existing user PDSs
@@ -53,6 +55,16 @@ public:
     rocksdb::Options dbopts = rocksdb::Options();
     dbopts.create_if_missing = true;
     dbopts.use_adaptive_mutex = true;
+    dbopts.write_buffer_size = 16 * 1048576;
+    dbopts.compression = rocksdb::kNoCompression;
+
+    rocksdb::BlockBasedTableOptions table_opts;
+    table_opts.block_size = 8192;
+    dbopts.table_factory.reset(NewBlockBasedTableFactory(table_opts));
+
+    dbopts.max_background_compactions = SKV_LOCAL_KV_WORKER_POOL_SIZE;
+    // dbopts.IncreaseParallelism( SKV_LOCAL_KV_WORKER_POOL_SIZE );
+    dbopts.env->SetBackgroundThreads( SKV_LOCAL_KV_WORKER_POOL_SIZE, rocksdb::Env::Priority::HIGH );
 
     // open the node's PDS table for later retrieval of PDS metadata
     std::string PDSName = aPDSBaseName;
@@ -84,7 +96,7 @@ public:
       status = SKV_ERRNO_PDS_DOES_NOT_EXIST;
     }
 
-    mDeleteOpts.sync = true;
+    mDeleteOpts.sync = false;
 
     return status;
   }

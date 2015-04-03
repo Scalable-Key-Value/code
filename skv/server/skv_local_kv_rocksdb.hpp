@@ -28,7 +28,7 @@
 #define SKV_LOCAL_KV_MAX_VALUE_SIZE ( 4 * 1048576ul )
 #define SKV_LOCAL_KV_RDMA_BUFFER_SIZE ( size_t(SKV_LOCAL_KV_MAX_VALUE_SIZE * SKV_LOCAL_KV_MAX_OUTSTANDING_REQUESTS) )
 
-#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 4 )
+#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 10 )
 
 #include <thread>
 #include <rocksdb/db.h>
