@@ -16,11 +16,19 @@
 #ifndef SKV_LOCAL_KV_ROCKSDB_ACCESS_HPP_
 #define SKV_LOCAL_KV_ROCKSDB_ACCESS_HPP_
 
-#define SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE ( 65536 )
+#define SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE ( 512 )
 
 typedef basic_string< char, char_traits<char>, skv_rdma_buffer_allocator_t<char>> skv_rdma_string;
 
+#define SKV_LOCAL_KV_ROCKSDB_STATISTICS
+
 #include <rocksdb/table.h>
+#include <rocksdb/filter_policy.h>
+#include <rocksdb/cache.h>
+
+#ifdef SKV_LOCAL_KV_ROCKSDB_STATISTICS
+#include <rocksdb/statistics.h>
+#endif
 
 class skv_local_kv_rocksdb_access_t {
 
@@ -50,21 +58,21 @@ public:
 
   skv_status_t Init( const std::string &aPDSBaseName, int aRank )
   {
-    skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
+    skv_status_t status = SKV_SUCCESS;
 
     rocksdb::Options dbopts = rocksdb::Options();
     dbopts.create_if_missing = true;
     dbopts.use_adaptive_mutex = true;
-    dbopts.write_buffer_size = 16 * 1048576;
+
+    dbopts.write_buffer_size = 32 * 1048576;
     dbopts.compression = rocksdb::kNoCompression;
 
     rocksdb::BlockBasedTableOptions table_opts;
     table_opts.block_size = 8192;
+//    table_opts.filter_policy = std::shared_ptr<const rocksdb::FilterPolicy>( rocksdb::NewBloomFilterPolicy( 10 ) );
+//    table_opts.block_cache = rocksdb::NewLRUCache( 512 * 1024 * 1024 );
     dbopts.table_factory.reset(NewBlockBasedTableFactory(table_opts));
 
-    dbopts.max_background_compactions = SKV_LOCAL_KV_WORKER_POOL_SIZE;
-    // dbopts.IncreaseParallelism( SKV_LOCAL_KV_WORKER_POOL_SIZE );
-    dbopts.env->SetBackgroundThreads( SKV_LOCAL_KV_WORKER_POOL_SIZE, rocksdb::Env::Priority::HIGH );
 
     // open the node's PDS table for later retrieval of PDS metadata
     std::string PDSName = aPDSBaseName;
@@ -80,6 +88,17 @@ public:
         << EndLogLine;
       status = SKV_ERRNO_PDS_DOES_NOT_EXIST;
     }
+
+
+    // dbopts.max_background_compactions = SKV_LOCAL_KV_WORKER_POOL_SIZE;
+    // dbopts.IncreaseParallelism( SKV_LOCAL_KV_WORKER_POOL_SIZE );
+    // dbopts.env->SetBackgroundThreads( SKV_LOCAL_KV_WORKER_POOL_SIZE, rocksdb::Env::Priority::HIGH );
+    // dbopts.env->SetBackgroundThreads( SKV_LOCAL_KV_WORKER_POOL_SIZE, rocksdb::Env::Priority::LOW );
+
+#ifdef SKV_LOCAL_KV_ROCKSDB_STATISTICS
+    dbopts.statistics = rocksdb::CreateDBStatistics();
+    dbopts.stats_dump_period_sec = 300;
+#endif
 
     // open the node's data table
     PDSName = aPDSBaseName;

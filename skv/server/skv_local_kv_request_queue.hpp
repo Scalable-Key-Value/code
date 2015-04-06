@@ -27,9 +27,10 @@ class skv_local_kv_request_queue_t {
   skv_array_stack_t< skv_local_kv_request_t*, SKV_LOCAL_KV_MAX_REQUESTS > mFreeRequests;
   skv_array_queue_t< skv_local_kv_request_t*, SKV_LOCAL_KV_MAX_REQUESTS > mActiveRequests;
   skv_mutex_t mQueueSerializer;
+  volatile int mFreeSlots;
 
 public:
-  skv_local_kv_request_queue_t() {}
+  skv_local_kv_request_queue_t() : mFreeSlots( 0 ) {}
   ~skv_local_kv_request_queue_t() {}
 
   skv_status_t Init()
@@ -39,6 +40,7 @@ public:
       mRequestPool[ i ].mType = SKV_LOCAL_KV_REQUEST_TYPE_UNKNOWN;
       mFreeRequests.push( &(mRequestPool[ i ]) );
     }
+    mFreeSlots = SKV_LOCAL_KV_MAX_REQUESTS;
 
     return SKV_SUCCESS;
   }
@@ -55,6 +57,7 @@ public:
 
     mQueueSerializer.lock();
     skv_local_kv_request_t *Req = mFreeRequests.top();
+    --mFreeSlots;
     mFreeRequests.pop();
     mQueueSerializer.unlock();
 
@@ -94,6 +97,7 @@ public:
   {
     mQueueSerializer.lock();
     mFreeRequests.push( aRequest );
+    ++mFreeSlots;
     mQueueSerializer.unlock();
 
     BegLogLine( SKV_LOCAL_KV_QUEUES_LOG )
@@ -104,6 +108,62 @@ public:
     return SKV_SUCCESS;
   }
 
+  inline int GetFreeSlots() const
+  {
+    return mFreeSlots;
+  }
 };
+
+// for now, just start with a round-robin implementation of a list of worker-request queues
+// later we might consider a "shortest-queue-first" scheme or other scheduling too
+class skv_local_kv_request_queue_list_t
+{
+  skv_local_kv_request_queue_t **mSortedRequestQueueList;
+  skv_local_kv_request_queue_t *mBestQueue;
+  uint64_t mCurrentIndex;
+  unsigned int mActiveQueueCount;
+  unsigned int mMaxQueueCount;
+
+public:
+  skv_local_kv_request_queue_list_t( const unsigned int aMaxQueueCount )
+  {
+    mMaxQueueCount = aMaxQueueCount;
+    mSortedRequestQueueList = new skv_local_kv_request_queue_t* [ mMaxQueueCount ];
+    mCurrentIndex = 0;
+    mActiveQueueCount = 0;
+    mBestQueue = NULL;
+  }
+  ~skv_local_kv_request_queue_list_t() {}
+
+  void sort()
+  {
+    // sort the list start with highest number of FreeSlots
+  }
+
+  void AddQueue( const skv_local_kv_request_queue_t * aQueue )
+  {
+    AssertLogLine( mActiveQueueCount < mMaxQueueCount )
+      << "Queue Limit exceeded: current=" << mActiveQueueCount
+      << " limit=" << mMaxQueueCount
+      << EndLogLine;
+
+    mSortedRequestQueueList[ mActiveQueueCount ] = (skv_local_kv_request_queue_t*)aQueue;
+    ++mActiveQueueCount;
+
+    if( mActiveQueueCount == 1 )
+      mBestQueue = mSortedRequestQueueList[ 0 ];
+  }
+
+  skv_local_kv_request_queue_t * GetBestQueue()
+  {
+    skv_local_kv_request_queue_t *retval = mBestQueue;
+
+    ++mCurrentIndex;
+    mBestQueue = mSortedRequestQueueList[ mCurrentIndex % mActiveQueueCount ];
+
+    return retval;
+  }
+};
+
 
 #endif /* SKV_LOCAL_KV_REQUEST_QUEUE_HPP_ */

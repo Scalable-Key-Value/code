@@ -24,11 +24,11 @@
 #define SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#define SKV_LOCAL_KV_MAX_OUTSTANDING_REQUESTS ( 16 )
-#define SKV_LOCAL_KV_MAX_VALUE_SIZE ( 4 * 1048576ul )
+#define SKV_LOCAL_KV_MAX_OUTSTANDING_REQUESTS ( 64 )
+#define SKV_LOCAL_KV_MAX_VALUE_SIZE ( 1 * 1048576ul )
 #define SKV_LOCAL_KV_RDMA_BUFFER_SIZE ( size_t(SKV_LOCAL_KV_MAX_VALUE_SIZE * SKV_LOCAL_KV_MAX_OUTSTANDING_REQUESTS) )
 
-#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 10 )
+#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 32 )
 
 #include <thread>
 #include <rocksdb/db.h>
@@ -58,19 +58,20 @@ struct skv_local_kv_rocksdb_reqctx_t
 
 class skv_local_kv_rocksdb_worker_t {
   skv_local_kv_request_queue_t mDedicatedQueue;
+  skv_local_kv_request_queue_t mRequestQueue;
   skv_local_kv_rocksdb_access_t *mDBAccess;
   skv_local_kv_rocksdb *mMaster;
   std::thread *mRequestProcessor;
   skv_local_kv_rdma_data_buffer_t *mDataBuffer;
   skv_local_kv_event_queue_t *mEventQueue;
-  skv_local_kv_request_queue_t *mRequestQueue;
   skv_local_kv_request_t *mStalledCommand;
+  uint64_t mThreadRank;
 
 public:
   skv_local_kv_rocksdb_worker_t() : mStalledCommand( NULL ) {};
   ~skv_local_kv_rocksdb_worker_t() {};
 
-  skv_status_t Init( skv_local_kv_rocksdb *aBackEnd, bool aThreaded = false );
+  skv_status_t Init( uint64_t aThreadRank, skv_local_kv_rocksdb *aBackEnd, bool aThreaded = false );
 
   skv_status_t PerformOpen( skv_local_kv_request_t *aReq );
   skv_status_t PerformStat( skv_local_kv_request_t *aReq );
@@ -85,19 +86,23 @@ public:
   skv_status_t PerformAsyncRetrieveCleanup( skv_local_kv_request_t *aReq );
   skv_status_t PerformAsyncRetrieveNKeysCleanup( skv_local_kv_request_t *aReq );
 
-  skv_local_kv_rocksdb* GetMaster()
+  skv_local_kv_rocksdb* GetMaster() const
   {
     return mMaster;
   }
+  uint64_t GetThreadRank() const
+  {
+    return mThreadRank;
+  }
   skv_local_kv_request_queue_t* GetRequestQueue()
   {
-    return mRequestQueue;
+    return &mRequestQueue;
   }
   skv_local_kv_request_queue_t* GetDedicatedQueue()
   {
     return &mDedicatedQueue;
   }
-  skv_local_kv_request_t* GetStalledRequest()
+  skv_local_kv_request_t* GetStalledRequest() const
   {
     return mStalledCommand;
   }
@@ -105,7 +110,7 @@ public:
   {
     mStalledCommand = NULL;
   }
-  skv_local_kv_rdma_data_buffer_t* GetDataBuffer()
+  skv_local_kv_rdma_data_buffer_t* GetDataBuffer() const
   {
     return mDataBuffer;
   }
@@ -239,7 +244,7 @@ class skv_local_kv_rocksdb {
   int mMyRank;
 
   skv_local_kv_event_queue_t mEventQueue;
-  skv_local_kv_request_queue_t mRequestQueue;
+  skv_local_kv_request_queue_list_t mRequestQueueList;
   it_pz_handle_t mPZ;
   skv_distribution_t mDistributionManager;
 
@@ -250,7 +255,7 @@ class skv_local_kv_rocksdb {
   skv_local_kv_rocksdb_access_t mDBAccess;
 
 public:
-  skv_local_kv_rocksdb()
+  skv_local_kv_rocksdb() : mRequestQueueList( SKV_LOCAL_KV_WORKER_POOL_SIZE )
   {
     mMyRank = -1;
   }
@@ -375,7 +380,6 @@ public:
   /******************************/
   /* NON-BACK-END API functions */
   bool KeepProcessing() { return mKeepProcessing; }
-  skv_local_kv_request_queue_t* GetRequestQueue() { return &mRequestQueue; }
   skv_local_kv_event_queue_t* GetEventQueue() { return &mEventQueue; }
   it_pz_handle_t GetPZ() { return mPZ; }
   skv_local_kv_rocksdb_access_t* GetDBAccess() { return &mDBAccess; }

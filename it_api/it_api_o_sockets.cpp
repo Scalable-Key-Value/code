@@ -3686,6 +3686,11 @@ iWARPEM_AcceptThread( void* args )
       socket_nonblock_on(ConnFd) ;
 #endif
       socket_nodelay_on(ConnFd) ;
+      // socklen_t ArgSize = sizeof( int );
+      // int SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
+      // int SockRecvBuffSize = 16 * IT_API_SOCKET_BUFF_SIZE;
+      // setsockopt( ConnFd, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
+      // setsockopt( ConnFd, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
       
       // create a connection request info object to hold
       // information to be used in responding to the req -- user will do reject or accept
@@ -4216,10 +4221,10 @@ it_status_t it_ep_connect (
       << " SockRecvBuffSize: " << SockRecvBuffSize
       << EndLogLine;
 
-    SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
-    SockRecvBuffSize = IT_API_SOCKET_BUFF_SIZE;
-    setsockopt( s, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
-    setsockopt( s, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
+    // SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
+    // SockRecvBuffSize = IT_API_SOCKET_BUFF_SIZE;
+    // setsockopt( s, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
+    // setsockopt( s, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
  
     while( 1 )
     {
@@ -6031,10 +6036,10 @@ it_status_t itx_ep_connect_with_rmr (
     << " SockRecvBuffSize: " << SockRecvBuffSize
     << EndLogLine;
 
-  SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
-  SockRecvBuffSize = IT_API_SOCKET_BUFF_SIZE;
-  setsockopt( s, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
-  setsockopt( s, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
+  // SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
+  // SockRecvBuffSize = IT_API_SOCKET_BUFF_SIZE;
+  // setsockopt( s, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
+  // setsockopt( s, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
 
   while( 1 )
     {

@@ -67,10 +67,15 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
   skv_local_kv_rocksdb *Master = aWorker->GetMaster();
   skv_local_kv_request_queue_t *RequestQueue = aWorker->GetRequestQueue();
   skv_local_kv_request_queue_t *DedicatedQueue = aWorker->GetDedicatedQueue();
+  uint64_t ThreadRank = aWorker->GetThreadRank();
+
+  uint64_t IdleThreshold = 10000; //( 3 + SKV_LOCAL_KV_WORKER_POOL_SIZE - ThreadRank) * 100000;
 
   // insert the data buffer into the thread-id-map to make sure the allocator finds the right buffer
   skv_thread_id_map_t *tm = skv_thread_id_map_t::GetThreadIdMap();
   tm->InsertRDB( aWorker->GetDataBuffer() );
+
+  static uint64_t idle_loops = 0;
 
   while( Master->KeepProcessing() )
   {
@@ -111,6 +116,8 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
 
     if( nextRequest )
     {
+      idle_loops == 0;
+
       BegLogLine( SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG )
         << "Fetched LocalKV request: " << skv_local_kv_request_type_to_string( nextRequest->mType )
         << " rctx:" << nextRequest->mReqCtx
@@ -169,15 +176,22 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
       if( status != SKV_ERRNO_NOT_DONE )
         nextQueue->AckRequest( nextRequest );
     }
+    else
+    {
+      ++idle_loops;
+      if( idle_loops > IdleThreshold )
+        usleep( 10000 );
+    }
   }
 
   BegLogLine( SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG )
     << "AsyncProcessing: Exiting thread"
     << EndLogLine;
 }
-skv_status_t skv_local_kv_rocksdb_worker_t::Init( skv_local_kv_rocksdb *aBackEnd, bool aThreaded )
+skv_status_t skv_local_kv_rocksdb_worker_t::Init( uint64_t aThreadRank, skv_local_kv_rocksdb *aBackEnd, bool aThreaded )
 {
   skv_status_t status;
+  mThreadRank = aThreadRank;
   mMaster = aBackEnd;
 
   mDataBuffer = new skv_local_kv_rdma_data_buffer_t( );
@@ -185,7 +199,10 @@ skv_status_t skv_local_kv_rocksdb_worker_t::Init( skv_local_kv_rocksdb *aBackEnd
   if( status != SKV_SUCCESS )
     return status;
 
-  mRequestQueue = mMaster->GetRequestQueue();
+  status = mRequestQueue.Init();
+  if( status != SKV_SUCCESS )
+    return status;
+
   status = mDedicatedQueue.Init();
   if( status != SKV_SUCCESS )
     return status;
@@ -218,10 +235,6 @@ skv_local_kv_rocksdb::Init( int aRank,
   if( status != SKV_SUCCESS )
     return status;
 
-  status = mRequestQueue.Init();
-  if( status != SKV_SUCCESS )
-    return status;
-
   mKeepProcessing = true;
   mPZ = aPZ;
 
@@ -234,18 +247,26 @@ skv_local_kv_rocksdb::Init( int aRank,
     << EndLogLine;
 
   status = mDBAccess.Init( config->GetServerPersistentFileLocalPath(), mMyRank );
+  if( status != SKV_SUCCESS )
+    return status;
+
   BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
     << "skv_local_kv_rocksdb::Init(): DB-Access initialized..."
     << EndLogLine;
 
-  status = mMasterProcessing.Init( this );
+  status = mMasterProcessing.Init( 0, this );
+  if( status != SKV_SUCCESS )
+    return status;
+
   BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
     << "skv_local_kv_rocksdb::Init(): Masterbased worker initialized..."
     << EndLogLine;
 
   for( int w=0; ( w < SKV_LOCAL_KV_WORKER_POOL_SIZE ) && (status == SKV_SUCCESS ); w++ )
   {
-    status = mWorkerPool[ w ].Init( this, true );
+    status = mWorkerPool[ w ].Init( w, this, true );
+    mRequestQueueList.AddQueue( mWorkerPool[ w ].GetRequestQueue() );
+
     BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
       << "skv_local_kv_rocksdb::Init(): Worker[ " << w << " ] initialized ..."
       << EndLogLine;
@@ -258,6 +279,7 @@ skv_local_kv_rocksdb::Exit()
 {
   skv_status_t status = mDBAccess.Exit();
   mDistributionManager.Finalize();
+  // todo: stop all workers and clean the requestqueuelist
   return status;
 }
 
@@ -287,7 +309,8 @@ skv_local_kv_rocksdb::PDS_Open( char *aPDSName,
     << "skv_local_kv_rocksdb:PDS_Open Entering..."
     << EndLogLine;
 
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -297,7 +320,7 @@ skv_local_kv_rocksdb::PDS_Open( char *aPDSName,
   kvReq->mRequest.mOpen.mPrivs = aPrivs;
   kvReq->mRequest.mOpen.mFlags = aFlags;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
 
   BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
     << "skv_local_kv_rocksdb: Open Request stored:"
@@ -439,7 +462,8 @@ skv_local_kv_rocksdb::PDS_Stat( skv_pdscntl_cmd_t aCmd,
                                 skv_pds_attr_t *aPDSAttr,
                                 skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -448,7 +472,7 @@ skv_local_kv_rocksdb::PDS_Stat( skv_pdscntl_cmd_t aCmd,
   memcpy( &kvReq->mData[ 0 ], aPDSAttr, sizeof( skv_pds_attr_t ) );
   kvReq->mRequest.mStat.mPDSAttr = (skv_pds_attr_t*)&kvReq->mData[ 0 ];
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
 
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
@@ -488,7 +512,8 @@ skv_status_t
 skv_local_kv_rocksdb::PDS_Close( skv_pds_attr_t *aPDSAttr,
                                  skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -496,7 +521,7 @@ skv_local_kv_rocksdb::PDS_Close( skv_pds_attr_t *aPDSAttr,
   kvReq->mRequest.mStat.mCmd = SKV_PDSCNTL_CMD_CLOSE;
   kvReq->mRequest.mStat.mPDSAttr = aPDSAttr;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
 skv_status_t skv_local_kv_rocksdb_worker_t::PerformClose( skv_local_kv_request_t *aReq )
@@ -531,7 +556,8 @@ skv_local_kv_rocksdb::Lookup( skv_pds_id_t aPDSId,
                               skv_lmr_triplet_t *aStoredValueRep,
                               skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -544,7 +570,7 @@ skv_local_kv_rocksdb::Lookup( skv_pds_id_t aPDSId,
   kvReq->mRequest.mLookup.mKeySize = aKeySize;
   kvReq->mRequest.mLookup.mFlags = aFlags;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
 
@@ -592,7 +618,8 @@ skv_local_kv_rocksdb::Insert( skv_cmd_RIU_req_t *aReq,
                               skv_lmr_triplet_t *aValueRDMADest,    // where new data has to be stored
                               skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -604,7 +631,7 @@ skv_local_kv_rocksdb::Insert( skv_cmd_RIU_req_t *aReq,
   kvReq->mRequest.mInsert.mCmdStatus = aCmdStatus;
   kvReq->mRequest.mInsert.mStoredValueRep = *aStoredValueRep;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
 skv_status_t skv_local_kv_rocksdb_worker_t::PerformInsert( skv_local_kv_request_t *aReq )
@@ -747,7 +774,8 @@ skv_local_kv_rocksdb::BulkInsert( skv_pds_id_t aPDSId,
                                   skv_lmr_triplet_t *aLocalBuffer,
                                   skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -755,7 +783,7 @@ skv_local_kv_rocksdb::BulkInsert( skv_pds_id_t aPDSId,
   kvReq->mRequest.mBulkInsert.mPDSId = aPDSId;
   kvReq->mRequest.mBulkInsert.mLocalBuffer = *aLocalBuffer;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
 
@@ -880,7 +908,8 @@ skv_local_kv_rocksdb::Retrieve( skv_pds_id_t aPDSId,
                                 int *aTotalSize,
                                 skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -895,7 +924,7 @@ skv_local_kv_rocksdb::Retrieve( skv_pds_id_t aPDSId,
   kvReq->mRequest.mRetrieve.mValueSize = aValueSize;
   kvReq->mRequest.mRetrieve.mFlags = aFlags;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
 skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_request_t *aReq )
@@ -919,9 +948,9 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
   size_t expSize = aReq->mRequest.mRetrieve.mValueSize;
 
   size_t expAllocReq = SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE > expSize ? SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE : expSize + (expSize>>2);
-  if( ! mDataBuffer->ReqWillFit( expAllocReq ) )
+  if( ! mDataBuffer->ReqWillFit( expAllocReq * 2 ) )
     {
-    BegLogLine( 1 )
+    BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
       << "RDMA-Buffer space shortage: req=" << expSize
       << " left=" << mDataBuffer->MaxSizeFit()
       << EndLogLine;
@@ -1032,7 +1061,8 @@ skv_local_kv_rocksdb::RetrieveNKeys( skv_pds_id_t aPDSId,
                                      skv_cursor_flags_t aFlags,
                                      skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -1061,7 +1091,7 @@ skv_local_kv_rocksdb::RetrieveNKeys( skv_pds_id_t aPDSId,
     << " KeySize: " << kvReq->mRequest.mRetrieveN.mStartingKeySize
     << EndLogLine;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
 
@@ -1230,7 +1260,8 @@ skv_local_kv_rocksdb::Remove( skv_pds_id_t aPDSId,
                               int aKeySize,
                               skv_local_kv_cookie_t *aCookie )
 {
-  skv_local_kv_request_t *kvReq = mRequestQueue.AcquireRequestEntry();
+  skv_local_kv_request_queue_t *RequestQueue = mRequestQueueList.GetBestQueue();
+  skv_local_kv_request_t *kvReq = RequestQueue->AcquireRequestEntry();
   if( !kvReq )
     return SKV_ERRNO_COMMAND_LIMIT_REACHED;
 
@@ -1242,7 +1273,7 @@ skv_local_kv_rocksdb::Remove( skv_pds_id_t aPDSId,
   kvReq->mRequest.mRemove.mKeyData = &kvReq->mData[ 0 ];
   kvReq->mRequest.mRemove.mKeySize = aKeySize;
 
-  mRequestQueue.QueueRequest( kvReq );
+  RequestQueue->QueueRequest( kvReq );
   return SKV_ERRNO_LOCAL_KV_EVENT;
 }
 skv_status_t skv_local_kv_rocksdb_worker_t::PerformRemove( skv_local_kv_request_t *aReq )

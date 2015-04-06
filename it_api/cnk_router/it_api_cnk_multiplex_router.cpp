@@ -1938,6 +1938,14 @@ int ConnectToServers( int aMyRank )
     {
       socket_nonblock_on( connections[ conn_count ].socket );
       socket_nodelay_on( connections[ conn_count ].socket );
+
+// #define IT_API_SOCKET_BUFF_SIZE ( 16 * 1024 )
+//       socklen_t ArgSize = sizeof( int );
+//       int SockSendBuffSize = IT_API_SOCKET_BUFF_SIZE;
+//       int SockRecvBuffSize = 16 * IT_API_SOCKET_BUFF_SIZE;
+//       setsockopt( connections[ conn_count ].socket, SOL_SOCKET, SO_SNDBUF, (const char *) & SockSendBuffSize, ArgSize );
+//       setsockopt( connections[ conn_count ].socket, SOL_SOCKET, SO_RCVBUF, (const char *) & SockRecvBuffSize, ArgSize );
+
       connections[ conn_count ].ServerEP = new iWARPEM_Router_Endpoint_t( connections[ conn_count ].socket );
 
       // set up the router info
