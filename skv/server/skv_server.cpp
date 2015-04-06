@@ -534,6 +534,7 @@ ProcessEvent( skv_server_state_t  aState,
 #endif
             << EndLogLine;
           // NO BREAK HERE - JUST CONTINUE PROCESSING WITH CM-state machine
+          // SetState( SKV_SERVER_STATE_EXIT );
         }
         case SKV_SERVER_EVENT_TYPE_IT_CMM_CONN_ESTABLISHED:
         {
