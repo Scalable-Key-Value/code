@@ -188,7 +188,10 @@ bool verify_data( char *aBuf,
   for( int i=0; i<aSize; i++ )
   {
     if( aBuf[i] != (char)random() )
+    {
+      std::cout << "!!"; std::flush( std::cout );
       return false;
+    }
   }
   return true;
 }
@@ -515,7 +518,12 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
         case SKV_SUCCESS:
           KeyCount++;
           if (!verify_data( value, valueSize, *Key, 0))
+          {
+            BegLogLine( 1 )
+              << "Failed data verification on first key: " << (void*) *Key
+              << EndLogLine;
             status = SKV_ERRNO_CHECKSUM_MISMATCH;
+          }
           break;
         case SKV_ERRNO_END_OF_RECORDS:
           break;
@@ -556,7 +564,13 @@ skv_status_t skv_base_test_cursor( const char *aPDSName,
             << EndLogLine;
 
         if( (status == SKV_SUCCESS) && (!verify_data( value, valueSize, *Key, 0)) )
+        {
+          BegLogLine( 1 )
+            << "Failed data verification on " << KeyCount << ". key: " << (void*) *Key
+            << EndLogLine;
+
           status = SKV_ERRNO_CHECKSUM_MISMATCH;
+        }
       }
 
       if( local )

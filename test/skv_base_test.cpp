@@ -55,7 +55,7 @@ typedef struct
 static skv_test_config_t config = {
     "skv_server.conf",
     SKV_BASE_TEST_ALL,
-    4,
+    8,
     1000,
     0
 };
