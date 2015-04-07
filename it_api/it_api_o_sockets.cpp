@@ -87,6 +87,7 @@ int             gITAPI_Initialized = 0;
 
 static itov_event_queue_t *gSendCmplQueue ;
 static itov_event_queue_t *gRecvCmplQueue ;
+static it_api_o_sockets_aevd_mgr_t* gAEVD = NULL;
 
 int itov_aevd_defined = 0;
 static void it_api_o_sockets_signal_accept(void) ;
@@ -955,7 +956,8 @@ iwarpem_generate_conn_termination_event( int aSocketId )
     << "iWARPEM_DataReceiverThread()::Failed to enqueue connection request event" 
     << EndLogLine;	  
 
-  it_api_o_sockets_signal_accept();
+  if( gAEVD )
+    it_api_o_sockets_signal_accept();
   /*********************************************/
   
   LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
@@ -2218,7 +2220,8 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             << "RDMA read completion, wants queue=" << gSendCmplQueue
             << EndLogLine ;
           int enqrc=gSendCmplQueue->Enqueue(*(it_event_t *) dtoce) ;
-          it_api_o_sockets_signal_accept() ;
+          if( gAEVD )
+            it_api_o_sockets_signal_accept() ;
 		    
           StrongAssertLogLine( enqrc == 0 ) 
             << "iWARPEM_DataReceiverThread(): failed to enqueue connection request event" 
@@ -3237,7 +3240,6 @@ it_status_t it_ep_rc_create (
 
 #define APE_MAX_EVD_HANDLES 1024
 int ape_evd_handle_next = 0;
-static it_api_o_sockets_aevd_mgr_t* gAEVD = NULL;
 
 it_status_t it_evd_create (
   IN  it_ia_handle_t   ia_handle,
