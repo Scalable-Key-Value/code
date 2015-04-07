@@ -64,27 +64,32 @@ set(COMMON_LIBRARY_TYPE STATIC CACHE STRING
 # inmem    - in-memory version of local kv
 # asyncmem - async in-memory version for testing
 # rocksdb  - rocksdb backend (requires rocksdb build)
+# auto     - rocksdb or asyncmem
 #############################################
-set(SKV_LOCAL_KV_BACKEND "rocksdb" CACHE STRING
-  "Select a database backend {inmem, asyncmem, rocksdb}")
+set(SKV_LOCAL_KV_BACKEND "auto" CACHE STRING
+  "Select a database backend {inmem, asyncmem, rocksdb, auto}")
 set_property(CACHE SKV_LOCAL_KV_BACKEND
-  PROPERTY STRINGS "inmem" "asyncmem" "rocksdb")
+  PROPERTY STRINGS "inmem" "asyncmem" "rocksdb" "auto")
 
 set(LOCAL_KV_BACKEND ${SKV_LOCAL_KV_BACKEND})
-if(LOCAL_KV_BACKEND MATCHES "rocksdb")
+if(LOCAL_KV_BACKEND MATCHES "rocksdb" OR LOCAL_KV_BACKEND MATCHES "auto")
   find_package(ZLIB)
   find_package(BZip2)
   find_package(rocksdb)
   if(NOT ROCKSDB_FOUND)
-    message(FATAL_ERROR "rocksdb not found. Check rocksdb search path (-DROCKSDB_ROOT=) or configure another backend (-DSKV_LOCAL_KV_BACKEND=<inmem|asyncmem>)!")
+    if(LOCAL_KV_BACKEND MATCHES "rocksdb")
+      message(FATAL_ERROR "rocksdb not found. Check rocksdb search path (-DROCKSDB_ROOT=) or configure another backend (-DSKV_LOCAL_KV_BACKEND=<inmem|asyncmem>)!")
+    else()
+      set(LOCAL_KV_BACKEND asyncmem)
+    endif()
   endif()
 endif()
 
 
-set(SKV_COMM_API_TYPE "verbs" CACHE STRING
+set(SKV_COMM_API_TYPE "sockets" CACHE STRING
   "Select a database backend {verbs, sockets, sockets_routed}")
 set_property(CACHE SKV_COMM_API_TYPE
-  PROPERTY STRINGS "verbs" "sockets", "sockets_routed")
+  PROPERTY STRINGS "verbs" "sockets" "sockets_routed")
 
 if(SKV_COMM_API_TYPE MATCHES "verbs")
   find_package(OFED REQUIRED)
@@ -235,7 +240,7 @@ foreach(_test ${UNITTEST_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
   set_target_properties(${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS
-    "SKV_UNIT_TEST")
+    "SKV_UNIT_TEST;SKV_CLIENT_UNI;SKV_NON_MPI")
   target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
     ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION unittest)

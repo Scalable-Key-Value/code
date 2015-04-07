@@ -54,7 +54,6 @@ set(SKV_CLIENT_PUBLIC_HEADERS
   client/skv_client_bulk_inserter_manager_if.hpp
 )
 set(SKV_CLIENT_LINK_LIBRARIES it_api fxlogger skv_common)
-
 set(SKV_CLIENT_MPI_SOURCES ${SKV_CLIENT_SOURCES})
 set(SKV_CLIENT_MPI_LINK_LIBRARIES ${SKV_CLIENT_LINK_LIBRARIES})
 
@@ -71,8 +70,8 @@ set(SKVSERVER_SOURCES
   server/skv_server_command_event_buffer.cpp
 )
 set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES}
-  ${MPI_CXX_LIBRARIES}  ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES} ${ROCKSDB_LIBRARIES}
-  skv_common it_api fxlogger)
+  ${MPI_CXX_LIBRARIES}  ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES}
+  ${ROCKSDB_LIBRARIES} skv_common it_api fxlogger)
 
 #------------------------------------------------------------------------------
 # libraries
