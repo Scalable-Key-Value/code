@@ -15,6 +15,7 @@
 #include <skv/common/skv_types.hpp>
 #include <skv/common/skv_client_server_headers.hpp>
 #include <skv/server/skv_server_types.hpp>
+#include <skv/server/skv_server_epstate_map.hpp>
 #include <skv/server/skv_server_network_event_manager.hpp>
 
 #include <skv/server/skv_server_command_event_buffer.hpp>
@@ -58,7 +59,14 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
   skv_status_t status = SKV_SUCCESS;
 
   skv_server_command_event_buffer_t *EventBuffer = mBufferList.GetAndFreezeReadyBuffer();
+  if( ! EventBuffer )
+  {
+    *aEventCount = 0;
+    return SKV_SUCCESS;
+  }
   *aEventCount = EventBuffer->GetEventCount();
+
+  // todo: rebalance the priorities, the caller needs to make sure to have enough space for all elements of one full command-event-buffer
   StrongAssertLogLine( *aEventCount <= aMaxEventCount )
     << "Too Many Events. Command_event_source is only capable of delivering the whole accumulated buffer. "
     << " available=" << *aEventCount
@@ -86,7 +94,7 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
     static int maxEvDist = 0;
     maxEvDist = std::max( maxEvDist, mBufferList.GetBufferDistance() );
 
-    if( !printed && ( gServerCmdMin != gServerCmdMax ) && (mBufferList.mFtcCounter % 0xFFFF < 32) )
+    if( !printed && ( gServerCmdMin != gServerCmdMax ) && (mBufferList.mFtcCounter % 0x3FFFF < 32) )
       {
       BegLogLine( 1 )
         << "Event collection avg per call: " << gServerCmdAvg
@@ -118,13 +126,11 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
 void* skv_server_command_event_source_t::CommandFetchThread( void *aArgs )
 {
   skv_server_command_thread_args_t *args = (skv_server_command_thread_args_t*)aArgs;
-  EPStateMap_T::iterator iter;
 
   skv_server_command_event_buffer_list_t *buffers = args->mBufferList;
   skv_status_t status = SKV_SUCCESS;
 
-  skv_server_command_event_source_t *CES = args->mEventSource;
-  iter = CES->GetEventManager()->begin();
+  skv_server_epstate_map_t *CEPM = args->mEventSource->GetEventManager();
 
   BegLogLine( SKV_SERVER_COMMAND_POLLING_LOG )
     << "CommandFetchThread running..."
@@ -132,23 +138,9 @@ void* skv_server_command_event_source_t::CommandFetchThread( void *aArgs )
 
   while ( args->mKeepRunning )
   {
-    if( iter == CES->GetEventManager()->end() )
-    {
-      iter = CES->GetEventManager()->begin();
-//      // if there's nothing to do, then just block on a mutex instead of pulling endlessly...
-//      if ( iter == CES->GetEventManager()->end() )
-//        pthread_mutex_lock( &args->mMutex );
-    }
-
-    skv_server_ep_state_t *EPState = iter->second;
-
-    if(( iter != CES->GetEventManager()->end() ) &&
-        ( EPState->mEPState_status == SKV_SERVER_ENDPOINT_STATUS_ACTIVE ) )
-    {
-        buffers->FillCurrentEventBuffer( EPState );
-    }
-
-    iter++;
+    skv_server_ep_state_t *EPState = CEPM->GetNextEPStateAndFreezeForProcessing();
+    buffers->FillCurrentEventBuffer( EPState );
+    CEPM->UnfreezeAfterProcessing();
   }
   return NULL;
 }

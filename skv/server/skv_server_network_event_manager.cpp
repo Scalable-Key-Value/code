@@ -17,6 +17,7 @@
 #include <skv/common/skv_client_server_headers.hpp>
 #include <skv/server/skv_server_types.hpp>
 #include <skv/server/skv_server_cursor_manager_if.hpp>
+#include <skv/server/skv_server_epstate_map.hpp>
 #include <skv/server/skv_server_network_event_manager.hpp>
 
 
@@ -315,14 +316,16 @@ Init( int aPartitionSize,
  ***/
 skv_status_t
 skv_server_network_event_manager_if_t::
-FinalizeEPState(  EPStateMap_T*         aEPStateMap,
-                  it_ep_handle_t        aEP,
+FinalizeEPState( skv_server_epstate_map_t *aEPStateMap,
+                 it_ep_handle_t aEP,
                  skv_server_ep_state_t* aStateForEP )
 {
   AssertLogLine( aStateForEP != NULL )
     << "skv_server_t::FinalizeEPState(): ERROR: "
     << " aEP: " << (void *) aEP
     << EndLogLine;
+
+  aStateForEP->Closing();
 
   skv_server_finalizable_associated_ep_state_list_t::iterator iter = aStateForEP->mAssociatedStateList->begin();
   skv_server_finalizable_associated_ep_state_list_t::iterator end  = aStateForEP->mAssociatedStateList->end();
@@ -358,7 +361,8 @@ FinalizeEPState(  EPStateMap_T*         aEPStateMap,
       << " )"
       << EndLogLine ;
 
-  free( aStateForEP );
+  bzero( aStateForEP, sizeof( skv_server_ep_state_t ) );
+  delete aStateForEP;
 
   it_ep_free( aEP );
 
@@ -377,7 +381,7 @@ FinalizeEPState(  EPStateMap_T*         aEPStateMap,
  ***/
 skv_status_t
 skv_server_network_event_manager_if_t::
-InitNewStateForEP( EPStateMap_T* aEPStateMap,
+InitNewStateForEP( skv_server_epstate_map_t* aEPStateMap,
                   skv_server_ep_state_t** aStateForEP )
 {
   it_ep_attributes_t         ep_attr;
@@ -423,7 +427,7 @@ InitNewStateForEP( EPStateMap_T* aEPStateMap,
     << " status: " << status
     << EndLogLine;
 
-  *aStateForEP = (skv_server_ep_state_t *) malloc( sizeof( skv_server_ep_state_t ) );
+  *aStateForEP = new skv_server_ep_state_t;
 
   BegLogLine(SKV_SERVER_NETWORK_EVENT_MANAGER_LOG)
     << "malloc *aStateForEP -> " << (void *) *aStateForEP
@@ -436,9 +440,9 @@ InitNewStateForEP( EPStateMap_T* aEPStateMap,
   (*aStateForEP)->Init( ep_hdl,
                         mPZ_Hdl );
 
-  int rc = aEPStateMap->insert( std::make_pair( ep_hdl, *aStateForEP ) ).second;
+  skv_status_t rc = aEPStateMap->insert( ep_hdl, *aStateForEP );
 
-  StrongAssertLogLine( rc == 1 )
+  StrongAssertLogLine( rc == SKV_SUCCESS )
     << "skv_server_t::InitNewStateForEP():: ERROR on insert to aEPStateMap"
     << EndLogLine;
 

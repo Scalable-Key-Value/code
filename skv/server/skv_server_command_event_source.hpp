@@ -26,7 +26,7 @@ struct skv_server_command_thread_args_t
 };
 
 class skv_server_command_event_source_t :
-    public skv_server_event_source_t<EPStateMap_T>
+    public skv_server_event_source_t<skv_server_epstate_map_t>
 {
   skv_server_command_event_buffer_list_t mBufferList;
   pthread_t mPollThread;

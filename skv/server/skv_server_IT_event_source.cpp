@@ -15,6 +15,7 @@
 #include <skv/common/skv_types.hpp>
 #include <skv/common/skv_client_server_headers.hpp>
 #include <skv/server/skv_server_types.hpp>
+#include <skv/server/skv_server_epstate_map.hpp>
 #include <skv/server/skv_server_network_event_manager.hpp>
 
 #include <skv/server/skv_server_event_source.hpp>

@@ -130,12 +130,12 @@ public:
   }
 
   skv_status_t
-  FinalizeEPState( EPStateMap_T* aEPStateMap,
+  FinalizeEPState( skv_server_epstate_map_t *aEPStateMap,
                    it_ep_handle_t aEP,
                    skv_server_ep_state_t* aStateForEP );
 
   skv_status_t
-  InitNewStateForEP( EPStateMap_T* aEPStateMap,
+  InitNewStateForEP( skv_server_epstate_map_t *aEPStateMap,
                      skv_server_ep_state_t** aStateForEP );
 
 };
