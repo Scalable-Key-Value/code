@@ -2135,20 +2135,20 @@ iWARPEM_DataReceiverThread( void* args )
 
 static void validate_hdr(const iWARPEM_Message_Hdr_t& Hdr, size_t expected_length)
 {
-  AssertLogLine(Hdr.mMsg_Type >= iWARPEM_DTO_SEND_TYPE && Hdr.mMsg_Type <= iWARPEM_DISCONNECT_RESP_TYPE)
-    << "Hdr.mMsg_Type=" << Hdr.mMsg_Type
-    << " is out of range. Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+  AssertLogLine(ntohl( Hdr.mMsg_Type) >= iWARPEM_DTO_SEND_TYPE && ntohl( Hdr.mMsg_Type ) <= iWARPEM_DISCONNECT_RESP_TYPE)
+    << "Hdr.mMsg_Type=" << ntohl( Hdr.mMsg_Type )
+    << " is out of range. Hdr.mTotalDataLen=" << ntohl( Hdr.mTotalDataLen )
     << " expected_length=" << expected_length
     << EndLogLine ;
-  AssertLogLine(Hdr.mTotalDataLen == expected_length)
-    << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
+  AssertLogLine( ntohl( Hdr.mTotalDataLen ) == expected_length)
+    << "Hdr.mTotalDataLen=" << ntohl( Hdr.mTotalDataLen )
     << " disagrees with expected_length=" << expected_length
-    << " Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+    << " Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string( ntohl( Hdr.mMsg_Type ) )
     << EndLogLine ;
 #ifdef WITH_CNK_ROUTER
   AssertLogLine(expected_length < IT_API_MULTIPLEX_SOCKET_BUFFER_SIZE)
-    << "Hdr.mTotalDataLen=" << Hdr.mTotalDataLen
-    << " will overflow buffer in forwarder. Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string(Hdr.mMsg_Type)
+    << "Hdr.mTotalDataLen=" << ntohl( Hdr.mTotalDataLen )
+    << " will overflow buffer in forwarder. Hdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string( ntohl( Hdr.mMsg_Type ))
     << EndLogLine ;
 #endif
 }
@@ -2444,7 +2444,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             istatus = SendVec( EP,
                                iov,
                                SendWR->num_segments+1,
-                               SendWR->mMessageHdr.mTotalDataLen + sizeof(SendWR->mMessageHdr),
+                               ntohl( SendWR->mMessageHdr.mTotalDataLen ) + sizeof(SendWR->mMessageHdr),
                                & wlen );
             if( istatus != IWARPEM_SUCCESS )
               {
@@ -2457,11 +2457,11 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
               gActiveSocketsQueue.push( EP );
 #endif
-            StrongAssertLogLine(wlen == SendWR->mMessageHdr.mTotalDataLen + sizeof(SendWR->mMessageHdr))
+            StrongAssertLogLine(wlen == ntohl( SendWR->mMessageHdr.mTotalDataLen ) + sizeof(SendWR->mMessageHdr))
               << "Wrong length write, wlen=" << wlen
-              << " SendWR->mMessageHdr.mTotalDataLen=" << SendWR->mMessageHdr.mTotalDataLen
+              << " SendWR->mMessageHdr.mTotalDataLen=" << ntohl( SendWR->mMessageHdr.mTotalDataLen )
               << " sizeof(SendWR->mMessageHdr)=" << sizeof(SendWR->mMessageHdr)
-              << " SendWR->mMessageHdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string(SendWR->mMessageHdr.mMsg_Type)
+              << " SendWR->mMessageHdr.mMsg_Type=" << iWARPEM_Msg_Type_to_string( SendWR->mMessageHdr.mMsg_Type )
               << EndLogLine ;
 #if IT_API_CHECKSUM
             StrongAssertLogLine( Checksum == SendWR->mMessageHdr.mChecksum )
