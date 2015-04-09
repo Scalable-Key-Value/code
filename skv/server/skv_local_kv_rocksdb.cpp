@@ -75,14 +75,40 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
   while( Master->KeepProcessing() )
   {
     skv_status_t status;
+
+    // Prioritized queue needs to be processed first (this mostly does the important post-processing and buffer release)
     skv_local_kv_request_queue_t *nextQueue = DedicatedQueue;
     skv_local_kv_request_t *nextRequest;
 
+    // if we had to break out of processing a request, we need to continue that one first (if dedicated queue is empty)
+    skv_local_kv_request_t *stalledRequest = NULL;
+
     // switch to global queue if dedicated request queue is empty
     if( nextQueue->IsEmpty() )
+      {
       nextQueue = RequestQueue;
+      stalledRequest = aWorker->GetStalledRequest();
+      }
+    else
+      BegLogLine(SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG )
+        << "Dedicated Queue processing."
+        << EndLogLine;
 
-    nextRequest = nextQueue->GetRequest();
+
+    if( stalledRequest )
+    {
+      BegLogLine( SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG )
+        << "Continuing stalled request. 0x" << (void*)stalledRequest
+        << " space: " << aWorker->GetDataBuffer()->MaxSizeFit()
+        << EndLogLine;
+      nextRequest = stalledRequest;
+      aWorker->ResetStalledRequest();
+    }
+    else
+    {
+      nextRequest = nextQueue->GetRequest();
+    }
+
     if( nextRequest )
     {
       BegLogLine( SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG )
@@ -103,7 +129,7 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
           status = aWorker->PerformClose( nextRequest );
           break;
         case SKV_LOCAL_KV_REQUEST_TYPE_GET_DISTRIBUTION:
-          StrongAssertLogLine( 1 )
+          StrongAssertLogLine( 0 )
             << "skv_local_kv_rocksdb:AsyncProcessing(): ERROR, unexpected Request type: " << skv_local_kv_request_type_to_string( nextRequest->mType )
             << EndLogLine;
           break;
@@ -140,7 +166,8 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
             << "skv_local_kv_rocksdb:AsyncProcessing(): ERROR, unknown/unexpected Request type: " << (int)nextRequest->mType
             << EndLogLine;
       }
-      nextQueue->AckRequest( nextRequest );
+      if( status != SKV_ERRNO_NOT_DONE )
+        nextQueue->AckRequest( nextRequest );
     }
   }
 
@@ -877,7 +904,7 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
   size_t TotalSize = 0;
   skv_lmr_triplet_t StoredValueRep;
 
-  BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
+  BegLogLine(SKV_LOCAL_KV_BACKEND_LOG )
     << "skv_local_kv_rocksdb:: retrieving: " << aReq->mRequest.mRetrieve.mValueSize
     << EndLogLine;
 
@@ -890,6 +917,17 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
   skv_rdma_string *value;
   value = new skv_rdma_string();
   size_t expSize = aReq->mRequest.mRetrieve.mValueSize;
+
+  size_t expAllocReq = SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE > expSize ? SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE : expSize + (expSize>>2);
+  if( ! mDataBuffer->ReqWillFit( expAllocReq ) )
+    {
+    BegLogLine( 1 )
+      << "RDMA-Buffer space shortage: req=" << expSize
+      << " left=" << mDataBuffer->MaxSizeFit()
+      << EndLogLine;
+    mStalledCommand = aReq;
+    return SKV_ERRNO_NOT_DONE;
+    }
 
   rocksdb::Status rs;
   rs = mDBAccess->GetData( *key, value, expSize );

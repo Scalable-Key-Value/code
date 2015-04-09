@@ -94,7 +94,7 @@ public:
     mPtr = mBase + ( mPtr + mSize - aSub.mPtr ) % mSize;
     return (*this);
   }
-  intptr_t diff( const skv_ringbuffer_ptr &a )
+  intptr_t diff( const skv_ringbuffer_ptr &a ) const
   {
     if( a.mWrapped != mWrapped )
       return ( mPtr + mSize - a.mPtr );
@@ -108,39 +108,39 @@ public:
     mWrapped = in.mWrapped;
     return (*this);
   }
-  bool operator==( const skv_ringbuffer_ptr &a )
+  bool operator==( const skv_ringbuffer_ptr &a ) const
   {
     return ( a.mPtr == mPtr) && ( a.mWrapped == mWrapped );
   }
-  bool operator<( const skv_ringbuffer_ptr &other )
+  bool operator<( const skv_ringbuffer_ptr &other ) const
   {
     // if wrap-level is equal, then operator evaluates to true if a<b
     // if wrap-level is different, then operator evaluates to false if a<b (i.e. true if a>=b)
     return ( ( mPtr < other.mPtr ) == ( mWrapped == other.mWrapped ) );
   }
-  bool operator>( const skv_ringbuffer_ptr &other )
+  bool operator>( const skv_ringbuffer_ptr &other ) const
   {
     return ( ( mPtr > other.mPtr ) == ( mWrapped == other.mWrapped ) );
   }
-  bool operator>=( const skv_ringbuffer_ptr &other )
+  bool operator>=( const skv_ringbuffer_ptr &other ) const
   {
     return ( ( mPtr >= other.mPtr ) == ( mWrapped == other.mWrapped ) );
   }
-  bool operator<=( const skv_ringbuffer_ptr &other )
+  bool operator<=( const skv_ringbuffer_ptr &other ) const
   {
     return ( ( mPtr <= other.mPtr ) == ( mWrapped == other.mWrapped ) );
   }
 
   // helper functions
-  inline char* GetPtr()
+  inline char* GetPtr() const
   {
     return mPtr;
   }
-  inline size_t GetOffset()
+  inline size_t GetOffset() const
   {
     return (size_t)(mPtr - mBase);
   }
-  inline size_t GetSpace()
+  inline size_t GetSpace() const
   {
     return (size_t)(mSize - GetOffset());
   }
@@ -149,7 +149,7 @@ public:
     mPtr = mBase;
     mWrapped = !mWrapped;
   }
-  inline bool GetWrapState()
+  inline bool GetWrapState() const
   {
     return mWrapped;
   }
@@ -260,23 +260,35 @@ public:
 
     return SKV_SUCCESS;
   }
-  inline size_t GetSize()
+  inline size_t GetSize() const
   {
     return mLMR.GetLen()-mHeadSpace;
   }
-  inline size_t GetAllocSize()
+  inline size_t GetAllocSize() const
   {
     return mChunkSize;
+  }
+  inline uintptr_t MaxSizeFit( ) const
+  {
+    uintptr_t diff = mLastBusy.GetOffset() - mFirstFree.GetOffset();
+    if( diff > 0 )
+      return diff;
+    else
+      return std::max( mFirstFree.GetSpace(), mLastBusy.GetOffset() );
+  }
+  inline bool ReqWillFit( const size_t aSize ) const
+  {
+    return ((MaxSizeFit() > (aSize + mHeadSpace) ) );
   }
   inline it_lmr_handle_t GetLMR()
   {
     return mLMR.GetLMRHandle();
   }
-  inline bool IsEmpty()
+  inline bool IsEmpty() const
   {
     return mLastBusy == mFirstFree;
   }
-  inline bool IsFull()
+  inline bool IsFull() const
   {
     return ( mLastBusy > mFirstFree );
   }
@@ -320,6 +332,8 @@ public:
         << " LB.ptr=" << (uintptr_t)mLastBusy.GetPtr()
         << " NF.ptr=" << (uintptr_t)newFirst.GetPtr()
         << " size=" << aSize
+        << " fit=" << ReqWillFit( aSize )
+        << " spc=" << MaxSizeFit()
         << EndLogLine;
       return SKV_ERRNO_NO_BUFFER_AVAILABLE;
     }
@@ -329,7 +343,8 @@ public:
     lmrState->mSize = aSize;
     lmrState->mState = SKV_LMR_STATE_BUSY;
 
-    BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
+    BegLogLine( 0 ) << "PING [ " << mFirstFree.GetOffset() << " : " << mLastBusy.GetOffset() << " ]" << EndLogLine;
+    BegLogLine(SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
       << " AcquireDataArea stats: lmr=" << (uintptr_t)aLMR->GetAddr()
       << " FF.ptr=" << (uintptr_t)mFirstFree.GetPtr()
       << " FF.Offs=" << mFirstFree.GetOffset()
@@ -389,13 +404,14 @@ public:
       released = (( lmrToRelease->mState == SKV_LMR_STATE_TORELEASE ));
       if( released )
       {
-        BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
+      BegLogLine( 0 ) << "PONG [ " << mFirstFree.GetOffset() << " : " << mLastBusy.GetOffset() << " ]" << EndLogLine;
+        BegLogLine(SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
           << "ReleaseDataArea: oldEntry[" << (uintptr_t)lmrToRelease << ":" << lmrToRelease->mSize << "]"
           << " NIL[" << (uintptr_t)mLastBusy.GetPtr() << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
           << " mod_align:" << (lmrToRelease->mSize + mHeadSpace)%mAlignment
           << EndLogLine;
         mLastBusy = mLastBusy + (lmrToRelease->mSize + mHeadSpace);
-        BegLogLine( SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
+        BegLogLine(SKV_LOCAL_KV_RDMA_DATA_BUFFER_LOG )
           << "ReleaseDataArea: inc:" << (lmrToRelease->mSize + mHeadSpace) << "; newLast[" << (uintptr_t)mLastBusy.GetPtr()+mHeadSpace << ":" << ((skv_lmr_wait_queue_t*)mLastBusy.GetPtr())->mSize << "]"
           << EndLogLine;
         lmrToRelease->mState = SKV_LMR_STATE_FREE;

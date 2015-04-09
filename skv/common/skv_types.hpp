@@ -387,7 +387,7 @@ struct skv_lmr_triplet_t
     mLMRTriplet.addr.abs = aLMR.mLMRTriplet.addr.abs;
   }
   it_length_t
-  GetLen()
+  GetLen() const
   {
     return mLMRTriplet.length;
   }
@@ -409,7 +409,7 @@ struct skv_lmr_triplet_t
   }
 
   uintptr_t
-  GetAddr()
+  GetAddr() const
   {
     return (uintptr_t) mLMRTriplet.addr.abs;
   }

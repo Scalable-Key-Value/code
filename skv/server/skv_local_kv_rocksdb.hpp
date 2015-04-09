@@ -28,7 +28,7 @@
 #define SKV_LOCAL_KV_MAX_VALUE_SIZE ( 4 * 1048576ul )
 #define SKV_LOCAL_KV_RDMA_BUFFER_SIZE ( size_t(SKV_LOCAL_KV_MAX_VALUE_SIZE * SKV_LOCAL_KV_MAX_OUTSTANDING_REQUESTS) )
 
-#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 4 )
+#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 10 )
 
 #include <thread>
 #include <rocksdb/db.h>
@@ -64,9 +64,10 @@ class skv_local_kv_rocksdb_worker_t {
   skv_local_kv_rdma_data_buffer_t *mDataBuffer;
   skv_local_kv_event_queue_t *mEventQueue;
   skv_local_kv_request_queue_t *mRequestQueue;
+  skv_local_kv_request_t *mStalledCommand;
 
 public:
-  skv_local_kv_rocksdb_worker_t() {};
+  skv_local_kv_rocksdb_worker_t() : mStalledCommand( NULL ) {};
   ~skv_local_kv_rocksdb_worker_t() {};
 
   skv_status_t Init( skv_local_kv_rocksdb *aBackEnd, bool aThreaded = false );
@@ -95,6 +96,14 @@ public:
   skv_local_kv_request_queue_t* GetDedicatedQueue()
   {
     return &mDedicatedQueue;
+  }
+  skv_local_kv_request_t* GetStalledRequest()
+  {
+    return mStalledCommand;
+  }
+  void ResetStalledRequest( )
+  {
+    mStalledCommand = NULL;
   }
   skv_local_kv_rdma_data_buffer_t* GetDataBuffer()
   {
