@@ -121,9 +121,9 @@ public:
 
             OpenReq->EndianConvert() ;
 
-            char*                  PDSName = OpenReq->mPDSName;
-            skv_pds_priv_t         Privs   = ntohl( OpenReq->mPrivs );
-            skv_cmd_open_flags_t   Flags   = ntohl( OpenReq->mFlags );
+            char*                PDSName = OpenReq->mPDSName;
+            skv_pds_priv_t       Privs   = (skv_pds_priv_t)ntohl( OpenReq->mPrivs );
+            skv_cmd_open_flags_t Flags   = (skv_cmd_open_flags_t)ntohl( OpenReq->mFlags );
 
             skv_pds_id_t PDSId;
 
