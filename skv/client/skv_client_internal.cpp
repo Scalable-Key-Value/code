@@ -842,7 +842,9 @@ iClose( skv_pds_id_t*         aPDSId,
     << " aPDSId != NULL "
     << EndLogLine;
 
-  int NodeId = aPDSId->mOwnerNodeId;
+  // pdsid is stored in network byte order since it's used only at the server
+  // however, we need to get the node-id out of it here....
+  int NodeId = ntohl( aPDSId->mOwnerNodeId );
   /*****************************************/
 
   // Starting a new command, get a command control block
@@ -921,7 +923,9 @@ iPDScntl( skv_pdscntl_cmd_t     aCmd,
     << " aPDSAttr != NULL "
     << EndLogLine;
 
-  int NodeId = aPDSAttr->mPDSId.mOwnerNodeId;
+  // pdsid is stored in network byte order since it's used only at the server
+  // however, we need to get the node-id out of it here....
+  int NodeId = ntohl( aPDSAttr->mPDSId.mOwnerNodeId );
   /*****************************************/
 
   // Starting a new command, get a command control block
