@@ -71,10 +71,10 @@ extern "C"
 
 // Priority settings for event sources in SKV server
 // value determines interval of loops between check for new events  (lower is higher prio, not linear!)
-#define SKV_SERVER_COMMAND_SRC_PRIORITY    1
+#define SKV_SERVER_COMMAND_SRC_PRIORITY    2
 #define SKV_SERVER_LOCAL_KV_SRC_PRIORITY   1
-#define SKV_SERVER_NETWORK_SRC_PRIORITY    4
-#define SKV_SERVER_INTERNAL_SRC_PRIORITY   5
+#define SKV_SERVER_NETWORK_SRC_PRIORITY    5
+#define SKV_SERVER_INTERNAL_SRC_PRIORITY   4
 
 #define SKV_SERVER_AEVD_EVENTS_MAX_COUNT            ( 128 )
 #define SKV_SERVER_EVENTS_MAX_COUNT                 ( 128 )
