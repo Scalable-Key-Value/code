@@ -22,31 +22,38 @@
 
 #define SKV_LOCAL_KV_MAX_REQUESTS ( 1048576 )
 
+#include <algorithm>
+
 class skv_local_kv_request_queue_t {
-  skv_local_kv_request_t *mRequestPool;
   skv_array_stack_t< skv_local_kv_request_t*, SKV_LOCAL_KV_MAX_REQUESTS > mFreeRequests;
   skv_array_queue_t< skv_local_kv_request_t*, SKV_LOCAL_KV_MAX_REQUESTS > mActiveRequests;
+  skv_local_kv_request_t *mRequestPool;
+  size_t mLenght;
   skv_mutex_t mQueueSerializer;
   volatile int mFreeSlots;
 
 public:
-  skv_local_kv_request_queue_t() : mFreeSlots( 0 )
+  skv_local_kv_request_queue_t( const size_t aSize = SKV_LOCAL_KV_MAX_REQUESTS ) : mFreeSlots( 0 ), mLenght( std::min( (size_t)aSize, (size_t)SKV_LOCAL_KV_MAX_REQUESTS ) )
   {
-    mRequestPool = new skv_local_kv_request_t[ SKV_LOCAL_KV_MAX_REQUESTS ];
+    mRequestPool = NULL;
   }
   ~skv_local_kv_request_queue_t()
   {
-    delete mRequestPool;
+    if( mRequestPool != NULL )
+      delete mRequestPool;
   }
 
   skv_status_t Init()
   {
-    for( int i=0; i<SKV_LOCAL_KV_MAX_REQUESTS; i++ )
+    if( mRequestPool == NULL )
+      mRequestPool = new skv_local_kv_request_t[ mLenght ];
+
+    for( int i=0; i < mLenght; i++ )
     {
       mRequestPool[ i ].mType = SKV_LOCAL_KV_REQUEST_TYPE_UNKNOWN;
       mFreeRequests.push( &(mRequestPool[ i ]) );
     }
-    mFreeSlots = SKV_LOCAL_KV_MAX_REQUESTS;
+    mFreeSlots = mLenght;
 
     return SKV_SUCCESS;
   }
@@ -58,7 +65,7 @@ public:
 
   skv_local_kv_request_t* AcquireRequestEntry()
   {
-    if( mFreeRequests.empty() || (mActiveRequests.size() > SKV_LOCAL_KV_MAX_REQUESTS-2) )
+    if( mFreeRequests.empty() || (mActiveRequests.size() > mLenght-2) )
       return NULL;
 
     mQueueSerializer.lock();

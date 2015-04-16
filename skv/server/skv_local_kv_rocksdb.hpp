@@ -68,7 +68,11 @@ class skv_local_kv_rocksdb_worker_t {
   uint64_t mThreadRank;
 
 public:
-  skv_local_kv_rocksdb_worker_t() : mStalledCommand( NULL ) {};
+  skv_local_kv_rocksdb_worker_t() 
+    : mStalledCommand( NULL ),
+      mRequestQueue( SKV_LOCAL_KV_MAX_REQUESTS / SKV_LOCAL_KV_WORKER_POOL_SIZE ),
+      mDedicatedQueue( SKV_LOCAL_KV_MAX_REQUESTS / SKV_LOCAL_KV_WORKER_POOL_SIZE )
+    {};
   ~skv_local_kv_rocksdb_worker_t() {};
 
   skv_status_t Init( uint64_t aThreadRank, skv_local_kv_rocksdb *aBackEnd, bool aThreaded = false );
