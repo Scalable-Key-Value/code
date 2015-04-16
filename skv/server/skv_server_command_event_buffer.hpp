@@ -28,8 +28,8 @@
 #define SKV_SERVER_COMMAND_POLLING_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#define SKV_SERVER_COMMAND_EVENT_BUFFER_COUNT 2048
-#define POLL_PER_EP SKV_MAX_COMMANDS_PER_EP
+#define SKV_SERVER_COMMAND_EVENT_BUFFER_COUNT 1024
+#define POLL_PER_EP ( 64 )
 
 /*
  * class for command event buffer for consistent event extraction out of endpoints
