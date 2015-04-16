@@ -41,7 +41,7 @@ static int state_has_changed = 1;
 #endif
 
 #ifndef SKV_SERVER_COMMAND_STATISTICS
-#define SKV_SERVER_COMMAND_STATISTICS
+//#define SKV_SERVER_COMMAND_STATISTICS
 #endif
 
 #ifdef SKV_SERVER_COMMAND_STATISTICS

@@ -1897,7 +1897,7 @@ struct skv_cmd_retrieve_resp_t
 
 class skv_server_internal_event_manager_if_t
 {
-  typedef STL_QUEUE( skv_server_event_t )  EventQueue_T;
+  typedef STL_QUEUE( skv_server_event_t* )  EventQueue_T;
   EventQueue_T* mQueue;
 
 public:
@@ -1923,8 +1923,10 @@ public:
   skv_status_t
   Enqueue( skv_server_event_t* aEvent )
   {
-    mQueue->push( *aEvent );
-    BegLogLine( 1 )
+    skv_server_event_t *newEvent = new skv_server_event_t;
+    memcpy( newEvent, aEvent, sizeof( skv_server_event_t) );
+    mQueue->push( newEvent );
+    BegLogLine( SKV_SERVER_PENDING_EVENTS_LOG )
       << "skv_server_internal_event_manager_if_t::Enqueue(): "
       << " Event.ccb: " << (void*)aEvent->mEventMetadata.mCommandFinder.mEPStatePtr
       << EndLogLine;
@@ -1945,17 +1947,17 @@ public:
   }
 
   skv_status_t
-  Dequeue( skv_server_event_t* aEvent )
+  Dequeue( skv_server_event_t** aEvent )
   {
     if( GetEventQueueSize() > 0 )
     {
       *aEvent = mQueue->front();
       mQueue->pop();
 
-      BegLogLine( 1 )
+      BegLogLine( SKV_SERVER_PENDING_EVENTS_LOG )
         << "skv_server_user_event_manager_if_t::Dequeue():: "
         << " Popped one"
-        << " Event.ccb: " << (void*)aEvent->mEventMetadata.mCommandFinder.mEPStatePtr
+        << " Event.ccb: " << (void*)(*aEvent)->mEventMetadata.mCommandFinder.mEPStatePtr
         << EndLogLine;
 
       return SKV_SUCCESS;

@@ -22,10 +22,15 @@ public:
   virtual skv_status_t
   GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
   {
-    skv_status_t status = mEventManager->Dequeue( aEvents );
+    skv_server_event_t *newEvent;
+    skv_status_t status = mEventManager->Dequeue( &newEvent );
 
     if( status == SKV_SUCCESS )
+    {
+      memcpy( aEvents, newEvent, sizeof( skv_server_event_t ) );
       *aEventCount = 1;
+      delete newEvent;
+    }
     else
       *aEventCount = 0;
 
