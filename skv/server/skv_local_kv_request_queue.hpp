@@ -20,18 +20,24 @@
 #define SKV_LOCAL_KV_QUEUES_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#define SKV_LOCAL_KV_MAX_REQUESTS (1048576 )
+#define SKV_LOCAL_KV_MAX_REQUESTS ( 1048576 )
 
 class skv_local_kv_request_queue_t {
-  skv_local_kv_request_t mRequestPool[ SKV_LOCAL_KV_MAX_REQUESTS ];
+  skv_local_kv_request_t *mRequestPool;
   skv_array_stack_t< skv_local_kv_request_t*, SKV_LOCAL_KV_MAX_REQUESTS > mFreeRequests;
   skv_array_queue_t< skv_local_kv_request_t*, SKV_LOCAL_KV_MAX_REQUESTS > mActiveRequests;
   skv_mutex_t mQueueSerializer;
   volatile int mFreeSlots;
 
 public:
-  skv_local_kv_request_queue_t() : mFreeSlots( 0 ) {}
-  ~skv_local_kv_request_queue_t() {}
+  skv_local_kv_request_queue_t() : mFreeSlots( 0 )
+  {
+    mRequestPool = new skv_local_kv_request_t[ SKV_LOCAL_KV_MAX_REQUESTS ];
+  }
+  ~skv_local_kv_request_queue_t()
+  {
+    delete mRequestPool;
+  }
 
   skv_status_t Init()
   {

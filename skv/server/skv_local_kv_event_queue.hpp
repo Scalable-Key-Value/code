@@ -23,14 +23,20 @@
 #define SKV_LOCAL_KV_MAX_EVENTS ( 1048576 )
 
 class skv_local_kv_event_queue_t {
-  skv_local_kv_event_t mEventPool[ SKV_LOCAL_KV_MAX_EVENTS ];
+  skv_local_kv_event_t *mEventPool;
   skv_array_stack_t< skv_local_kv_event_t*, SKV_LOCAL_KV_MAX_EVENTS > mFreeEvents;
   skv_array_queue_t< skv_local_kv_event_t*, SKV_LOCAL_KV_MAX_EVENTS > mActiveEventQueue;
   skv_mutex_t mQueueSerializer;
 
 public:
-  skv_local_kv_event_queue_t() {}
-  ~skv_local_kv_event_queue_t() {}
+  skv_local_kv_event_queue_t()
+  {
+    mEventPool = new skv_local_kv_event_t[ SKV_LOCAL_KV_MAX_EVENTS ];
+  }
+  ~skv_local_kv_event_queue_t()
+  {
+    delete mEventPool;
+  }
 
   skv_status_t Init() {
     for( int i=0; i<SKV_LOCAL_KV_MAX_EVENTS; i++ )
