@@ -2616,7 +2616,7 @@ int on_disconnect(struct rdma_cm_id *id)
   // make sure we flush the active FlushQueue to remove conn from the active list
   AckAllConnections();
 
-  BegLogLine( 1 )
+  BegLogLine( 0 )
     << "Flush stats: "
     << " AckConn: " << gAckConnectionCount
     << " FlushConn: " << gFlushConnectionCount

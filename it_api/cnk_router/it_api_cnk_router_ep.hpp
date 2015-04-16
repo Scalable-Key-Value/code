@@ -23,7 +23,7 @@
 #include <cnk_router/it_api_cnk_router_types.hpp>
 #include <cnk_router/it_api_cnk_router_ep_buffer.hpp>
 
-#define MULTIPLEX_STATISTICS
+//#define MULTIPLEX_STATISTICS
 
 #define ALLOW_COPY ( true )
 #define CREATE_SEND_BUFFER ( false )
