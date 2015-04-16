@@ -18,8 +18,6 @@
 
 #include <FxLogger.hpp>
 
-#define SKV_MAX_ARRAY_QUEUE_SIZE ( 1048576 )
-
 template<class T, size_t SKV_ARRAY_QUEUE_SIZE>
 class skv_array_queue_t
 {
@@ -32,10 +30,6 @@ public:
   skv_array_queue_t()
   {
     len = 0;
-    AssertLogLine( SKV_ARRAY_QUEUE_SIZE < SKV_MAX_ARRAY_QUEUE_SIZE )
-      << "skv_array_queue_t(): requested length exceeds limit of " << SKV_MAX_ARRAY_QUEUE_SIZE
-      << EndLogLine;
-
     Memory = new T[SKV_ARRAY_QUEUE_SIZE + 1];
     head = 0;
     tail = 0;
