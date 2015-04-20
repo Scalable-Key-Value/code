@@ -136,10 +136,23 @@ public:
   }
 
 private:
+  inline skv_server_ccb_t* RetrieveCCB( skv_local_kv_cookie_t *aCookie )
+  {
+    skv_server_ccb_t *retval = NULL;
+    skv_server_ep_state_t *EP = aCookie->GetEPState();
+    if( EP && ( EP->mEPState_status == SKV_SERVER_ENDPOINT_STATUS_ACTIVE ) )
+      retval = EP->GetCommandForOrdinal( aCookie->GetOrdinal() );
+
+    return retval;
+  }
+
   inline skv_status_t InitKVEvent( skv_local_kv_cookie_t *aCookie,
                                    skv_status_t aRC )
   {
-    skv_server_ccb_t *ccb = aCookie->GetEPState()->GetCommandForOrdinal( aCookie->GetOrdinal() );
+    skv_server_ccb_t *ccb = RetrieveCCB( aCookie );
+    if( !ccb )
+      return SKV_ERRNO_CONN_FAILED;
+
     ccb->mLocalKVrc = aRC;
 
     return mEventQueue->QueueEvent( aCookie );
@@ -148,7 +161,10 @@ private:
                                    skv_pds_id_t aPDSId,
                                    skv_status_t aRC )
   {
-    skv_server_ccb_t *ccb = aCookie->GetEPState()->GetCommandForOrdinal( aCookie->GetOrdinal() );
+    skv_server_ccb_t *ccb = RetrieveCCB( aCookie );
+    if( !ccb )
+      return SKV_ERRNO_CONN_FAILED;
+
     ccb->mLocalKVData.mPDSOpen.mPDSId = aPDSId;
     ccb->mLocalKVrc = aRC;
 
@@ -159,7 +175,10 @@ private:
                                    skv_pds_attr_t *aPDSAttr,
                                    skv_status_t aRC )
   {
-    skv_server_ccb_t *ccb = aCookie->GetEPState()->GetCommandForOrdinal( aCookie->GetOrdinal() );
+    skv_server_ccb_t *ccb = RetrieveCCB( aCookie );
+    if( !ccb )
+      return SKV_ERRNO_CONN_FAILED;
+
     ccb->mLocalKVData.mPDSStat.mPDSAttr = *aPDSAttr;
     ccb->mLocalKVData.mPDSStat.mCntlCmd = aCntlCmd;
     ccb->mLocalKVrc = aRC;
@@ -170,7 +189,10 @@ private:
                                    skv_distribution_t *aDist,
                                    skv_status_t aRC )
   {
-    skv_server_ccb_t *ccb = aCookie->GetEPState()->GetCommandForOrdinal( aCookie->GetOrdinal() );
+    skv_server_ccb_t *ccb = RetrieveCCB( aCookie );
+    if( !ccb )
+      return SKV_ERRNO_CONN_FAILED;
+
     ccb->mLocalKVData.mDistribution.mDist = aDist;
     ccb->mLocalKVrc = aRC;
 
@@ -180,7 +202,10 @@ private:
                                    skv_lmr_triplet_t *aValueRepInStore,
                                    skv_status_t aRC )
   {
-    skv_server_ccb_t *ccb = aCookie->GetEPState()->GetCommandForOrdinal( aCookie->GetOrdinal() );
+    skv_server_ccb_t *ccb = RetrieveCCB( aCookie );
+    if( !ccb )
+      return SKV_ERRNO_CONN_FAILED;
+
     ccb->mLocalKVData.mLookup.mValueRepInStore = *aValueRepInStore;
     ccb->mLocalKVrc = aRC;
 
@@ -193,7 +218,10 @@ private:
                                    int aKeysSizesSegsCount,
                                    skv_status_t aRC )
   {
-    skv_server_ccb_t *ccb = aCookie->GetEPState()->GetCommandForOrdinal( aCookie->GetOrdinal() );
+    skv_server_ccb_t *ccb = RetrieveCCB( aCookie );
+    if( !ccb )
+      return SKV_ERRNO_CONN_FAILED;
+
     ccb->mLocalKVData.mRetrieveNKeys.mKeysSizesSegs= aKeysSizesSegs;
     ccb->mLocalKVData.mRetrieveNKeys.mKeysCount = aKeysCount;
     ccb->mLocalKVData.mRetrieveNKeys.mKeysSizesSegsCount = aKeysSizesSegsCount;
@@ -208,7 +236,9 @@ private:
                                        int aValueSize,
                                        skv_status_t aRC )
   {
-    skv_server_ccb_t *ccb = aCookie->GetEPState()->GetCommandForOrdinal( aCookie->GetOrdinal() );
+    skv_server_ccb_t *ccb = RetrieveCCB( aCookie );
+    if( !ccb )
+      return SKV_ERRNO_CONN_FAILED;
 
     ccb->mLocalKVData.mRDMA.mValueRDMADest= *aValueRDMADest;
     ccb->mLocalKVData.mRDMA.mReqCtx = aReqCtx;

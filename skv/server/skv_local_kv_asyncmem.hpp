@@ -40,7 +40,7 @@ class skv_local_kv_asyncmem {
   std::thread *mReqProcessor;
   volatile bool mKeepProcessing;
 
-  skv_server_ccb_t* RetrieveCCB( skv_local_kv_cookie_t *aCookie )
+  inline skv_server_ccb_t* RetrieveCCB( skv_local_kv_cookie_t *aCookie )
   {
     skv_server_ccb_t *retval = NULL;
     skv_server_ep_state_t *EP = aCookie->GetEPState();
