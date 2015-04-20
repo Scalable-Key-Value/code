@@ -107,7 +107,8 @@ enum optype {
   k_wc_downlink ,
   k_wc_ack ,
   k_wc_downlink_complete ,
-  k_wc_downlink_complete_return
+  k_wc_downlink_complete_return,
+  k_wc_terminate
 };
 
 struct oprec_recv {
@@ -133,6 +134,9 @@ struct oprec_downlink_complete {
 struct oprec_downlink_complete_return {
 
 };
+struct oprec_link_terminate {
+
+};
 union oprec {
   struct oprec_recv ;
   struct oprec_send ;
@@ -140,6 +144,7 @@ union oprec {
   struct oprec_ack ;
   struct oprec_downlink_complete ;
   struct oprec_downlink_complete_return ;
+  struct oprec_link_terminate;
 };
 
 struct connection ;
@@ -2049,6 +2054,15 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
       *requireFlushUplinks = 1 ;
       break;
 
+    case k_wc_terminate:
+      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+        << " conn=0x" << (void*)conn
+        << " deferred memory disposal after termination."
+        << EndLogLine;
+      bzero( conn, sizeof( struct connection ) );
+      free( conn );
+      free( endiorec );
+      break;
     default:
       StrongAssertLogLine(0)
         << "Unknown optype=" << optype
@@ -2137,17 +2151,11 @@ static void do_cq_processing(struct ibv_wc& wc)
         << " k_wc_ack. TX complete. Nothing to do."
         << EndLogLine ;
       break ;
-    case k_wc_downlink_complete:
-      BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "k_wc_downlink_complete"
-        << EndLogLine ;
-      break ;
-    case k_wc_downlink_complete_return:
-      BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "k_wc_downlink_complete_return: SHOULD NOT HAPPEN ANY MORE..."
-        << EndLogLine ;
-      conn->issuedDownstreamFetch=0 ;
-      break ;
+    case k_wc_terminate:
+      BegLogLine( FXLOG_ITAPI_ROUTER | FXLOG_ITAPI_ROUTER_CLEANUP )
+        << "conn=0x" << (void*) conn
+        << " Termination event/processing"
+        << EndLogLine;
     default:
       StrongAssertLogLine(0)
         << "Unknown optype=" << optype
@@ -2269,7 +2277,13 @@ void TerminateConnection( struct termination_entry_t *aTerm )
   rdma_destroy_qp(id);
   FreeClientId( conn->clientId );
   ibv_dereg_mr(conn->mr) ;
-  free((void *)conn);
+
+  // Inject marker into sliq to prevent currently queued requests hitting freed memory
+  struct endiorec *term_marker = new struct endiorec;
+  term_marker->conn = conn;
+  term_marker->optype = k_wc_terminate;
+  cqSlihQueue.Enqueue( term_marker );
+
   rdma_destroy_id(id);
 }
 
