@@ -647,6 +647,7 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformInsert( skv_local_kv_request_
 
   switch( aReq->mRequest.mInsert.mCmdStatus )
   {
+    case SKV_ERRNO_RECORD_ALREADY_EXISTS:
     case SKV_SUCCESS:
       switch( aReq->mRequest.mInsert.mReqData->mFlags & (SKV_COMMAND_RIU_INSERT_EXPANDS_VALUE
           | SKV_COMMAND_RIU_INSERT_OVERWRITE_VALUE_ON_DUP

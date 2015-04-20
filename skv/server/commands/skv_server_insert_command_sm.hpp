@@ -448,10 +448,6 @@ public:
               << EndLogLine;
 
             skv_cmd_RIU_req_t *Req = (skv_cmd_RIU_req_t *) Command->GetSendBuff();
-            BegLogLine(  ( Command->mLocalKVrc == SKV_ERRNO_RECORD_ALREADY_EXISTS ) )
-              << " Houston, we have a problem... Repeated an insertion... "
-              << EndLogLine;
-
             status = insert_sequence( aLocalKV,
                                       aEPState,
                                       Command,
