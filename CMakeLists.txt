@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8 FATAL_ERROR)
 project(skv)
 
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/CMake
-  ${PROJECT_SOURCE_DIR}/CMake/common)
+  ${CMAKE_SOURCE_DIR}/CMake/common)
 include(GitExternal)
 
 set(VERSION_MAJOR 0)
