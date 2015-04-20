@@ -2015,6 +2015,9 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << " endiorec=0x" << (void *) endiorec
     << EndLogLine ;
+  if( !endiorec )
+    return;
+
   enum optype optype = endiorec->optype ;
   struct connection *conn = endiorec->conn ;
   switch(optype)
