@@ -135,16 +135,16 @@ struct oprec_downlink_complete_return {
 
 };
 struct oprec_link_terminate {
-
+  struct rdma_cm_id *mRdmaId;
 };
 union oprec {
-  struct oprec_recv ;
-  struct oprec_send ;
-  struct oprec_downlink ;
-  struct oprec_ack ;
-  struct oprec_downlink_complete ;
-  struct oprec_downlink_complete_return ;
-  struct oprec_link_terminate;
+  struct oprec_recv recv;
+  struct oprec_send send;
+  struct oprec_downlink downlink;
+  struct oprec_ack ack;
+  struct oprec_downlink_complete downlink_complete;
+  struct oprec_downlink_complete_return downlink_complete_return;
+  struct oprec_link_terminate link_terminate;
 };
 
 struct connection ;
@@ -783,7 +783,7 @@ bool ion_cn_buffer::rawTransmit(struct connection *conn, unsigned long aTransmit
 
     conn->ibv_send_last_optype = k_wc_downlink ;
     conn->ibv_post_send_count += 1 ;
-    int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
+    int rc = ( conn->mDisconnecting ) ? 0 : ibv_post_send(conn->qp, &wr, &bad_wr);
     BegLogLine( rc != 0 )
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
@@ -2059,9 +2059,18 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
         << " conn=0x" << (void*)conn
         << " deferred memory disposal after termination."
         << EndLogLine;
+
+      struct rdma_cm_id *id = endiorec->oprec.link_terminate.mRdmaId;
+
+      rdma_destroy_qp(id);
+      FreeClientId( conn->clientId );
+      ibv_dereg_mr(conn->mr) ;
+      rdma_destroy_id(id);
+
       bzero( conn, sizeof( struct connection ) );
       free( conn );
       free( endiorec );
+      *requireFlushUplinks = 0;
       break;
     default:
       StrongAssertLogLine(0)
@@ -2274,17 +2283,12 @@ void TerminateConnection( struct termination_entry_t *aTerm )
 
   conn->mBuffer.Term() ;
 
-  rdma_destroy_qp(id);
-  FreeClientId( conn->clientId );
-  ibv_dereg_mr(conn->mr) ;
-
   // Inject marker into sliq to prevent currently queued requests hitting freed memory
   struct endiorec *term_marker = new struct endiorec;
   term_marker->conn = conn;
   term_marker->optype = k_wc_terminate;
+  term_marker->oprec.link_terminate.mRdmaId = id;
   cqSlihQueue.Enqueue( term_marker );
-
-  rdma_destroy_id(id);
 }
 
 static void * poll_cq(void *ctx)
