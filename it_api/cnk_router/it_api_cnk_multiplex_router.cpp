@@ -2258,7 +2258,7 @@ void TerminateConnection( struct termination_entry_t *aTerm )
 
       // send a disconnect via multiplexed endpoint
       iWARPEM_Router_Endpoint_t *srv = (iWARPEM_Router_Endpoint_t*)cb->getUpLink();
-      srv->InsertCloseRequest( client );
+      srv->InsertDisconnectRequest( client );
 
       close_crossbar_link(conn, cb->getServerId() );
     }
