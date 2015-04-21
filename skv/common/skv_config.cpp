@@ -316,8 +316,8 @@ skv_configuration_t::GetSKVConfiguration( const char *aConfigFile )
   return mConfiguration;
 }
 
-uint32_t
-skv_configuration_t::GetSKVServerPort()
+const uint32_t
+skv_configuration_t::GetSKVServerPort() const
 {
   return mServerPort;
 }
@@ -329,41 +329,46 @@ skv_configuration_t::SetSKVServerPort( uint32_t aServerPort )
 }
 
 const char*
-skv_configuration_t::GetServerReadyFile()
+skv_configuration_t::GetServerReadyFile() const
 {
   return mReadyFile.c_str();
 }
 
 const char*
-skv_configuration_t::GetMachineFile()
+skv_configuration_t::GetMachineFile() const
 {
   return mMachineFile.c_str();
 }
 
 const char*
-skv_configuration_t::GetServerPersistentFilename()
+skv_configuration_t::GetServerPersistentFilename() const
 {
   return mPersistentFilename.c_str();
 }
 
 const char*
-skv_configuration_t::GetServerPersistentFileLocalPath()
+skv_configuration_t::GetServerPersistentFileLocalPath() const
 {
   return mPersistentFileLocalPath.c_str();
 }
 
 const char*
-skv_configuration_t::GetServerLocalInfoFile()
+skv_configuration_t::GetServerLocalInfoFile() const
 {
   return mLocalInfoFile.c_str();
 }
 
 const char*
-skv_configuration_t::GetCommIF()
+skv_configuration_t::GetCommIF() const
 {
   return mCommIF.c_str();
 }
 
+const string
+skv_configuration_t::GetConfigFileName() const
+{
+  return mConfigFile;
+}
 /*********************************************************************/
 // tool routines
 skv_config_line_status_t

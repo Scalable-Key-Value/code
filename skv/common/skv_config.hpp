@@ -66,20 +66,21 @@ class skv_configuration_t
 public:
   static skv_configuration_t* GetSKVConfiguration( const char* aConfigFile = NULL );
 
-  const char* GetServerReadyFile();
+  const char* GetServerReadyFile() const;
 
-  const char* GetMachineFile();
+  const char* GetMachineFile() const;
 
-  const char* GetServerPersistentFilename();
-  const char* GetServerPersistentFileLocalPath();
+  const char* GetServerPersistentFilename() const;
+  const char* GetServerPersistentFileLocalPath() const;
 
-  uint32_t GetSKVServerPort();
+  const uint32_t GetSKVServerPort() const;
   // input in network byte order
   void SetSKVServerPort( uint32_t aServerPort );
 
-  const char* GetServerLocalInfoFile();
-  const char* GetCommIF();
+  const char* GetServerLocalInfoFile() const;
+  const char* GetCommIF() const;
 
+  const string GetConfigFileName() const;
 };
 
 #endif // __SKV_CONFIG_HPP__
