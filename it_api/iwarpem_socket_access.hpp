@@ -221,25 +221,31 @@ read_from_socket( int sock, char * buff, int len, int* rlen )
                           len - BytesRead );
     if( read_rc < 0 )
     {
-      // printf( "errno: %d\n", errno );
-      if( errno == EAGAIN || errno == EINTR )
-        continue;
-      else if ( errno == ECONNRESET )
+      switch( errno )
       {
-        BegLogLine(FXLOG_IT_API_O_SOCKETS)
-          << "ECONNRESET"
-          << EndLogLine ;
-        return IWARPEM_ERRNO_CONNECTION_RESET;
+        case EAGAIN:
+        case EINTR:
+          continue;
+        case ECONNRESET:
+          BegLogLine(FXLOG_IT_API_O_SOCKETS)
+            << "ECONNRESET"
+            << EndLogLine ;
+          return IWARPEM_ERRNO_CONNECTION_RESET;
+        case EBADF:
+          BegLogLine(FXLOG_IT_API_O_SOCKETS)
+            << "EBADF"
+            << EndLogLine ;
+          return IWARPEM_ERRNO_CONNECTION_CLOSED;
+        default:
+          StrongAssertLogLine( 0 )
+            << "read_from_socket:: ERROR:: "
+            << "failed to read from file: " << sock
+            << " errno: " << errno
+            << " buff=" << (void *) buff
+            << " " << (long) buff
+            << " length=" << len
+            << EndLogLine;
       }
-      else
-        StrongAssertLogLine( 0 )
-          << "read_from_socket:: ERROR:: "
-          << "failed to read from file: " << sock
-          << " errno: " << errno
-          << " buff=" << (void *) buff
-          << " " << (long) buff
-          << " length=" << len
-          << EndLogLine;
     }
     else if( read_rc == 0 )
     {
@@ -332,6 +338,12 @@ writev_retry:
       case EPIPE: // This is likely to be that upstream has already closed the socket
         *wlen = write_rc ;
         return IWARPEM_ERRNO_CONNECTION_RESET;
+      case EBADF:
+        *wlen = 0;
+        BegLogLine( FXLOG_IT_API_O_SOCKETS )
+          << "write_to_socket:: Failed with EBADF. Socket probably closed unexpectedly."
+          << EndLogLine;
+        return IWARPEM_ERRNO_CONNECTION_RESET;
       default:
         StrongAssertLogLine( 0 )
           << "write_to_socket:: ERROR:: "
@@ -419,23 +431,28 @@ write_to_socket( int sock, char * buff, int len, int* wlen )
                             len - BytesWritten );
     if( write_rc < 0 )
     {
-      // printf( "errno: %d\n", errno );
-      if( errno == EAGAIN )
-        continue;
-      else if ( errno == ECONNRESET )
+      switch( errno )
       {
-        return IWARPEM_ERRNO_CONNECTION_RESET;
+        case EAGAIN:
+          continue;
+        case ECONNRESET:
+          return IWARPEM_ERRNO_CONNECTION_RESET;
+        case EBADF:
+          *wlen = 0;
+          BegLogLine( FXLOG_IT_API_O_SOCKETS )
+            << "write_to_socket:: Failed with EBADF. Socket probably closed unexpectedly."
+            << EndLogLine;
+          return IWARPEM_ERRNO_CONNECTION_RESET;
+        default:
+          StrongAssertLogLine( 0 )
+            << "write_to_socket:: ERROR:: "
+            << "failed to write to file: " << sock
+            << " buff: " << (void *) buff
+            << " len: " << len
+            << " errno: " << errno
+            << EndLogLine;
       }
-      else
-        StrongAssertLogLine( 0 )
-          << "write_to_socket:: ERROR:: "
-          << "failed to write to file: " << sock
-          << " buff: " << (void *) buff
-          << " len: " << len
-          << " errno: " << errno
-          << EndLogLine;
     }
-
     BytesWritten += write_rc;
   }
 
