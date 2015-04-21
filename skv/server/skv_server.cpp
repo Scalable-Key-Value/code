@@ -1400,13 +1400,19 @@ Init( int   aRank,
                                        & mInternalEventManager,
                                        mNetworkEventManager.GetPZ(),
                                        aCheckpointPath );
-  StrongAssertLogLine( status == SKV_SUCCESS )
-    << "pimd_server_t::Init():: ERROR:: mLocalKV.Init() failed. "
-    << " status: " << skv_status_to_string( status )
-    << " Rank: " << Rank
-    << " PartitionSize: " << PartitionSize
-    << EndLogLine;
+  if( status != SKV_SUCCESS )
+  {
+    std::cerr << "Initialization of LocalKV failed. Check PERSISTENT_FILE_LOCAL_PATH in "
+      << mSKVConfiguration->GetConfigFileName()
+      << std::endl;
 
+    StrongAssertLogLine( status == SKV_SUCCESS )
+      << "pimd_server_t::Init():: ERROR:: mLocalKV.Init() failed. "
+      << " status: " << skv_status_to_string( status )
+      << " Rank: " << Rank
+      << " PartitionSize: " << PartitionSize
+      << EndLogLine;
+  }
   mEventSources[ SKV_SERVER_LOCAL_KV_EVENT_SRC_INDEX ] = new skv_server_local_kv_event_source_t();
   ((skv_server_local_kv_event_source_t*)(mEventSources[ SKV_SERVER_LOCAL_KV_EVENT_SRC_INDEX ]))->Init( &mLocalKV,
                                                                                                        SKV_SERVER_LOCAL_KV_SRC_PRIORITY );

@@ -817,7 +817,9 @@ Init( it_pz_handle_t                            aPZ_Hdl,
 
   // mMaxDataLoad = SKV_MAX_DATA_LOAD * 1024 * 1024;
   char* PersistanceHdr = NULL;
-  skv_server_heap_manager_t::Init( SKV_MAX_DATA_LOAD, & PersistanceHdr, aRestartImagePath, aFlag );
+  skv_status_t rc = skv_server_heap_manager_t::Init( SKV_MAX_DATA_LOAD, & PersistanceHdr, aRestartImagePath, aFlag );
+  if( rc != SKV_SUCCESS )
+    return rc;
 
   mHeapHdr = (skv_server_persistance_heap_hdr_t *) PersistanceHdr;
 

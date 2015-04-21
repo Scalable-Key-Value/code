@@ -132,12 +132,17 @@ skv_local_kv_asyncmem::Init( int aRank,
                              aInternalEventMgr,
                              aPZ,
                              aCheckpointPath );
-  StrongAssertLogLine( status == SKV_SUCCESS )
-    << "skv_local_kv_asyncmem::Init():: ERROR:: mPDSManager.Init() failed. "
-    << " status: " << skv_status_to_string( status )
-    << " Rank: " << aRank
-    << " PartitionSize: " << aNodeCount
-    << EndLogLine;
+
+  if( status != SKV_SUCCESS )
+  {
+    BegLogLine( status != SKV_SUCCESS )
+      << "skv_local_kv_asyncmem::Init():: ERROR:: mPDSManager.Init() failed. "
+      << " status: " << skv_status_to_string( status )
+      << " Rank: " << aRank
+      << " PartitionSize: " << aNodeCount
+      << EndLogLine;
+    return status;
+  }
   /***********************************************************/
 
   mKeepProcessing = true;

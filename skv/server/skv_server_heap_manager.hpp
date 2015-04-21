@@ -347,20 +347,22 @@ public:
   }
 
   static
-  void
+  skv_status_t
   Init( int                      aHeapMegs,
         char**                   aPersistanceMetadataStart,
         char*                    aRestartImagePath,
         skv_persistance_flag_t  aFlag )
   {
-    //mTotalLen = aHeapMegs * 1024 * 1024;
     mTotalLen = PERSISTENT_IMAGE_MAX_LEN ;
-    //mTotalLen = 2147483648u;
 
-    StrongAssertLogLine( mTotalLen > 0 )
-      << "Init(): ERROR: "
-      << " mTotalLen: " << mTotalLen
-      << EndLogLine;
+    if( mTotalLen <= 0 )
+    {
+      BegLogLine( 1 )
+        << "Init(): ERROR: "
+        << " mTotalLen: " << mTotalLen
+        << EndLogLine;
+      return SKV_ERRNO_UNSPECIFIED_ERROR;
+    }
 
     BegLogLine( SKV_SERVER_HEAP_MANAGER_LOG )
       << "Init(): Trying to allocate "
@@ -386,12 +388,16 @@ public:
                   O_RDWR | O_CREAT | O_TRUNC,
                   S_IROTH | S_IWOTH | S_IRUSR | S_IWUSR );
 
-      StrongAssertLogLine( mFd >= 0 )
-        << "ERROR: Failed to open file: "
-        << " PersistentLocalFilePath: " << PersistentLocalFilePath
-        << " mFd: " << mFd
-        << " errno: " << errno
-        << EndLogLine;
+      if( mFd < 0)
+      {
+        BegLogLine( 1 )
+          << "ERROR: Failed to open file: "
+          << " PersistentLocalFilePath: " << PersistentLocalFilePath
+          << " mFd: " << mFd
+          << " errno: " << errno
+          << EndLogLine;
+        return SKV_ERRNO_NOT_DONE;
+      }
 
       int rc = ftruncate64( mFd, mTotalLen );
 
@@ -488,10 +494,11 @@ public:
     }
     else
     {
-      StrongAssertLogLine( 0 )
+      BegLogLine( 1 )
         << "Init(): ERROR: "
         << " aFlag: " << aFlag
         << EndLogLine;
+      return SKV_ERRNO_NOT_IMPLEMENTED;
     }
 
     mMemoryAllocation = (char *) mmap( persistentFileMapAddress,
@@ -508,11 +515,12 @@ public:
       sprintf( CatPid, "cat /proc/%d/maps > /tmp/skv_server_proc_maps.%d ", getpid(), getpid() );
       system( CatPid );
 
-      StrongAssertLogLine( 0 )
+      BegLogLine( 1 )
         << "Init(): ERROR: mmap failed "
         << " mTotalLen: " << mTotalLen
         << " errno: " << errno
         << EndLogLine;
+      return SKV_ERRNO_NO_BUFFER_AVAILABLE;
     }
 
     BegLogLine( SKV_SERVER_HEAP_MANAGER_LOG )
@@ -581,7 +589,7 @@ public:
       << "skv_server_heap_manager_t::Init(): Exiting"
       << EndLogLine;
 
-    return;
+    return SKV_SUCCESS;
   }
 
   static
