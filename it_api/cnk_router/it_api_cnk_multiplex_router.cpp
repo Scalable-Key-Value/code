@@ -343,8 +343,7 @@ void ion_cn_buffer::PostReceive(struct connection *conn)
       << " addr=0x" << (void *) sge.addr
       << EndLogLine ;
 
-    rc=ibv_post_recv(conn->qp, &wr, &bad_wr);
-
+    rc = ( conn->mDisconnecting ) ? 0 : ibv_post_recv(conn->qp, &wr, &bad_wr);
     if (rc!=0)
       {
         printf("ERROR: posting ibv_post_recv() failed\n");
@@ -394,7 +393,7 @@ void ion_cn_buffer::IssueRDMARead(struct connection *conn, unsigned long Offset,
 
     conn->ibv_post_send_count += 1 ;
     conn->ibv_send_last_optype = k_wc_uplink ;
-    int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
+    int rc = ( conn->mDisconnecting ) ? 0 : ibv_post_send(conn->qp, &wr, &bad_wr);
     BegLogLine( rc != 0 )
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
@@ -718,7 +717,7 @@ bool ion_cn_buffer::pushAckOnly( struct connection *conn, unsigned long aSentByt
 
   conn->ibv_send_last_optype = k_wc_ack;
   conn->ibv_post_send_count += 1 ;
-  int rc=ibv_post_send(conn->qp, &wr, &bad_wr);
+  int rc = ( conn->mDisconnecting ) ? 0 : ibv_post_send(conn->qp, &wr, &bad_wr);
   BegLogLine( rc != 0 )
     << "ibv_post_send fails, rc=" << rc
     << EndLogLine ;
@@ -2055,6 +2054,7 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
       break;
 
     case k_wc_terminate:
+    {
       BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
         << " conn=0x" << (void*)conn
         << " deferred memory disposal after termination."
@@ -2072,6 +2072,7 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
       free( endiorec );
       *requireFlushUplinks = 0;
       break;
+    }
     default:
       StrongAssertLogLine(0)
         << "Unknown optype=" << optype
