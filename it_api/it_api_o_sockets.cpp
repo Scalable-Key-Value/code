@@ -1030,7 +1030,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
   if( istatus != IWARPEM_SUCCESS || ( rlen != rlen_expected ) )
   {
     struct epoll_event EP_Event;
-    EP_Event.events = EPOLLIN;
+    EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
     EP_Event.data.fd = SocketFd;
 
     int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
@@ -1081,7 +1081,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
       iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_RECV_QUEUE_FLAG );
 
       struct epoll_event EP_Event;
-      EP_Event.events = EPOLLIN;
+      EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
       EP_Event.data.fd = SocketFd;
 
       int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
@@ -1254,7 +1254,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
                 if( istatus != IWARPEM_SUCCESS )
                 {
                   struct epoll_event EP_Event;
-                  EP_Event.events = EPOLLIN;
+                  EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
                   EP_Event.data.fd = SocketFd;
 
                   int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
@@ -1431,7 +1431,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
         if(( istatus != IWARPEM_SUCCESS ) || ( rlen != HdrPtr->mTotalDataLen ))
         {
           struct epoll_event EP_Event;
-          EP_Event.events = EPOLLIN;
+          EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
           EP_Event.data.fd = SocketFd;
 
           int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
@@ -1546,7 +1546,7 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
             if( istatus != IWARPEM_SUCCESS )
             {
               struct epoll_event EP_Event;
-              EP_Event.events = EPOLLIN;
+              EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
               EP_Event.data.fd = SocketFd;
 
               int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
@@ -1699,7 +1699,7 @@ iWARPEM_DataReceiverThread( void* args )
     << EndLogLine;
 
   struct epoll_event EP_Event;
-  EP_Event.events = EPOLLIN;
+  EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
   EP_Event.data.fd = drc_client_socket;
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
@@ -1747,7 +1747,7 @@ iWARPEM_DataReceiverThread( void* args )
 	{
 	  int SocketFd = InEvents[ i ].data.fd;
 
-	  StrongAssertLogLine(InEvents[ i ].events & EPOLLIN)
+	  StrongAssertLogLine(InEvents[ i ].events & (EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR ))
 	    << "iWARPEM_DataReceiverThread:: ERROR:: "
 	    << " i: " << i
 	    << " InEvents[ i ].events: " << (void *)InEvents[ i ].events
@@ -1769,7 +1769,7 @@ iWARPEM_DataReceiverThread( void* args )
 	          << EndLogLine ;
 
 	      struct epoll_event EP_Event;
-	      EP_Event.events = EPOLLIN;
+	      EP_Event.events = EPOLLIN  | EPOLLRDHUP | EPOLLHUP;
 	      EP_Event.data.fd = SocketFd;
 
 	      int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
@@ -1923,7 +1923,7 @@ iWARPEM_DataReceiverThread( void* args )
                         default:
                         {
                           struct epoll_event EP_Event;
-                          EP_Event.events = EPOLLIN;
+                          EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
                           EP_Event.data.fd = SocketFd;
 
                           int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
@@ -2026,7 +2026,7 @@ iWARPEM_DataReceiverThread( void* args )
                         default:
                         {
                           struct epoll_event EP_Event;
-                          EP_Event.events = EPOLLIN;
+                          EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
                           EP_Event.data.fd = SocketFd;
 
                           int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
