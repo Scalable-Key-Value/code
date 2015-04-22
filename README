@@ -4,7 +4,7 @@
   2. compile
   3. install
   4. runtime env
-
+  5. troubleshooting
 
 ================
 
@@ -179,3 +179,15 @@ will create an RPM that can be used to install SKV.
      later. For now, unfortunately we can only point to the source
      code examples and the file include/client/skv_client.hpp (for C++
      clients) or lib/include/skv.h (for C clients).
+
+     
+     
+================
+5. TROUBLESHOOTING
+
+  * Large Scale runs fail because of open file limit exceeded
+
+    * when running SKV at a large scale - i.e. with many many clients,
+      it is important to observe the user's limit for open file
+      descriptors.  The server needs at least one file desciptor per
+      client (unless clients connect via the forwarder option).
