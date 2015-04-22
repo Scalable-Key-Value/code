@@ -241,7 +241,7 @@ SKVTestGetServerCount()
 
   sprintf( ServerAddrInfoFilename,
            "%s",
-           config->GetServerLocalInfoFile()
+           config->GetMachineFile()
            );
 
   strcpy( ComputeFileNamePath, ServerAddrInfoFilename );      

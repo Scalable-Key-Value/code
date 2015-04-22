@@ -25,10 +25,9 @@ using namespace std;            // that's a bad place for using... ;-)...
 
 #define DEFAULT_SKV_SERVER_PORT 17002
 #define DEFAULT_SKV_SERVER_READY_FILE "/tmp/skv_server.ready"
-#define DEFAULT_SKV_MACHINE_FILE "/etc/machinefile"
-#define DEFAULT_SKV_PERSISTENT_FILENAME "beef_slab"
-#define DEFAULT_SKV_PERSISTENT_FILE_LOCAL_PATH "/tmp/beef_slab"
-#define DEFAULT_SKV_LOCAL_SERVER_INFO_FILE "/tmp/skv_server_info"
+#define DEFAULT_SKV_MACHINE_FILE "/etc/skv_machinefile"
+#define DEFAULT_SKV_PERSISTENT_FILENAME "skv_store"
+#define DEFAULT_SKV_PERSISTENT_FILE_LOCAL_PATH "/tmp/skv_store"
 #define DEFAULT_SKV_COMM_IF "roq0"
 
 typedef enum {
@@ -38,7 +37,6 @@ typedef enum {
   SKV_CONFIG_SETTING_MACHINE_FILE,
   SKV_CONFIG_SETTING_PERSISTENT_FILENAME,
   SKV_CONFIG_SETTING_PERSISTENT_FILE_LOCAL_PATH,
-  SKV_CONFIG_SETTING_LOCAL_SERVER_INFO_FILE,
   SKV_CONFIG_SETTING_COMM_IF,
 } skv_config_setting_t;
 
@@ -53,7 +51,6 @@ class skv_configuration_t
   string    mMachineFile;
   string    mPersistentFilename;
   string    mPersistentFileLocalPath;
-  string    mLocalInfoFile;
   string    mCommIF;
 
   string    mConfigFile;
@@ -77,7 +74,6 @@ public:
   // input in network byte order
   void SetSKVServerPort( uint32_t aServerPort );
 
-  const char* GetServerLocalInfoFile() const;
   const char* GetCommIF() const;
 
   const string GetConfigFileName() const;

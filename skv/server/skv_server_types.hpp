@@ -831,6 +831,13 @@ struct skv_server_ep_state_t
       << "Finalizing EP: " << (void*)this
       << EndLogLine;
 
+    while( mInProgressCommands > 1 )
+    {
+      mResourceLock.unlock();
+      usleep( 10000 );
+      mResourceLock.lock();
+    }
+
     delete mAssociatedStateList;
 
     it_lmr_free(mCommandBuffLMR);

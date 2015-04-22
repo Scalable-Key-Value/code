@@ -360,13 +360,13 @@ Connect( const char* aConfigFile,
   // first pass of the server machine file to get the server count
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::Connect():: "
-    << " ComputeFileNamePath: " << config->GetServerLocalInfoFile()
+    << " ComputeFileNamePath: " << config->GetMachineFile()
     << EndLogLine;
 
-  ifstream fin( config->GetServerLocalInfoFile() );
+  ifstream fin( config->GetMachineFile() );
 
   StrongAssertLogLine( !fin.fail() )
-    << "skv_client_conn_manager_if_t::Connect():: ERROR opening server machine file: " << config->GetServerLocalInfoFile()
+    << "skv_client_conn_manager_if_t::Connect():: ERROR opening server machine file: " << config->GetMachineFile()
     << EndLogLine;
 
 
@@ -401,7 +401,7 @@ Connect( const char* aConfigFile,
 
 
   // Open and parse compute file name
-  ifstream fin1( config->GetServerLocalInfoFile() );
+  ifstream fin1( config->GetMachineFile() );
 
   // get hostname to replace local server names with localhost
   char this_host_name[ SKV_MAX_SERVER_ADDR_NAME_LENGTH ];

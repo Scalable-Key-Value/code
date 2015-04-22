@@ -226,10 +226,10 @@ int main( int argc, char **argv )
   // get configuration to find servers
   skv_configuration_t *config = skv_configuration_t::GetSKVConfiguration();
 
-  ifstream fin( config->GetServerLocalInfoFile() );
+  ifstream fin( config->GetMachineFile() );
 
   StrongAssertLogLine( !fin.fail() )
-    << "skv_client_conn_manager_if_t::Connect():: ERROR opening server machine file: " << config->GetServerLocalInfoFile()
+    << "skv_client_conn_manager_if_t::Connect():: ERROR opening server machine file: " << config->GetMachineFile()
     << EndLogLine;
 
   // open sockets and connect to servers

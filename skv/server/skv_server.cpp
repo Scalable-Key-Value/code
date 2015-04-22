@@ -1518,7 +1518,7 @@ Init( int   aRank,
 
   sprintf( ServerAddrInfoFilename,
            "%s",
-           mSKVConfiguration->GetServerLocalInfoFile()
+           mSKVConfiguration->GetMachineFile()
            );
 
   BegLogLine( 1 )

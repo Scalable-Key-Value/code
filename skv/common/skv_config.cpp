@@ -50,8 +50,6 @@ skv_configuration_t::skv_configuration_t( )
 
   mPersistentFilename      = DEFAULT_SKV_PERSISTENT_FILENAME;
   mPersistentFileLocalPath = DEFAULT_SKV_PERSISTENT_FILE_LOCAL_PATH;
-
-  mLocalInfoFile = DEFAULT_SKV_LOCAL_SERVER_INFO_FILE;
 }
 
 // get the location and name of the config file
@@ -192,10 +190,6 @@ skv_configuration_t::ReadConfigurationFile( const char *aConfigFile )
             mPersistentFileLocalPath = cline.substr( valueIndex );
             break;
 
-          case SKV_CONFIG_SETTING_LOCAL_SERVER_INFO_FILE:
-            mLocalInfoFile = cline.substr( valueIndex );
-            break;
-
           case SKV_CONFIG_SETTING_COMM_IF:
             mCommIF = cline.substr( valueIndex );
             break;
@@ -237,7 +231,6 @@ skv_configuration_t::ReadConfigurationFile( const char *aConfigFile )
     << " ServerPort:" << mServerPort
     << " persFile: " << mPersistentFilename.c_str()
     << " persLocalFile: " << mPersistentFileLocalPath.c_str()
-    << " LocalInfoFile: " << mLocalInfoFile.c_str()
     << " verbsDev" << mCommIF.c_str()
     << EndLogLine;
 
@@ -265,9 +258,6 @@ skv_configuration_t::GetVariableCase( const string s, size_t *valueIndex )
 
     if( s.find( "MACHINE_FILE" ) != string::npos )
       setting = SKV_CONFIG_SETTING_MACHINE_FILE;
-
-    if( s.find( "LOCAL_INFO" ) != string::npos )
-      setting = SKV_CONFIG_SETTING_LOCAL_SERVER_INFO_FILE;
 
     if( s.find( "COMM_IF") != string::npos )
       setting = SKV_CONFIG_SETTING_COMM_IF;
@@ -350,12 +340,6 @@ const char*
 skv_configuration_t::GetServerPersistentFileLocalPath() const
 {
   return mPersistentFileLocalPath.c_str();
-}
-
-const char*
-skv_configuration_t::GetServerLocalInfoFile() const
-{
-  return mLocalInfoFile.c_str();
 }
 
 const char*

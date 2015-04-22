@@ -142,7 +142,7 @@ will create an RPM that can be used to install SKV.
      cause problems for clients on BG/Q, because they need to connect
      to the loopback address via siw)
 
-   * beef.slab.N: is the mmapped file that contains the stored
+   * skv_store.N: is the mmapped file that contains the stored
      data. Where N is the MPI rank of the server process. Currently,
      all storage memory has to be pinned and thus the capacity per
      node is limited by the amount of available memory and the memlock
