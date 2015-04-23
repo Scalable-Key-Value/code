@@ -236,7 +236,7 @@ Close( skv_pds_attr_t      *aPDSAttr )
 }
 
 
-int
+size_t
 skv_tree_based_container_t::
 GetMaxDataLoad()
 {

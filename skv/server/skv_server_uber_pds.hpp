@@ -95,7 +95,7 @@ public:
 
 
   //
-  int GetMaxDataLoad();
+  size_t GetMaxDataLoad();
 
   skv_status_t Remove( skv_pds_id_t             aPDSId,
                        char*                     aKeyData,

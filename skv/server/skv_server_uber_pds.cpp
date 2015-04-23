@@ -19,7 +19,7 @@
 #define SKV_SERVER_UBER_PDS_LOG ( 0 | SKV_LOGGING_ALL  )
 #endif
 
-int
+size_t
 skv_uber_pds_t::
 GetMaxDataLoad()
 {

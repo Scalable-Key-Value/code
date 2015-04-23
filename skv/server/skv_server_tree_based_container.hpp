@@ -31,7 +31,7 @@ class skv_tree_based_container_t
 {
   skv_data_container_t*                         mDataMap;
   // In bytes
-  int                                           mMaxDataLoad;
+  size_t                                        mMaxDataLoad;
 
   // Memory for local data
   char*                                         mStartOfDataField;
@@ -98,7 +98,7 @@ public:
   skv_status_t
   Close( skv_pds_attr_t *aPDSAttr );
 
-  int GetMaxDataLoad();
+  size_t GetMaxDataLoad();
 
   skv_status_t Init( it_pz_handle_t aPZ_Hdl,
                      skv_server_internal_event_manager_if_t* aInternalEventManager,
