@@ -21,7 +21,7 @@
 template<class T, size_t SKV_ARRAY_QUEUE_SIZE>
 class skv_array_queue_t
 {
-  size_t len;
+  volatile size_t len;
   volatile T *Memory;
   volatile size_t head;
   volatile size_t tail;
