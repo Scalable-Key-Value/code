@@ -23,18 +23,38 @@ public:
   GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
   {
     skv_server_event_t *newEvent;
-    skv_status_t status = mEventManager->Dequeue( &newEvent );
+    skv_server_event_t *nextEventSlot = aEvents;
+    skv_status_t status = SKV_SUCCESS;
 
-    if( status == SKV_SUCCESS )
-    {
-      memcpy( aEvents, newEvent, sizeof( skv_server_event_t ) );
-      *aEventCount = 1;
-      delete newEvent;
-    }
+    *aEventCount = 0;
+    while(( status == SKV_SUCCESS) && ( *aEventCount < aMaxEventCount ))
+      {
+      status = mEventManager->Dequeue( &newEvent );
+
+      if( status == SKV_SUCCESS )
+        {
+        BegLogLine( 0 )
+          << "Found new internally queued event: 0x" << (void*)newEvent
+          << " cpy to: 0x" << (void*)aEvents
+          << " CmdOrd: " << newEvent->mEventMetadata.mCommandFinder.mCommandOrd
+          << " Event: " << skv_server_event_type_to_string( newEvent->mCmdEventType )
+          << EndLogLine;
+
+        memcpy( nextEventSlot, newEvent, sizeof( skv_server_event_t ) );
+        nextEventSlot++;
+        *aEventCount += 1;
+
+        delete newEvent;
+        }
+      }
+    BegLogLine( (0 && (*aEventCount > 0)) )
+      << "Collected " << *aEventCount << " internal events"
+      << EndLogLine;
+
+    if( *aEventCount > 0 )
+      return SKV_SUCCESS;
     else
-      *aEventCount = 0;
-
-    return status;
+      return status;
   }
 
 };
