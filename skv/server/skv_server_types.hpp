@@ -1935,7 +1935,9 @@ public:
     mQueue->push( newEvent );
     BegLogLine( SKV_SERVER_PENDING_EVENTS_LOG )
       << "skv_server_internal_event_manager_if_t::Enqueue(): "
-      << " Event.ccb: " << (void*)aEvent->mEventMetadata.mCommandFinder.mEPStatePtr
+      << " queue 0x" << (void*)this
+      << " Event.EP: " << (void*)aEvent->mEventMetadata.mCommandFinder.mEPStatePtr
+      << " Event.Ord: " << aEvent->mEventMetadata.mCommandFinder.mCommandOrd
       << EndLogLine;
     return SKV_SUCCESS;
   }
