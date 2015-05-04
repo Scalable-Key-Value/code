@@ -268,58 +268,8 @@ private:
       << "skv_server_insert_command_sm::insert_sequence():: Insert returned: " << skv_status_to_string( status )
       << EndLogLine;
 
-    switch ( status )
-    {
-      case SKV_SUCCESS:
-        /*******************************************************************
-         * Command complete, ready to dispatch response to client
-         ******************************************************************/
-        status = insert_command_completion( status, aEPState, aReq, aCommand, aCommandOrdinal, aSeqNo );
-        aCommand->Transit( SKV_SERVER_COMMAND_STATE_INIT );
-        return status;
+    aValueRepInStore->Init( ValueRepForRdmaRead );
 
-      case SKV_ERRNO_NEED_DATA_TRANSFER:
-        /*******************************************************************
-         * Issue an rdma read from the client
-         ******************************************************************/
-        status = insert_create_multi_stage( aEPState, aLocalKV, aCommand, aCommandOrdinal, aReq );
-        insert_post_rdma( aEPState,
-                          aLocalKV,
-                          aCommandOrdinal,
-                          aReq,
-                          &ValueRepForRdmaRead,
-                          aSeqNo,
-                          aMyRank );
-        aCommand->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_READ_CMPL );
-        break;
-
-      case SKV_ERRNO_LOCAL_KV_EVENT:
-        // insert requires multiple stages including going through async storage steps
-        status = insert_create_multi_stage( aEPState, aLocalKV, aCommand, aCommandOrdinal, aReq );
-        aCommand->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_DATA_OP );
-        break;
-
-      case SKV_ERRNO_RECORD_ALREADY_EXISTS:
-        // if record exists, we don't need to crash-exit, just return error to client
-        status = insert_command_completion( status, aEPState, aReq, aCommand, aCommandOrdinal, aSeqNo );
-        aCommand->Transit( SKV_SERVER_COMMAND_STATE_INIT );
-        break;
-
-      case SKV_ERRNO_COMMAND_LIMIT_REACHED:
-        AssertLogLine( 1 )
-          << "skv_server_insert_command_sm::insert_sequence():: Back-end ran out of command slots."
-          << EndLogLine;
-        break;
-
-      default:
-        BegLogLine( SKV_SERVER_INSERT_LOG )
-          << "skv_server_insert_command_sm::Execute()::ERROR in local insert"
-          << " status: " << skv_status_to_string( status )
-          << EndLogLine;
-
-        status = insert_command_completion( status, aEPState, aReq, aCommand, aCommandOrdinal, aSeqNo );
-        aCommand->Transit( SKV_SERVER_COMMAND_STATE_INIT );
-    }
     return status;
   }
 
@@ -393,17 +343,23 @@ public:
                   << " record is locked"
                   << EndLogLine;
 
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 aEventQueueManager->Enqueue( aEvent );
-                return SKV_SUCCESS;
+                return status;
 
               case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                BegLogLine( SKV_SERVER_INSERT_LOG )
+                  << "skv_server_insert_command_sm::insert_sequence():: Back-end ran out of command slots."
+                  << EndLogLine;
+
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 aEventQueueManager->Enqueue( aEvent );
-                return SKV_SUCCESS;
+                return status;
 
               case SKV_ERRNO_LOCAL_KV_EVENT:
                 status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_INDEX_OP );
-                return SKV_SUCCESS;
+                return status;
 
               default:
                 break;
@@ -418,6 +374,62 @@ public:
                                       aSeqNo,
                                       aMyRank,
                                       &ValueRepInStore );
+            switch ( status )
+            {
+              case SKV_SUCCESS:
+                /*******************************************************************
+                 * Command complete, ready to dispatch response to client
+                 ******************************************************************/
+                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
+                break;
+
+              case SKV_ERRNO_NEED_DATA_TRANSFER:
+                /*******************************************************************
+                 * Issue an rdma read from the client
+                 ******************************************************************/
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
+                insert_post_rdma( aEPState,
+                                  aLocalKV,
+                                  aCommandOrdinal,
+                                  Req,
+                                  &ValueRepInStore,
+                                  aSeqNo,
+                                  aMyRank );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_READ_CMPL );
+                break;
+
+              case SKV_ERRNO_LOCAL_KV_EVENT:
+                // insert requires multiple stages including going through async storage steps
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_DATA_OP );
+                break;
+
+              case SKV_ERRNO_RECORD_ALREADY_EXISTS:
+                // if record exists, we don't need to crash-exit, just return error to client
+                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
+                break;
+
+              case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                BegLogLine( SKV_SERVER_INSERT_LOG )
+                  << "skv_server_insert_command_sm::insert_sequence():: Back-end ran out of command slots."
+                  << EndLogLine;
+
+                // insert requires multiple stages including going through async storage steps
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
+                status = aEventQueueManager->Enqueue( aEvent );
+                break;
+
+              default:
+                BegLogLine( SKV_SERVER_INSERT_LOG )
+                  << "skv_server_insert_command_sm::Execute()::ERROR in local insert"
+                  << " status: " << skv_status_to_string( status )
+                  << EndLogLine;
+
+                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
+            }
             break;
           }
           default:
@@ -457,6 +469,61 @@ public:
                                       aSeqNo,
                                       aMyRank,
                                       &Command->mLocalKVData.mLookup.mValueRepInStore );
+            switch ( status )
+            {
+              case SKV_SUCCESS:
+                /*******************************************************************
+                 * Command complete, ready to dispatch response to client
+                 ******************************************************************/
+                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
+                break;
+
+              case SKV_ERRNO_NEED_DATA_TRANSFER:
+                /*******************************************************************
+                 * Issue an rdma read from the client
+                 ******************************************************************/
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
+                insert_post_rdma( aEPState,
+                                  aLocalKV,
+                                  aCommandOrdinal,
+                                  Req,
+                                  &Command->mLocalKVData.mLookup.mValueRepInStore,
+                                  aSeqNo,
+                                  aMyRank );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_READ_CMPL );
+                break;
+
+              case SKV_ERRNO_LOCAL_KV_EVENT:
+                // insert requires multiple stages including going through async storage steps
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_DATA_OP );
+                break;
+
+              case SKV_ERRNO_RECORD_ALREADY_EXISTS:
+                // if record exists, we don't need to crash-exit, just return error to client
+                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
+                break;
+
+              case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                BegLogLine( SKV_SERVER_INSERT_LOG )
+                  << "skv_server_insert_command_sm::insert_sequence():: Back-end ran out of command slots."
+                  << EndLogLine;
+                // insert requires multiple stages including going through async storage steps
+                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
+                status = aEventQueueManager->Enqueue( aEvent );
+                break;
+
+              default:
+                BegLogLine( SKV_SERVER_INSERT_LOG )
+                  << "skv_server_insert_command_sm::Execute()::ERROR in local insert"
+                  << " status: " << skv_status_to_string( status )
+                  << EndLogLine;
+
+                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
+            }
             break;
           }
           default:
