@@ -377,6 +377,10 @@ public:
                 status = SKV_SUCCESS;
                 break;
 
+              case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                status = aEventQueueManager->Enqueue( aEvent );
+                break;
+
               default:
               case SKV_SUCCESS:
                 // Return the temporary buffer to the store
