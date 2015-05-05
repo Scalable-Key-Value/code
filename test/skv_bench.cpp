@@ -58,6 +58,8 @@
 #define MB_FACTOR ( (1000 * 1000) )
 
 //#define SKV_BENCH_SHOW_HOSTNAME
+//#define SKV_BENCH_SKIP_READ
+//#define SKV_BENCH_SKIP_REMOVE
 
 /*************************************************************
  * Output formating macros
@@ -829,6 +831,9 @@ public:
 
     // fill the pipeline
     StartTime = MPI_Wtime();
+#ifdef SKV_BENCH_SKIP_READ
+    goto skip_read;
+#endif
     for( int batch = 0; batch < MaxBatch; batch++ )
       SetExitStatus( RetrieveBatch( (const char*)(KeyBufferList[ batch ]),
                                     (const char*)(ValueBufferList[ batch]),
@@ -862,6 +867,7 @@ public:
       SetExitStatus( WaitForBatch( HandleBufferList[ batch ],
                                   mConfigRef->mBatchSize ) );
 
+  skip_read:
     CurrentTime = MPI_Wtime();
     BegLogLine(SKV_BENCH_LOG_LW)
       << "Entering barrier"
@@ -884,6 +890,9 @@ public:
 
     // fill the pipeline
     StartTime = MPI_Wtime();
+#ifdef SKV_BENCH_SKIP_REMOVE
+    goto skip_remove;
+#endif
     for( int batch = 0; batch < MaxBatch; batch++ )
       SetExitStatus( RemoveBatch( (const char*)(KeyBufferList[ batch ]),
                                   HandleBufferList[ batch ],
@@ -915,6 +924,7 @@ public:
       SetExitStatus( WaitForBatch( HandleBufferList[ batch ],
                                    mConfigRef->mBatchSize ) );
 
+  skip_remove:
     CurrentTime = MPI_Wtime();
     BegLogLine(SKV_BENCH_LOG_LW)
       << "Entering barrier"
