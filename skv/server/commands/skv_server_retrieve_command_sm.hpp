@@ -224,7 +224,8 @@ class skv_server_retrieve_command_sm
 public:
   static
   skv_status_t
-  Execute( skv_local_kv_t *aLocalKV,
+  Execute( skv_server_internal_event_manager_if_t* aEventQueueManager,
+           skv_local_kv_t *aLocalKV,
            skv_server_ep_state_t* aEPState,
            int aCommandOrdinal,
            skv_server_event_t* aEvent,
@@ -346,11 +347,18 @@ public:
 
                 Command->Transit( SKV_SERVER_COMMAND_STATE_WAITING_RDMA_WRITE_CMPL );
                 break;
+
               case SKV_ERRNO_LOCAL_KV_EVENT:
                 // storage needs background operation to complete; nothing to do, come back via localKV event
                 status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_INDEX_OP );
                 return SKV_SUCCESS;
+
+              case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                status = aEventQueueManager->Enqueue( aEvent );
+                break;
+
               default:
                 // go and report any other errors
                 status = command_completion( status,

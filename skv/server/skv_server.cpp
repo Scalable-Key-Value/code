@@ -730,7 +730,8 @@ ProcessEvent( skv_server_state_t  aState,
                   << "skv_server_t::ProcessEvent(): calling execute in for receive "
                   << EndLogLine;
 
-                status = skv_server_retrieve_command_sm::Execute( &mLocalKV,
+                status = skv_server_retrieve_command_sm::Execute( &mInternalEventManager,
+                                                                  &mLocalKV,
                                                                   EPStatePtr,
                                                                   CmdOrd,
                                                                   aEvent,
@@ -874,7 +875,8 @@ ProcessEvent( skv_server_state_t  aState,
           skv_server_ep_state_t* EPStatePtr = aEvent->mEventMetadata.mCommandFinder.mEPStatePtr;
           int CmdOrd = aEvent->mEventMetadata.mCommandFinder.mCommandOrd;
 
-          status = skv_server_retrieve_command_sm::Execute( &mLocalKV,
+          status = skv_server_retrieve_command_sm::Execute( &mInternalEventManager,
+                                                            &mLocalKV,
                                                             EPStatePtr,
                                                             CmdOrd,
                                                             aEvent,
@@ -1050,7 +1052,8 @@ ProcessEvent( skv_server_state_t  aState,
                                                                    mMyRank );
               break;
             case SKV_COMMAND_RETRIEVE:
-              status = skv_server_retrieve_command_sm::Execute( &mLocalKV,
+              status = skv_server_retrieve_command_sm::Execute( &mInternalEventManager,
+                                                                &mLocalKV,
                                                                 EPStatePtr,
                                                                 CmdOrd,
                                                                 aEvent,

@@ -169,6 +169,11 @@ public:
                 Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_DATA_OP );
                 break;
 
+              case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                status = aEventQueueManager->Enqueue( aEvent );
+                break;
+
               case SKV_SUCCESS:
               default:
                 status = post_response( status, aEPState, (skv_cmd_remove_cmpl_t*)Req, Command, aCommandOrdinal, aSeqNo );
