@@ -50,29 +50,45 @@ private:
       return status;
 
     /*******************************************************************
-     * Command requires at least one data transfer (rdma read)
-     ******************************************************************/
-    skv_rec_lock_handle_t RecLock;
-    if( aReq->mFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
-    {
-      status = aLocalKV->Lock( &(aReq->mPDSId),
-                               &(aReq->mKeyValue),
-                               &RecLock );
-    }
-    /******************************************************************/
-
-    /*******************************************************************
      * Save local command state
      ******************************************************************/
     aCommand->mCommandState.mCommandInsert.mHdr        = aReq->mHdr;
     aCommand->mCommandState.mCommandInsert.mFlags      = aReq->mFlags;
-    aCommand->mCommandState.mCommandInsert.mRecLockHdl = RecLock;
     /******************************************************************/
     aEPState->ReplaceAndInitCommandBuffer( aCommand, aCommandOrdinal );
 
     return status;
   }
 
+  static inline
+  skv_status_t FlagBasedLock( skv_local_kv_t *aLocalKV,
+                              const skv_cmd_RIU_req_t *aReq,
+                              skv_server_ccb_t* aCommand )
+  {
+    if( aReq->mFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
+    {
+      skv_rec_lock_handle_t RecLock;
+      skv_status_t status = aLocalKV->Lock( &(aReq->mPDSId),
+                                            &(aReq->mKeyValue),
+                                            aCommand,
+                                            &RecLock );
+      if( status == SKV_SUCCESS )
+        aCommand->mCommandState.mCommandInsert.mRecLockHdl = RecLock;
+      return status;
+    }
+    return SKV_SUCCESS;
+  }
+
+  static inline
+  skv_status_t FlagBasedUnlock( skv_local_kv_t *aLocalKV,
+                                const skv_server_ccb_t *aCommand )
+  {
+    if( aCommand->mCommandState.mCommandInsert.mFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
+    {
+      return aLocalKV->Unlock( aCommand->mCommandState.mCommandInsert.mRecLockHdl, aCommand );
+    }
+    return SKV_SUCCESS;
+  }
 
   static inline
   skv_status_t insert_lookup_sequence( skv_local_kv_t *aLocalKV,
@@ -86,6 +102,16 @@ private:
 
     Req->EndianConvert() ;
     *aReq = Req;
+
+    if( FlagBasedLock( aLocalKV, Req, aCommand ) != SKV_SUCCESS )
+    {
+      BegLogLine( ( SKV_SERVER_LOCK_LOG | SKV_SERVER_INSERT_LOG ) )
+        << "skv_server_insert_command_sm::Execute()::"
+        << " record is locked."
+        << EndLogLine;
+
+      return SKV_ERRNO_RECORD_IS_LOCKED;
+    }
 
     // Check if the key is in the buffer
     int KeySize = Req->mKeyValue.mKeySize;
@@ -179,7 +205,8 @@ private:
   }
 
   static inline
-  skv_status_t insert_command_completion( skv_status_t aRC,
+  skv_status_t insert_command_completion( skv_local_kv_t *aLocalKV,
+                                          skv_status_t aRC,
                                           skv_server_ep_state_t *aEPState,
                                           skv_cmd_RIU_req_t *aReq,
                                           skv_server_ccb_t *aCommand,
@@ -214,6 +241,8 @@ private:
       << "skv_server_insert_command_sm::Execute():: ERROR: "
       << " status: " << skv_status_to_string( status )
       << EndLogLine;
+
+    FlagBasedUnlock( aLocalKV, aCommand );
 
     return status;
   }
@@ -327,31 +356,20 @@ public:
             skv_local_kv_cookie_t *cookie = &Command->mLocalKVCookie;
             cookie->Set( aCommandOrdinal, aEPState );
             skv_cmd_RIU_req_t *Req;
+
             status = insert_lookup_sequence( aLocalKV,
                                              Command,
                                              &Req,
                                              cookie,
-                                             &ValueRepInStore);
+                                             &ValueRepInStore );
+            BegLogLine( SKV_SERVER_INSERT_LOG )
+              << "skv_server_insert_command_sm::Lookup return status=" << skv_status_to_string( status )
+              << EndLogLine;
+
             switch( status )
             {
               case SKV_ERRNO_RECORD_IS_LOCKED:
-                // Put the event back in the User Event Queue
-                // ... Spin Waiting ...
-
-                BegLogLine( SKV_SERVER_LOCK_LOG )
-                  << "skv_server_insert_command_sm::Execute()::"
-                  << " record is locked"
-                  << EndLogLine;
-
-                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
-                aEventQueueManager->Enqueue( aEvent );
-                return status;
-
               case SKV_ERRNO_COMMAND_LIMIT_REACHED:
-                BegLogLine( SKV_SERVER_INSERT_LOG )
-                  << "skv_server_insert_command_sm::insert_sequence():: Back-end ran out of command slots."
-                  << EndLogLine;
-
                 status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 aEventQueueManager->Enqueue( aEvent );
                 return status;
@@ -361,8 +379,12 @@ public:
                 Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_INDEX_OP );
                 return status;
 
-              default:
+              case SKV_SUCCESS:
+              case SKV_ERRNO_RECORD_ALREADY_EXISTS:
+              case SKV_ERRNO_ELEM_NOT_FOUND:
                 break;
+              default:
+                return status;
             }
 
             status = insert_sequence( aLocalKV,
@@ -380,7 +402,7 @@ public:
                 /*******************************************************************
                  * Command complete, ready to dispatch response to client
                  ******************************************************************/
-                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                status = insert_command_completion( aLocalKV, status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
 
@@ -407,15 +429,11 @@ public:
 
               case SKV_ERRNO_RECORD_ALREADY_EXISTS:
                 // if record exists, we don't need to crash-exit, just return error to client
-                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                status = insert_command_completion( aLocalKV, status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
 
               case SKV_ERRNO_COMMAND_LIMIT_REACHED:
-                BegLogLine( SKV_SERVER_INSERT_LOG )
-                  << "skv_server_insert_command_sm::insert_sequence():: Back-end ran out of command slots."
-                  << EndLogLine;
-
                 // insert requires multiple stages including going through async storage steps
                 status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 status = aEventQueueManager->Enqueue( aEvent );
@@ -427,7 +445,7 @@ public:
                   << " status: " << skv_status_to_string( status )
                   << EndLogLine;
 
-                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                status = insert_command_completion( aLocalKV, status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
             }
             break;
@@ -475,7 +493,7 @@ public:
                 /*******************************************************************
                  * Command complete, ready to dispatch response to client
                  ******************************************************************/
-                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                status = insert_command_completion( aLocalKV, status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
 
@@ -483,7 +501,6 @@ public:
                 /*******************************************************************
                  * Issue an rdma read from the client
                  ******************************************************************/
-                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 insert_post_rdma( aEPState,
                                   aLocalKV,
                                   aCommandOrdinal,
@@ -495,23 +512,16 @@ public:
                 break;
 
               case SKV_ERRNO_LOCAL_KV_EVENT:
-                // insert requires multiple stages including going through async storage steps
-                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_DATA_OP );
                 break;
 
               case SKV_ERRNO_RECORD_ALREADY_EXISTS:
                 // if record exists, we don't need to crash-exit, just return error to client
-                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                status = insert_command_completion( aLocalKV, status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
 
               case SKV_ERRNO_COMMAND_LIMIT_REACHED:
-                BegLogLine( SKV_SERVER_INSERT_LOG )
-                  << "skv_server_insert_command_sm::insert_sequence():: Back-end ran out of command slots."
-                  << EndLogLine;
-                // insert requires multiple stages including going through async storage steps
-                status = insert_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal, Req );
                 status = aEventQueueManager->Enqueue( aEvent );
                 break;
 
@@ -521,7 +531,7 @@ public:
                   << " status: " << skv_status_to_string( status )
                   << EndLogLine;
 
-                status = insert_command_completion( status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
+                status = insert_command_completion( aLocalKV, status, aEPState, Req, Command, aCommandOrdinal, aSeqNo );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
             }
             break;
@@ -564,21 +574,13 @@ public:
                                                       aMyRank,
                                                       gSKVServerInsertSendingRDMAReadAck );
 
-            insert_command_completion( Command->mLocalKVrc,
+            insert_command_completion( aLocalKV,
+                                       Command->mLocalKVrc,
                                        aEPState,
                                        (skv_cmd_RIU_req_t *) Command->GetSendBuff(),
                                        Command,
                                        aCommandOrdinal,
                                        aSeqNo );
-            /*******************************************************************
-             * Handle Locking
-             ******************************************************************/
-            if( Command->mCommandState.mCommandInsert.mFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
-            {
-              aLocalKV->Unlock( Command->mCommandState.mCommandInsert.mRecLockHdl );
-            }
-            /******************************************************************/
-
             Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
             break;
           default:
@@ -619,21 +621,13 @@ public:
                                                       aMyRank,
                                                       gSKVServerInsertSendingRDMAReadAck );
 
-            insert_command_completion( status,
+            insert_command_completion( aLocalKV,
+                                       status,
                                        aEPState,
                                        (skv_cmd_RIU_req_t *) Command->GetSendBuff(),
                                        Command,
                                        aCommandOrdinal,
                                        aSeqNo );
-            /*******************************************************************
-             * Handle Locking
-             ******************************************************************/
-            if( Command->mCommandState.mCommandInsert.mFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
-            {
-              aLocalKV->Unlock( Command->mCommandState.mCommandInsert.mRecLockHdl );
-            }
-            /******************************************************************/
-
             Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
 
             break;
@@ -665,21 +659,13 @@ public:
                                                       aMyRank,
                                                       gSKVServerInsertSendingRDMAReadAck );
 
-            insert_command_completion( Command->mLocalKVrc,
+            insert_command_completion( aLocalKV,
+                                       Command->mLocalKVrc,
                                        aEPState,
                                        (skv_cmd_RIU_req_t *) Command->GetSendBuff(),
                                        Command,
                                        aCommandOrdinal,
                                        aSeqNo );
-            /*******************************************************************
-             * Handle Locking
-             ******************************************************************/
-            if( Command->mCommandState.mCommandInsert.mFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
-            {
-              aLocalKV->Unlock( Command->mCommandState.mCommandInsert.mRecLockHdl );
-            }
-            /******************************************************************/
-
             Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
             break;
           default:

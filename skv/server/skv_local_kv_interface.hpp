@@ -54,6 +54,7 @@
 // Include the list of defined local kv back ends
 #include <skv/server/skv_local_kv_inmem.hpp>
 #include <skv/server/skv_local_kv_asyncmem.hpp>
+#include <skv/server/skv_server_lock_manager.hpp>
 
 // include rocksdb parts only if rocksdb is requested to avoid dependency from C++11 compiler and rocksdb source
 // \todo: this should be done via a kind of backend-config.h to avoid this extra compile flag
@@ -61,10 +62,11 @@
 #include <skv/server/skv_local_kv_rocksdb.hpp>
 #endif
 
-template<class skv_local_kv_manager>
+template<class skv_local_kv_manager, class skv_record_lock_manager = skv_server_lock_manager_t>
 class skv_local_kv_interface
 {
   skv_local_kv_manager mLocalKVManager;
+  skv_record_lock_manager mLockManager;
 
 public:
   skv_local_kv_interface() {}
@@ -366,16 +368,28 @@ public:
    * !!!! SYNCHRONOUS FUNCTIONS !!!!
    *************************************************************/
 
-  /* Lock/Unlock */
-  skv_status_t Lock( skv_pds_id_t *aPDSId,
-                     skv_key_value_in_ctrl_msg_t *aKeyValue,
+  /*
+   * Lock attempts to create a lock based on PDS+Key and assigns it to an owner
+   * if the record is not locked or if the owner retries to lock, the function returns SKV_SUCCESS
+   * if a non-owner tries to lock a record that already locked, SKV_ERRNO_RECORD_IS_LOCKED is returned
+   * if SKV_SUCCESS is returned, the RecLock handle is valid
+   */
+  skv_status_t Lock( const skv_pds_id_t *aPDSId,
+                     const skv_key_value_in_ctrl_msg_t *aKeyValue,
+                     const skv_server_ccb_t *aOwner,
                      skv_rec_lock_handle_t *aRecLock )
   {
-    return mLocalKVManager.Lock( aPDSId, aKeyValue, aRecLock );
+    return mLockManager.Lock( aPDSId, aKeyValue, aOwner, aRecLock );
   }
-  skv_status_t Unlock( skv_rec_lock_handle_t aLock )
+  /*
+   * Unlock attempts to remove the lock based on the lock handle and the owner
+   * only the owner can unlock a previously locked record
+   * the function also succeeds if the record wasn't locked
+   */
+  skv_status_t Unlock( const skv_rec_lock_handle_t aLock,
+                       const skv_server_ccb_t *aOwner )
   {
-    return mLocalKVManager.Unlock( aLock );
+    return mLockManager.Unlock( aLock, aOwner );
   }
 
   /************************************************************/
