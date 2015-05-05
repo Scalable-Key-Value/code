@@ -338,6 +338,37 @@ int Test_Insert( int aDataSize, const char *aText )
                                                testFlag ),
                          SKV_SUCCESS,
                          mtext.c_str(), "UPDATE" );
+
+  testFlag = (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_UPDATE | SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS);
+  status += TEST_RESULT( skv_base_test_insert( "SKV_BASE_TEST_PDS",
+                                               Key,
+                                               aDataSize,
+                                               0,
+                                               testFlag),
+                         SKV_SUCCESS,
+                         mtext.c_str(), "UPD+LOCK" );
+
+  mtext = "ASYNC-INS:";
+  testFlag = (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_UPDATE);
+  status += TEST_RESULT( skv_base_test_async_insert( "SKV_BASE_ITEST_PDS",
+                                                     Key,
+                                                     aDataSize,
+                                                     512,
+                                                     0,
+                                                     testFlag ),
+                         SKV_SUCCESS,
+                         mtext.c_str(), "UPDATE" );
+
+  testFlag = (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_UPDATE | SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS);
+  status += TEST_RESULT( skv_base_test_async_insert( "SKV_BASE_ITEST_PDS",
+                                                     Key,
+                                                     aDataSize,
+                                                     512,
+                                                     0,
+                                                     testFlag ),
+                         SKV_SUCCESS,
+                         mtext.c_str(), "UPD+LOCK" );
+
   return status;
 }
 

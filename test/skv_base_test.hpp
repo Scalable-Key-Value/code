@@ -239,6 +239,63 @@ skv_status_t skv_base_test_insert( const char *aPDSName,
   return status;
 }
 
+
+skv_status_t skv_base_test_async_insert( const char *aPDSName,
+                                         int aKey,
+                                         int aDataSize,
+                                         int aInFlight,
+                                         int aOffset,
+                                         skv_cmd_RIU_flags_t aFlags )
+{
+  skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
+  skv_pds_id_t PDSId;
+
+  status = gdata.Client.Open( (char*)aPDSName,
+                              (skv_pds_priv_t)(SKV_PDS_READ | SKV_PDS_WRITE),
+                              SKV_COMMAND_OPEN_FLAGS_CREATE,
+                              & PDSId );
+
+  if( status != SKV_SUCCESS )
+  {
+    BegLogLine( 1 )
+      << "insert: OPEN failed with: " << skv_status_to_string( status )
+      << EndLogLine;
+    return status;
+  }
+
+  if( aDataSize > 65536 )
+    return SKV_ERRNO_VALUE_TOO_LARGE;
+
+  skv_client_cmd_ext_hdl_t cmd[ aInFlight ];
+  char *value_buf = new char[ aInFlight * 65536 ];
+  char *value[ aInFlight ];
+  for( int i=0; i<aInFlight; ++i )
+    {
+    value[i] = &(value_buf[ i * 65536 ]);
+    generate_data( value[i], aDataSize, aKey+(i & ~2), aOffset );
+    }
+
+  for( int i=0; i<aInFlight; ++i )
+    {
+    status = gdata.Client.iInsert( &PDSId, (char*)&aKey, sizeof(int),
+                                   value[i], aDataSize, aOffset,
+                                   aFlags, &cmd[i] );
+    }
+
+  for( int i=0; i<aInFlight; ++i )
+    gdata.Client.Wait( cmd[i] );
+
+  if( gdata.Client.Close( &PDSId ) != SKV_SUCCESS )
+  {
+    BegLogLine( 1 )
+      << "insert: closing failed."
+      << EndLogLine;
+  }
+
+  return status;
+}
+
+
 skv_status_t skv_base_test_retrieve( const char *aPDSName,
                                      int aKey,
                                      int aDataSize,
