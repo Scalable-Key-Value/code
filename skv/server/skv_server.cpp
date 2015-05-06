@@ -406,7 +406,9 @@ GetEvent( skv_server_event_t* aEvents, int* aEventCount, int aMaxEventCount )
         << EndLogLine;
 
       skv_server_event_t *nextEventAddr = &(aEvents[*aEventCount]);
-      int eventLimit = (aMaxEventCount - *aEventCount);
+      // todo: using a fixed limit obsoletes the idea of "slots correlated to priority"
+      //       however, this concept was already obsoleted by the command and network event sources!
+      int eventLimit = SKV_SERVER_EVENTS_MAX_COUNT;
       status = mEventSources[evt_src]->GetEvent( nextEventAddr, &evtCount, eventLimit );
 
       BegLogLine( SKV_GET_EVENT_LOG )
