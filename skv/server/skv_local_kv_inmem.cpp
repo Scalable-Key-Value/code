@@ -201,7 +201,7 @@ InsertLocal( skv_cmd_RIU_req_t *aReq,
                                      aMyRank,
                                      gSKVServerInsertInTreeFinis );
 
-  AssertLogLine( status == SKV_SUCCESS )
+  BegLogLine( (SKV_LOCAL_KV_BACKEND_LOG && (status != SKV_SUCCESS )) )
     << "skv_local_kv_inmem::InsertLocal():: ERROR: "
     << " status: " << skv_status_to_string( status )
     << EndLogLine;
@@ -862,24 +862,6 @@ skv_local_kv_inmem::CreateCursor( char* aBuff,
 {
   return mPDSManager.CreateCursor( aBuff, aBuffSize, aServCursorHdl );
 }
-
-skv_status_t
-skv_local_kv_inmem::Lock( skv_pds_id_t *aPDSId,
-                          skv_key_value_in_ctrl_msg_t *aKeyValue,
-                          skv_rec_lock_handle_t *aRecLock )
-{
-  return mPDSManager.LockRecord( *aPDSId,
-                                 aKeyValue->mData,
-                                 aKeyValue->mKeySize,
-                                 &(*aRecLock) );
-}
-
-skv_status_t
-skv_local_kv_inmem::Unlock( skv_rec_lock_handle_t aLock )
-{
-  return mPDSManager.UnlockRecord( aLock );
-}
-
 
 skv_status_t
 skv_local_kv_inmem::RDMABoundsCheck( const char* aContext,

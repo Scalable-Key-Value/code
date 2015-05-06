@@ -369,6 +369,10 @@ public:
    *************************************************************/
 
   /*
+   * LockManager functions (not to be implemented by the LKVS
+   */
+
+  /*
    * Lock attempts to create a lock based on PDS+Key and assigns it to an owner
    * if the record is not locked or if the owner retries to lock, the function returns SKV_SUCCESS
    * if a non-owner tries to lock a record that already locked, SKV_ERRNO_RECORD_IS_LOCKED is returned

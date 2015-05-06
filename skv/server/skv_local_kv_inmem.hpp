@@ -107,12 +107,6 @@ public:
                        int aKeySize,
                        skv_local_kv_cookie_t *aCookie );
 
-  skv_status_t Lock( skv_pds_id_t *aPDSId,
-                     skv_key_value_in_ctrl_msg_t *aKeyValue,
-                     skv_rec_lock_handle_t *aRecLock );
-
-  skv_status_t Unlock( skv_rec_lock_handle_t aLock );
-
   skv_status_t RDMABoundsCheck( const char* aContext,
                                 char* aMem,
                                 int aSize );

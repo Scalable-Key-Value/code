@@ -1323,24 +1323,11 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRemove( skv_local_kv_request_
 }
 
 skv_status_t
-skv_local_kv_rocksdb::Lock( skv_pds_id_t *aPDSId,
-                            skv_key_value_in_ctrl_msg_t *aKeyValue,
-                            skv_rec_lock_handle_t *aRecLock )
-{
-  return SKV_ERRNO_NOT_IMPLEMENTED;
-}
-skv_status_t
-skv_local_kv_rocksdb::Unlock( skv_rec_lock_handle_t aLock )
-{
-  return SKV_ERRNO_NOT_IMPLEMENTED;
-}
-
-skv_status_t
 skv_local_kv_rocksdb::RDMABoundsCheck( const char* aContext,
                                        char* aMem,
                                        int aSize )
 {
-  return SKV_ERRNO_NOT_IMPLEMENTED;
+  return SKV_SUCCESS;
 }
 
 skv_status_t
