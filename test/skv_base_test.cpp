@@ -348,7 +348,16 @@ int Test_Insert( int aDataSize, const char *aText )
                          SKV_SUCCESS,
                          mtext.c_str(), "UPD+LOCK" );
 
+  status += TEST_RESULT( skv_base_test_lock_insert( "SKV_BASE_LOCKTEST_PDS",
+                                                     Key,
+                                                     aDataSize,
+                                                     config.RECORD_COUNT,
+                                                     0 ),
+                         SKV_SUCCESS,
+                         mtext.c_str(), "LOCK" );
+
   mtext = "ASYNC-INS:";
+  mtext.append( aText );
   testFlag = (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_UPDATE);
   status += TEST_RESULT( skv_base_test_async_insert( "SKV_BASE_ITEST_PDS",
                                                      Key,

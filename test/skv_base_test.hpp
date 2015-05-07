@@ -276,11 +276,11 @@ skv_status_t skv_base_test_async_insert( const char *aPDSName,
     }
 
   for( int i=0; i<aInFlight; ++i )
-    {
+  {
     status = gdata.Client.iInsert( &PDSId, (char*)&aKey, sizeof(int),
                                    value[i], aDataSize, aOffset,
                                    aFlags, &cmd[i] );
-    }
+  }
 
   for( int i=0; i<aInFlight; ++i )
     gdata.Client.Wait( cmd[i] );
@@ -294,6 +294,58 @@ skv_status_t skv_base_test_async_insert( const char *aPDSName,
 
   return status;
 }
+
+// Lock-Test proposed by Nesrine Khouzami
+skv_status_t skv_base_test_lock_insert( const char *aPDSName,
+                                        int aKey,
+                                        int aDataSize,
+                                        int aIterations,
+                                        int aOffset )
+{
+  skv_status_t status = SKV_ERRNO_UNSPECIFIED_ERROR;
+  skv_pds_id_t PDSId;
+
+  status = gdata.Client.Open( (char*)aPDSName,
+                              (skv_pds_priv_t)(SKV_PDS_READ | SKV_PDS_WRITE),
+                              SKV_COMMAND_OPEN_FLAGS_CREATE,
+                              & PDSId );
+
+  if( status != SKV_SUCCESS )
+  {
+    BegLogLine( 1 )
+      << "insert: OPEN failed with: " << skv_status_to_string( status )
+      << EndLogLine;
+    return status;
+  }
+
+  uint64_t key;
+
+  char value[65536];
+  if( aDataSize > 65536 )
+    return SKV_ERRNO_VALUE_TOO_LARGE;
+  generate_data( value, aDataSize, aKey, aOffset );
+
+  for (int i = 1; (i < aIterations) && (status == SKV_SUCCESS); ++i)
+  {
+    key = aKey + i;
+    status = gdata.Client.Insert(&PDSId,
+                                 (char *) &key, sizeof(uint64_t),
+                                 (char *) &value, sizeof(uint64_t),
+                                 0,
+                                 (skv_cmd_RIU_flags_t)(SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS));
+  }
+
+  if( gdata.Client.Close( &PDSId ) != SKV_SUCCESS )
+  {
+    BegLogLine( 1 )
+      << "insert: closing failed."
+      << EndLogLine;
+  }
+
+  return status;
+}
+
+
 
 
 skv_status_t skv_base_test_retrieve( const char *aPDSName,
