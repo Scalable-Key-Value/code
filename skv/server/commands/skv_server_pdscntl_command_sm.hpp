@@ -127,7 +127,8 @@ public:
             // we have copied all Req data into response buffer already at cmd init
             skv_cmd_pdscntl_req_t* StatReq = (skv_cmd_pdscntl_req_t *) Command->GetSendBuff();
 
-            StatReq->EndianConvert() ;
+            if( Command->GetCommandClass() == SKV_COMMAND_CLASS_IMMEDIATE )
+              StatReq->EndianConvert() ;
             skv_pdscntl_cmd_t cntl_cmd = StatReq->mCntlCmd;
             skv_pds_attr_t *PDSAttr = &(StatReq->mPDSAttr);
             skv_pds_id_t PDSId = PDSAttr->mPDSId;

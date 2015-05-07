@@ -127,7 +127,8 @@ public:
           {
             skv_cmd_remove_req_t *Req = (skv_cmd_remove_req_t *) Command->GetSendBuff();
 
-            Req->EndianConvert() ;
+            if( Command->GetCommandClass() == SKV_COMMAND_CLASS_IMMEDIATE )
+              Req->EndianConvert() ;
 
             int KeySize   = Req->mKeyValue.mKeySize;
 

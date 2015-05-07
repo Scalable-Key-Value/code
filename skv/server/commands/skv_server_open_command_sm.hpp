@@ -119,11 +119,12 @@ public:
             // we have copied all Req data into response buffer already at cmd init
             skv_cmd_open_req_t* OpenReq = (skv_cmd_open_req_t *) Command->GetSendBuff();
 
-            OpenReq->EndianConvert() ;
+            if( Command->GetCommandClass() == SKV_COMMAND_CLASS_IMMEDIATE )
+              OpenReq->EndianConvert() ;
 
             char*                PDSName = OpenReq->mPDSName;
-            skv_pds_priv_t       Privs   = (skv_pds_priv_t)ntohl( OpenReq->mPrivs );
-            skv_cmd_open_flags_t Flags   = (skv_cmd_open_flags_t)ntohl( OpenReq->mFlags );
+            skv_pds_priv_t       Privs   = OpenReq->mPrivs;
+            skv_cmd_open_flags_t Flags   = OpenReq->mFlags;
 
             skv_pds_id_t PDSId;
 

@@ -73,7 +73,10 @@ private:
                                             aCommand,
                                             &RecLock );
       if( status == SKV_SUCCESS )
+      {
+        aCommand->mCommandState.mCommandInsert.mFlags = aReq->mFlags;
         aCommand->mCommandState.mCommandInsert.mRecLockHdl = RecLock;
+      }
       return status;
     }
     return SKV_SUCCESS;
@@ -85,8 +88,17 @@ private:
   {
     if( aCommand->mCommandState.mCommandInsert.mFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
     {
+      BegLogLine( SKV_SERVER_LOCK_LOG )
+        << "Unlocking cmd 0x" << (void*)aCommand
+        << " RecLock = 0x" << (void*)aCommand->mCommandState.mCommandInsert.mRecLockHdl
+        << EndLogLine;
       return aLocalKV->Unlock( aCommand->mCommandState.mCommandInsert.mRecLockHdl, aCommand );
     }
+    else
+      BegLogLine( SKV_SERVER_LOCK_LOG )
+        << "No Lock-Flags set."
+        << EndLogLine;
+
     return SKV_SUCCESS;
   }
 
@@ -100,7 +112,9 @@ private:
     // we have copied all Req data into response buffer already at cmd init
     skv_cmd_RIU_req_t *Req = (skv_cmd_RIU_req_t *) aCommand->GetSendBuff();
 
-    Req->EndianConvert() ;
+    // convert only if it's the first time we arrive here...
+    if( aCommand->GetCommandClass() == SKV_COMMAND_CLASS_IMMEDIATE )
+      Req->EndianConvert() ;
     *aReq = Req;
 
     if( FlagBasedLock( aLocalKV, Req, aCommand ) != SKV_SUCCESS )
@@ -225,6 +239,8 @@ private:
       << "skv_server_insert_command_sm::Execute():: ERROR: "
       << EndLogLine;
 
+    FlagBasedUnlock( aLocalKV, aCommand );
+
     if( aRC != SKV_SUCCESS )
       Cmpl->mHdr.mEvent = SKV_CLIENT_EVENT_ERROR;
     else
@@ -241,8 +257,6 @@ private:
       << "skv_server_insert_command_sm::Execute():: ERROR: "
       << " status: " << skv_status_to_string( status )
       << EndLogLine;
-
-    FlagBasedUnlock( aLocalKV, aCommand );
 
     return status;
   }

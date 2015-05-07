@@ -26,24 +26,30 @@ class skv_server_record_lock_key_t
 {
   skv_pds_id_t mPDSId;
   skv_key_t mKey;
+  char mKeyData[ SKV_CONTROL_MESSAGE_SIZE ];
 
 public:
   skv_server_record_lock_key_t()
   {
     mPDSId.Init( 0, 0 );
     mKey.Init( NULL, 0 );
-    mKey.mData = new char[ SKV_CONTROL_MESSAGE_SIZE ];
+    mKey.mData = mKeyData;
+  }
+  skv_server_record_lock_key_t( const skv_server_record_lock_key_t &aLockRec )
+  {
+    setPdsId( aLockRec.mPDSId );
+    mKey.mData = mKeyData;
+    setKey( aLockRec.mKey );
   }
   skv_server_record_lock_key_t( const skv_pds_id_t &aPDSId,
                                 const skv_key_t &aKey )
   {
     setPdsId( aPDSId );
-    mKey.mData = new char[ SKV_CONTROL_MESSAGE_SIZE ];
+    mKey.mData = mKeyData;
     setKey( aKey );
   }
   ~skv_server_record_lock_key_t()
   {
-  // deleting mKey.mData caused double-delete error
   }
 
   const skv_key_t& getKey() const
@@ -53,19 +59,22 @@ public:
 
   void setKey( const skv_key_value_in_ctrl_msg_t &aKeyVal )
   {
-    mKey.mSizeBE = aKeyVal.mKeySize;
-    if( mKey.mSizeBE < SKV_CONTROL_MESSAGE_SIZE )
-      memcpy( mKey.mData, aKeyVal.mData, mKey.mSizeBE );
+    mKey.mData = mKeyData;
+    mKey.mSizeBE = htonl( aKeyVal.mKeySize );
+    if( mKey.mSize() < SKV_CONTROL_MESSAGE_SIZE )
+      memcpy( mKey.mData, aKeyVal.mData, mKey.mSize() );
     else
       StrongAssertLogLine( 0 )
         << "KeySize too large (check client request or potential endian issue)."
-        << " size=" << mKey.mSizeBE
-        << " in hex=0x" << (void*)mKey.mSizeBE
+        << " size=" << mKey.mSize()
+        << " in hex=0x" << (void*)mKey.mSize()
         << EndLogLine;
   }
   void setKey( const skv_key_t& aKey )
   {
-    mKey = aKey;
+    mKey.mSizeBE = aKey.mSizeBE;
+    mKey.mData = mKeyData;
+    memcpy( mKeyData, aKey.mData, mKey.mSize() );
   }
 
   skv_pds_id_t getPdsId() const
@@ -76,6 +85,17 @@ public:
   void setPdsId( const skv_pds_id_t &aPDSId )
   {
     mPDSId.Init( aPDSId.mOwnerNodeId, aPDSId.mIdOnOwner );
+  }
+
+  skv_server_record_lock_key_t&
+  operator=( const skv_server_record_lock_key_t &aLockRec )
+  {
+    setPdsId( aLockRec.mPDSId );
+    mKey.mData = mKeyData;
+    memcpy( mKeyData, aLockRec.mKeyData, mKey.mSize() );
+    setKey( aLockRec.mKey );
+
+    return *this;
   }
 
   bool

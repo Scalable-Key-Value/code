@@ -63,7 +63,9 @@ class skv_server_retrieve_n_keys_command_sm
                                  skv_lmr_triplet_t *aRetrievedKeysSizesSegs,
                                  int *aRetrievedKeysSizesSegsCount )
   {
+    if( aCommand->GetCommandClass() == SKV_COMMAND_CLASS_IMMEDIATE )
       aReq->EndianConvert() ;
+
     // Check if the key is in the buffer
     if( ! aReq->mIsKeyInCtrlMsg )
       {

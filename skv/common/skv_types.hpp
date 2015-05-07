@@ -206,7 +206,7 @@ struct skv_store_t
       << " aStore.mData != NULL "
       << EndLogLine;
 
-    if( mSizeBE == aStore.mSizeBE )
+    if( mSize() == aStore.mSize() )
     {
       return (memcmp( mData, aStore.mData, mSize() ) == 0);
     }

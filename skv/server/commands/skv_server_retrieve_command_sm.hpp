@@ -268,7 +268,8 @@ public:
             skv_lmr_triplet_t ValueMemRep;
             int TotalSize = 0;
 
-            Req->EndianConvert() ;
+            if( Command->GetCommandClass() == SKV_COMMAND_CLASS_IMMEDIATE )
+              Req->EndianConvert() ;
 
             if( Req->mFlags & (SKV_COMMAND_RIU_INSERT_KEY_FITS_IN_CTL_MSG|SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) )
             {

@@ -211,7 +211,8 @@ public:
 
             skv_cmd_bulk_insert_req_t* Req = (skv_cmd_bulk_insert_req_t *) Command->GetSendBuff();
 
-            Req->EndianConvert() ;
+            if( Command->GetCommandClass() == SKV_COMMAND_CLASS_IMMEDIATE )
+              Req->EndianConvert() ;
 
             AssertLogLine( ( ((void *) Req->mBuffer) != NULL ) &&
                            ( Req->mBufferSize >= 0 && Req->mBufferSize < SKV_BULK_INSERT_LIMIT ) )
