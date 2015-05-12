@@ -42,8 +42,6 @@
 #define IONODE_IP                               "10.255.255.254"
 #define MY_HOSTNAME_SIZE 128
 
-#define PERSISTENT_IMAGE_MAX_LEN                ( 2ull * 1024ull * 1024ull * 1024ull )
-
 static
 int
 read_from_file( int sock, char * buff, int len )
@@ -348,22 +346,6 @@ public:
         char*                    aRestartImagePath,
         skv_persistance_flag_t  aFlag )
   {
-    mTotalLen = PERSISTENT_IMAGE_MAX_LEN ;
-
-    if( mTotalLen <= 0 )
-    {
-      BegLogLine( 1 )
-        << "Init(): ERROR: "
-        << " mTotalLen: " << mTotalLen
-        << EndLogLine;
-      return SKV_ERRNO_UNSPECIFIED_ERROR;
-    }
-
-    BegLogLine( SKV_SERVER_HEAP_MANAGER_LOG )
-      << "Init(): Trying to allocate "
-      << " mTotalLen: " << mTotalLen
-      << EndLogLine;
-
     mFd = -1;
     char* persistentFileMapAddress = NULL;
     int  mmapFlags = MAP_SHARED;
@@ -373,6 +355,22 @@ public:
     MPI_Comm_rank( MPI_COMM_WORLD, & MyRank );
 #endif
     skv_configuration_t *config = skv_configuration_t::GetSKVConfiguration();
+
+    mTotalLen = config->GetRdmaMemoryLimit();
+
+    if( mTotalLen <= 0 )
+    {
+      BegLogLine( 1 )
+        << "Init(): ERROR: "
+        << " mTotalLen: " << mTotalLen
+        << EndLogLine;
+      return SKV_ERRNO_OUT_OF_MEMORY;
+    }
+
+    BegLogLine( SKV_SERVER_HEAP_MANAGER_LOG )
+      << "Init(): Trying to allocate "
+      << " mTotalLen: " << mTotalLen
+      << EndLogLine;
 
     char PersistentLocalFilePath[ 128 ];
     sprintf( PersistentLocalFilePath, "%s.%d", config->GetServerPersistentFileLocalPath(), MyRank );

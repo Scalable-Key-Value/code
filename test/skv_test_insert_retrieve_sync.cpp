@@ -41,7 +41,6 @@ static TraceClient SKVRetrieveFinis;
 
 // #define NUMBER_OF_TRIES  (  16 * 512  )
 #define PURESTORAGE_FACTOR ( (double)0.7 )                                                      // factor to reflect space overhead in server space, represents the available fraction of space per server
-#define STORAGE_SPACE_PER_SNODE     ( (int)(PERSISTENT_IMAGE_MAX_LEN * PURESTORAGE_FACTOR) )    // space available per server (reduced by an arbitrary space-overhead factor
 #define MAX_NUMBER_OF_TRIES_PER_SRV (  250  )    // max number of attempts per server
 #define MAX_TEST_SIZE_EXP ( 20 )       // 2^x max value size
 #define SKV_TEST_START_INDEX ( 2 )    // 2^x min value size
@@ -106,6 +105,8 @@ main(int argc, char **argv)
 
   FxLogger_Init( argv[ 0 ] );
   pkTraceServer::Init();
+
+  skv_configuration_t *config = skv_configuration_t::GetSKVConfiguration();
 
   int Rank = 0;
   int NodeCount = 1;
@@ -248,7 +249,8 @@ main(int argc, char **argv)
     {
       int testDataSize = DataSizes[ sizeIndex ];
 
-      uint64_t total_records = (uint64_t)STORAGE_SPACE_PER_SNODE / (uint64_t) testDataSize * (uint64_t)NUMBER_OF_SNODES;
+      uint64_t total_records = config->GetRdmaMemoryLimit() * (uint64_t)PURESTORAGE_FACTOR / (uint64_t) testDataSize * (uint64_t)NUMBER_OF_SNODES;
+
       NUMBER_OF_TRIES = total_records / NodeCount;
 
       BegLogLine( 1 | SKV_TEST_LOG )
