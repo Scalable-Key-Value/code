@@ -89,13 +89,6 @@ Retrieve( skv_pds_id_t             aPDSId,
 
 skv_status_t
 skv_uber_pds_t::
-UnlockRecord( skv_rec_lock_handle_t   aRecLock )
-{
-  return mLocalData.UnlockRecord( aRecLock );
-}
-
-skv_status_t
-skv_uber_pds_t::
 CreateCursor( char*                    aBuff,
               int                      aBuffSize,
               skv_server_cursor_hdl_t* aServCursorHdl )
@@ -103,19 +96,6 @@ CreateCursor( char*                    aBuff,
   return mLocalData.CreateCursor( aBuff,
                                   aBuffSize,
                                   aServCursorHdl );
-}
-
-skv_status_t
-skv_uber_pds_t::
-LockRecord( skv_pds_id_t             aPDSId,
-            char*                    aKeyData,
-            int                      aKeySize,
-            skv_rec_lock_handle_t*   aRecLock )
-{
-  return mLocalData.LockRecord( aPDSId,
-                                aKeyData,
-                                aKeySize,
-                                aRecLock);
 }
 
 skv_status_t

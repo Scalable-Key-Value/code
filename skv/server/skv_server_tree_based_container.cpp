@@ -380,7 +380,6 @@ operator<<(streamclass& os, const skv_tree_based_container_key_t& aKey )
   os << "skv_tree_based_container_t::Key [ "
      << " mPDSId: " << aKey.mPDSId
      << " mUserKey: " << aKey.mUserKey
-     << " mLockState: " << aKey.mLockState
      << " ]";
 
   return os;
@@ -610,11 +609,6 @@ Remove( skv_pds_id_t             aPDSId,
   // set key, get addr of record and deallocate potential RMR
   key = (skv_tree_based_container_key_t *) &(*iter);
 
-  if( key->GetLockState() == SKV_LOCKED_STATE )
-  {
-    return SKV_ERRNO_RECORD_IS_LOCKED;
-  }
-
   char* RecordPtr = key->GetRecordPtr();
   int KeySize = key->GetKeySize();
 
@@ -772,14 +766,6 @@ Retrieve( skv_pds_id_t             aPDSId,
   aMemRepValue->mLMRTriplet.lmr      = mDataLMR;
   aMemRepValue->mLMRTriplet.addr.abs = (StartOfValueInStore + RequestedOffset);
   aMemRepValue->mLMRTriplet.length   = SizeToReturn;
-
-  if( aFlags & SKV_COMMAND_RIU_INSERT_USE_RECORD_LOCKS )
-  {
-    if( key->GetLockState() == SKV_LOCKED_STATE )
-    {
-      return SKV_ERRNO_RECORD_IS_LOCKED;
-    }
-  }
 
   BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
     << "skv_tree_based_container_t::Retrieve():: Leaving with SKV_SUCCESS"
@@ -1024,7 +1010,6 @@ MakeKey( skv_pds_id_t & aPDSId, skv_key_t* aKey )
 
   mTempKeyBuffer.SetPDSId( aPDSId );
   mTempKeyBuffer.SetUserKey( aKey );
-  mTempKeyBuffer.SetLockState( SKV_UNLOCKED_STATE );
 
   return &mTempKeyBuffer;
 }
@@ -1053,68 +1038,6 @@ MakeMagicKey( skv_pds_id_t* aPDSId )
   return &mTempKeyBuffer;
 }
 
-
-skv_status_t
-skv_tree_based_container_t::
-UnlockRecord( skv_rec_lock_handle_t   aRecLock )
-{
-  BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
-    << "skv_tree_based_container_t::UnlockRecord():: Entering... "
-    << EndLogLine;
-
-  *aRecLock = SKV_UNLOCKED_STATE;
-
-  BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
-    << "skv_tree_based_container_t::UnlockRecord():: Leaving "
-    << EndLogLine;
-
-  return SKV_SUCCESS;
-}
-
-skv_status_t
-skv_tree_based_container_t::
-LockRecord( skv_pds_id_t             aPDSId,
-            char*                     aKeyData,
-            int                       aKeySize,
-            skv_rec_lock_handle_t*   aRecLock )
-{
-  BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
-    << "skv_tree_based_container_t::LockRecord():: Entering... "
-    << EndLogLine;
-
-  skv_key_t UserKey;
-  UserKey.Init( aKeyData, aKeySize );
-
-  skv_tree_based_container_key_t* key = MakeKey( aPDSId, & UserKey );
-
-  BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
-    << "skv_tree_based_container_t::LockRecord():: "
-    << " key: " << *key
-    << EndLogLine;
-
-  skv_data_container_t::iterator iter = mDataMap->find( *key );
-
-  if( iter == mDataMap->end() )
-  {
-    BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
-      << "skv_tree_based_container_t::LockRecord():: Leaving with SKV_ERRNO_ELEM_NOT_FOUND"
-      << EndLogLine;
-
-    return SKV_ERRNO_ELEM_NOT_FOUND;
-  }
-
-  skv_tree_based_container_key_t* IterKey = (skv_tree_based_container_key_t *) & (*iter);
-
-  IterKey->SetLockState( SKV_LOCKED_STATE ) ;
-
-  *aRecLock = IterKey->GetLockStatePtr();
-
-  BegLogLine( SKV_SERVER_TREE_BASED_CONTAINER_LOG )
-    << "skv_tree_based_container_t::LockRecord():: Leaving"
-    << EndLogLine;
-
-  return SKV_SUCCESS;
-}
 
 skv_status_t
 skv_tree_based_container_t::

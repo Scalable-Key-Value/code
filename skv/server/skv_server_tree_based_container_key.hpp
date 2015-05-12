@@ -43,11 +43,9 @@ public:
    * OVERHEAD PER RECORD OVERHEAD PER RECORD
    ***************************************************/
 
-  skv_pds_id_t  mPDSId;
-  skv_key_t     mUserKey;
-  int            mValueSize;
-  char           mLockState;
-
+  skv_pds_id_t mPDSId;
+  skv_key_t mUserKey;
+  int mValueSize;
 
 
 #define SKV_MAGIC_VALUE  (-1)
@@ -77,24 +75,6 @@ public:
   GetKeySize()
   {
     return mUserKey.GetSize();
-  }
-
-  char *
-  GetLockStatePtr()
-  {
-    return &mLockState;
-  }
-
-  char
-  GetLockState()
-  {
-    return mLockState;
-  }
-
-  void
-  SetLockState( char aState )
-  {
-    mLockState = aState;
   }
 
   void

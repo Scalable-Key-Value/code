@@ -139,13 +139,6 @@ public:
                               int aListOfKeysMaxCount,
                               skv_cursor_flags_t aFlags );
 
-  skv_status_t UnlockRecord( skv_rec_lock_handle_t aRecLock );
-
-  skv_status_t LockRecord( skv_pds_id_t aPDSId,
-                           char* aKeyData,
-                           int aKeySize,
-                           skv_rec_lock_handle_t* aRecLock );
-
   skv_status_t CreateCursor( char* aBuff,
                              int aBuffSize,
                              skv_server_cursor_hdl_t* aServCursorHdl );
