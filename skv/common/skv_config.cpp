@@ -50,13 +50,14 @@ skv_configuration_t::skv_configuration_t( )
 
   mPersistentFilename      = DEFAULT_SKV_PERSISTENT_FILENAME;
   mPersistentFileLocalPath = DEFAULT_SKV_PERSISTENT_FILE_LOCAL_PATH;
+
+  mRdmaMemoryLimit = DEFAULT_SKV_RDMA_MEMORY_LIMIT;
 }
 
 // get the location and name of the config file
 int
 skv_configuration_t::GetConfigurationFile( const char *aConfigFile )
 {
-
   ifstream cFileStream;
   // check if user provided a file
   // safe string length check: if there are more than N letters in the file name, we're fine
@@ -194,6 +195,10 @@ skv_configuration_t::ReadConfigurationFile( const char *aConfigFile )
             mCommIF = cline.substr( valueIndex );
             break;
 
+          case SKV_CONFIG_SETTING_RDMA_MEMORY_LIMIT:
+            mRdmaMemoryLimit = std::strtoll( cline.substr( valueIndex ).c_str(), NULL, 10 ) * 1024 * 1024;
+            break;
+
           default:
             BegLogLine( 1 )
               << "skv_configuration_t::ReadConfigurationFile():: unknown parameter in"
@@ -231,7 +236,8 @@ skv_configuration_t::ReadConfigurationFile( const char *aConfigFile )
     << " ServerPort:" << mServerPort
     << " persFile: " << mPersistentFilename.c_str()
     << " persLocalFile: " << mPersistentFileLocalPath.c_str()
-    << " verbsDev" << mCommIF.c_str()
+    << " commIF: " << mCommIF.c_str()
+    << " RDMAmemLimit: " << mRdmaMemoryLimit
     << EndLogLine;
 
   return status;
@@ -261,6 +267,9 @@ skv_configuration_t::GetVariableCase( const string s, size_t *valueIndex )
 
     if( s.find( "COMM_IF") != string::npos )
       setting = SKV_CONFIG_SETTING_COMM_IF;
+
+    if( s.find( "RDMA_MEMORY") != string::npos )
+      setting = SKV_CONFIG_SETTING_RDMA_MEMORY_LIMIT;
   }
   // client variables
   else if( s.find( "SKV_CLIENT" ) != string::npos )
@@ -346,6 +355,12 @@ const char*
 skv_configuration_t::GetCommIF() const
 {
   return mCommIF.c_str();
+}
+
+const uint64_t
+skv_configuration_t::GetRdmaMemoryLimit() const
+{
+  return mRdmaMemoryLimit;
 }
 
 const string

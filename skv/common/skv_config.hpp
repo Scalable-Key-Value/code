@@ -29,6 +29,7 @@ using namespace std;            // that's a bad place for using... ;-)...
 #define DEFAULT_SKV_PERSISTENT_FILENAME "skv_store"
 #define DEFAULT_SKV_PERSISTENT_FILE_LOCAL_PATH "/tmp/skv_store"
 #define DEFAULT_SKV_COMM_IF "roq0"
+#define DEFAULT_SKV_RDMA_MEMORY_LIMIT ( 2 * 1024 * 1024 * 1024 )
 
 typedef enum {
   SKV_CONFIG_SETTING_UNDEFINED,
@@ -38,6 +39,7 @@ typedef enum {
   SKV_CONFIG_SETTING_PERSISTENT_FILENAME,
   SKV_CONFIG_SETTING_PERSISTENT_FILE_LOCAL_PATH,
   SKV_CONFIG_SETTING_COMM_IF,
+  SKV_CONFIG_SETTING_RDMA_MEMORY_LIMIT
 } skv_config_setting_t;
 
 
@@ -52,6 +54,7 @@ class skv_configuration_t
   string    mPersistentFilename;
   string    mPersistentFileLocalPath;
   string    mCommIF;
+  uint64_t  mRdmaMemoryLimit;
 
   string    mConfigFile;
 
@@ -75,6 +78,8 @@ public:
   void SetSKVServerPort( uint32_t aServerPort );
 
   const char* GetCommIF() const;
+
+  const uint64_t GetRdmaMemoryLimit() const;
 
   const string GetConfigFileName() const;
 };
