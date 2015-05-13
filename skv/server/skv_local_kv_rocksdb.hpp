@@ -24,10 +24,10 @@
 #define SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG ( 0 | SKV_LOGGING_ALL )
 #endif
 
-#define SKV_LOCAL_KV_MAX_OUTSTANDING_REQUESTS ( 64 )
+// Worker Settings: note that the configured total rdma buffer size
+// will be divided by the worker pool size and the max value size
+#define SKV_LOCAL_KV_MIN_OUTSTANDING_REQUESTS ( 16 )
 #define SKV_LOCAL_KV_MAX_VALUE_SIZE ( 1 * 1048576ul )
-#define SKV_LOCAL_KV_RDMA_BUFFER_SIZE ( size_t(SKV_LOCAL_KV_MAX_VALUE_SIZE * SKV_LOCAL_KV_MAX_OUTSTANDING_REQUESTS) )
-
 #define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 32 )
 
 #include <thread>
@@ -56,6 +56,13 @@ struct skv_local_kv_rocksdb_reqctx_t
   void *mUserData;
 };
 
+struct skv_local_kv_rocksdb_worker_settings_t {
+  uint64_t mThreadRank;
+  uint64_t mRDMABufferSize;
+  uint64_t mMaxRequests;
+  uint64_t mMaxValueSize;
+};
+
 class skv_local_kv_rocksdb_worker_t {
   skv_local_kv_request_queue_t mDedicatedQueue;
   skv_local_kv_request_queue_t mRequestQueue;
@@ -65,17 +72,20 @@ class skv_local_kv_rocksdb_worker_t {
   skv_local_kv_rdma_data_buffer_t *mDataBuffer;
   skv_local_kv_event_queue_t *mEventQueue;
   skv_local_kv_request_t *mStalledCommand;
-  uint64_t mThreadRank;
+
+  skv_local_kv_rocksdb_worker_settings_t mSettings;
 
 public:
-  skv_local_kv_rocksdb_worker_t() 
+  skv_local_kv_rocksdb_worker_t( const uint32_t aQueueLengths )
     : mStalledCommand( NULL ),
-      mRequestQueue( SKV_LOCAL_KV_MAX_REQUESTS / SKV_LOCAL_KV_WORKER_POOL_SIZE ),
-      mDedicatedQueue( SKV_LOCAL_KV_MAX_REQUESTS / SKV_LOCAL_KV_WORKER_POOL_SIZE )
-    {};
+      mRequestQueue( aQueueLengths ),
+      mDedicatedQueue( aQueueLengths )
+    {
+    };
   ~skv_local_kv_rocksdb_worker_t() {};
 
-  skv_status_t Init( uint64_t aThreadRank, skv_local_kv_rocksdb *aBackEnd, bool aThreaded = false );
+  skv_status_t Init( const skv_local_kv_rocksdb_worker_settings_t &aSettings,
+                     skv_local_kv_rocksdb *aBackEnd, bool aThreaded = false );
 
   skv_status_t PerformOpen( skv_local_kv_request_t *aReq );
   skv_status_t PerformStat( skv_local_kv_request_t *aReq );
@@ -96,7 +106,7 @@ public:
   }
   uint64_t GetThreadRank() const
   {
-    return mThreadRank;
+    return mSettings.mThreadRank;
   }
   skv_local_kv_request_queue_t* GetRequestQueue()
   {
@@ -283,8 +293,8 @@ class skv_local_kv_rocksdb {
   skv_distribution_t mDistributionManager;
 
   volatile bool mKeepProcessing;
-  skv_local_kv_rocksdb_worker_t mMasterProcessing;
-  skv_local_kv_rocksdb_worker_t mWorkerPool[ SKV_LOCAL_KV_WORKER_POOL_SIZE ];
+  skv_local_kv_rocksdb_worker_t *mMasterProcessing;
+  skv_local_kv_rocksdb_worker_t *mWorkerPool[ SKV_LOCAL_KV_WORKER_POOL_SIZE ];
 
   skv_local_kv_rocksdb_access_t mDBAccess;
 
@@ -293,7 +303,7 @@ public:
   {
     mMyRank = -1;
   }
-
+  ~skv_local_kv_rocksdb();
   /****************************************************************************
    * SKV BACKEND API ROUTINES
    */

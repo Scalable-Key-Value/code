@@ -188,14 +188,18 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
     << "AsyncProcessing: Exiting thread"
     << EndLogLine;
 }
-skv_status_t skv_local_kv_rocksdb_worker_t::Init( uint64_t aThreadRank, skv_local_kv_rocksdb *aBackEnd, bool aThreaded )
+skv_status_t skv_local_kv_rocksdb_worker_t::Init( const skv_local_kv_rocksdb_worker_settings_t &aSettings, skv_local_kv_rocksdb *aBackEnd, bool aThreaded )
 {
   skv_status_t status;
-  mThreadRank = aThreadRank;
+  mSettings = aSettings;
   mMaster = aBackEnd;
 
-  mDataBuffer = new skv_local_kv_rdma_data_buffer_t( );
-  status = mDataBuffer->Init( mMaster->GetPZ(), SKV_LOCAL_KV_RDMA_BUFFER_SIZE, SKV_LOCAL_KV_MAX_VALUE_SIZE );
+  uint64_t RDMABufferSize = aSettings.mRDMABufferSize;
+
+  mDataBuffer = new skv_local_kv_rdma_data_buffer_t;
+  status = mDataBuffer->Init( mMaster->GetPZ(),
+                              mSettings.mRDMABufferSize,
+                              mSettings.mMaxValueSize );
   if( status != SKV_SUCCESS )
     return status;
 
@@ -212,6 +216,13 @@ skv_status_t skv_local_kv_rocksdb_worker_t::Init( uint64_t aThreadRank, skv_loca
 
   if( aThreaded )
     mRequestProcessor = new std::thread( Run, this );
+
+  BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
+    << "Initialized worker thread rank=" << mSettings.mThreadRank
+    << " buffersize=" << mSettings.mRDMABufferSize
+    << " qdepth=" << mSettings.mMaxRequests
+    << " maxvalue=" << mSettings.mMaxValueSize
+    << EndLogLine;
 
   return status;
 }
@@ -254,7 +265,21 @@ skv_local_kv_rocksdb::Init( int aRank,
     << "skv_local_kv_rocksdb::Init(): DB-Access initialized..."
     << EndLogLine;
 
-  status = mMasterProcessing.Init( 0, this );
+  skv_local_kv_rocksdb_worker_settings_t worker_config;
+  worker_config.mRDMABufferSize = config->GetRdmaMemoryLimit() / SKV_LOCAL_KV_WORKER_POOL_SIZE;
+  worker_config.mMaxValueSize = SKV_LOCAL_KV_MAX_VALUE_SIZE;
+  worker_config.mMaxRequests = worker_config.mRDMABufferSize / worker_config.mMaxValueSize;
+
+  // make sure we have at least 16 command slots
+  if( worker_config.mMaxRequests < SKV_LOCAL_KV_MIN_OUTSTANDING_REQUESTS )
+  {
+    worker_config.mMaxRequests = SKV_LOCAL_KV_MIN_OUTSTANDING_REQUESTS;
+    worker_config.mMaxValueSize = worker_config.mRDMABufferSize / worker_config.mMaxRequests;
+  }
+
+  worker_config.mThreadRank = 0;
+  mMasterProcessing = new skv_local_kv_rocksdb_worker_t( worker_config.mMaxRequests );
+  status = mMasterProcessing->Init( worker_config, this );
   if( status != SKV_SUCCESS )
     return status;
 
@@ -264,8 +289,10 @@ skv_local_kv_rocksdb::Init( int aRank,
 
   for( int w=0; ( w < SKV_LOCAL_KV_WORKER_POOL_SIZE ) && (status == SKV_SUCCESS ); w++ )
   {
-    status = mWorkerPool[ w ].Init( w, this, true );
-    mRequestQueueList.AddQueue( mWorkerPool[ w ].GetRequestQueue() );
+    worker_config.mThreadRank = w;
+    mWorkerPool[ w ] = new skv_local_kv_rocksdb_worker_t( worker_config.mMaxRequests );
+    status = mWorkerPool[ w ]->Init( worker_config, this, true );
+    mRequestQueueList.AddQueue( mWorkerPool[ w ]->GetRequestQueue() );
 
     BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
       << "skv_local_kv_rocksdb::Init(): Worker[ " << w << " ] initialized ..."
@@ -280,7 +307,17 @@ skv_local_kv_rocksdb::Exit()
   skv_status_t status = mDBAccess.Exit();
   mDistributionManager.Finalize();
   // todo: stop all workers and clean the requestqueuelist
+  mKeepProcessing = false;
   return status;
+}
+
+skv_local_kv_rocksdb::~skv_local_kv_rocksdb()
+{
+  if( mMasterProcessing )
+    delete mMasterProcessing;
+  for( int w=0; w < SKV_LOCAL_KV_WORKER_POOL_SIZE; w++ )
+    if( mWorkerPool[ w ] )
+      delete mWorkerPool[ w ];
 }
 
 skv_status_t
@@ -751,7 +788,7 @@ skv_local_kv_rocksdb::InsertPostProcess( skv_local_kv_req_ctx_t aReqCtx,
 
   rocksdb::Status rs = mDBAccess.PutData( *key, value);
 
-  mMasterProcessing.ReleaseKey( *key );
+  mMasterProcessing->ReleaseKey( *key );
   delete key;
 
   /* create an async request, make sure it goes to the worker thread
@@ -1334,13 +1371,13 @@ skv_status_t
 skv_local_kv_rocksdb::Allocate( int aBuffSize,
                                 skv_lmr_triplet_t *aRDMARep )
 {
-  return mMasterProcessing.GetDataBuffer()->AcquireDataArea( aBuffSize, aRDMARep );
+  return mMasterProcessing->GetDataBuffer()->AcquireDataArea( aBuffSize, aRDMARep );
 }
 
 skv_status_t
 skv_local_kv_rocksdb::Deallocate( skv_lmr_triplet_t *aRDMARep )
 {
-  return mMasterProcessing.GetDataBuffer()->ReleaseDataArea( aRDMARep );
+  return mMasterProcessing->GetDataBuffer()->ReleaseDataArea( aRDMARep );
 }
 
 skv_status_t
