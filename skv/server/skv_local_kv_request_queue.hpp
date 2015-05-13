@@ -35,12 +35,12 @@ class skv_local_kv_request_queue_t {
 public:
   skv_local_kv_request_queue_t( const size_t aSize = SKV_LOCAL_KV_MAX_REQUESTS ) : mFreeSlots( 0 ), mLenght( std::min( (size_t)aSize, (size_t)SKV_LOCAL_KV_MAX_REQUESTS ) )
   {
-    mRequestPool = NULL;
+    mRequestPool = new skv_local_kv_request_t[ mLenght ];
   }
   ~skv_local_kv_request_queue_t()
   {
     if( mRequestPool != NULL )
-      delete mRequestPool;
+      delete [] mRequestPool;
   }
 
   skv_status_t Init()

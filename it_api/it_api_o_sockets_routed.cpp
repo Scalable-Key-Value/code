@@ -40,6 +40,7 @@
 //#include <netinet/tcp.h>
 
 #include <spi/include/kernel/rdma.h>
+#include <skv/common/skv_config.hpp>
 
 //#include <it_api_o_sockets_router.h>
 
@@ -533,12 +534,16 @@ public:
   pthread_t mRdmaResponderThread ;
   volatile bool mResponderKeepRunning;
   bool mEven ;
+  skv_configuration_t *mConfig;
 
   VerbsChannel() : mRdmaSocket( VERBS_CHANNEL_UNINITIALIZED ),
       mEven( false ),
       mRdmaSendBlocks( 0 ),
       mRdmaResponderThread( VERBS_CHANNEL_UNINITIALIZED ),
-      mResponderKeepRunning( false ) {}
+      mResponderKeepRunning( false )
+  {
+    mConfig = skv_configuration_t::GetSKVConfiguration();
+  }
 
   ~VerbsChannel() { Terminate(); }
   void Init(void) ;
@@ -570,11 +575,13 @@ void VerbsChannel::Init(void)
      mBuffer.Init() ;
      mEven = false ;
      mRdmaSendBlocks = 0 ;
+     mConfig = skv_configuration_t::GetSKVConfiguration();
+     uint32_t IONPort = mConfig->GetSKVForwarderPort();
      int rc_open = Kernel_RDMAOpen(&mRdmaSocket) ;
      BegLogLine(FXLOG_IONCN_BUFFER)
        << "Kernel_RDMAOpen rc=" << rc_open
        << EndLogLine ;
-     int rc_connect = Kernel_RDMAConnect(mRdmaSocket,k_IONPort) ;
+     int rc_connect = Kernel_RDMAConnect(mRdmaSocket,IONPort) ;
      BegLogLine(FXLOG_IONCN_BUFFER)
        << "Kernel_RDMAConnect rc=" << rc_connect
        << EndLogLine ;

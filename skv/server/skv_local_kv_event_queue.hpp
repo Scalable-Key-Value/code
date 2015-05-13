@@ -35,7 +35,7 @@ public:
   }
   ~skv_local_kv_event_queue_t()
   {
-    delete mEventPool;
+    delete [] mEventPool;
   }
 
   skv_status_t Init() {

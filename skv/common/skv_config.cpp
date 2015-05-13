@@ -43,6 +43,7 @@ skv_configuration_t::skv_configuration_t( )
   mConfigFile = DEFAULT_CONFIG_FILE;
 
   mServerPort = DEFAULT_SKV_SERVER_PORT;
+  mForwarderPort = DEFAULT_SKV_FORWARDER_PORT;
 
   mMachineFile = DEFAULT_SKV_MACHINE_FILE;
 
@@ -175,6 +176,10 @@ skv_configuration_t::ReadConfigurationFile( const char *aConfigFile )
             SetSKVServerPort( (uint16_t)atoi( cline.substr( valueIndex ).c_str() ) );
             break;
 
+          case SKV_CONFIG_SETTING_FORWARDER_PORT:
+            mForwarderPort = (uint16_t)atoi( cline.substr( valueIndex ).c_str() );
+            break;
+
           case SKV_CONFIG_SETTING_READY_FILE:
             mReadyFile = cline.substr( valueIndex );
             break;
@@ -279,6 +284,9 @@ skv_configuration_t::GetVariableCase( const string s, size_t *valueIndex )
   // other/general variables
   else
   {
+    if( s.find( "FORWARDER_PORT" ) != string::npos )
+      setting = SKV_CONFIG_SETTING_FORWARDER_PORT;
+
     if( s.find( "PERSISTENT_FILENAME" ) != string::npos )
       setting = SKV_CONFIG_SETTING_PERSISTENT_FILENAME;
 
@@ -319,6 +327,12 @@ const uint32_t
 skv_configuration_t::GetSKVServerPort() const
 {
   return mServerPort;
+}
+
+const uint32_t
+skv_configuration_t::GetSKVForwarderPort() const
+{
+  return mForwarderPort;
 }
 
 void

@@ -24,6 +24,7 @@ using namespace std;            // that's a bad place for using... ;-)...
 #endif
 
 #define DEFAULT_SKV_SERVER_PORT 17002
+#define DEFAULT_SKV_FORWARDER_PORT 10950
 #define DEFAULT_SKV_SERVER_READY_FILE "/tmp/skv_server.ready"
 #define DEFAULT_SKV_MACHINE_FILE "/etc/skv_machinefile"
 #define DEFAULT_SKV_PERSISTENT_FILENAME "skv_store"
@@ -34,6 +35,7 @@ using namespace std;            // that's a bad place for using... ;-)...
 typedef enum {
   SKV_CONFIG_SETTING_UNDEFINED,
   SKV_CONFIG_SETTING_SERVER_PORT,
+  SKV_CONFIG_SETTING_FORWARDER_PORT,
   SKV_CONFIG_SETTING_READY_FILE,
   SKV_CONFIG_SETTING_MACHINE_FILE,
   SKV_CONFIG_SETTING_PERSISTENT_FILENAME,
@@ -49,6 +51,7 @@ class skv_configuration_t
   static skv_configuration_t *mConfiguration;
 
   uint32_t  mServerPort;   // stored in host byte order
+  uint32_t  mForwarderPort;   // stored in host byte order
   string    mReadyFile;
   string    mMachineFile;
   string    mPersistentFilename;
@@ -74,6 +77,8 @@ public:
   const char* GetServerPersistentFileLocalPath() const;
 
   const uint32_t GetSKVServerPort() const;
+  const uint32_t GetSKVForwarderPort() const;
+
   // input in network byte order
   void SetSKVServerPort( uint32_t aServerPort );
 

@@ -79,7 +79,9 @@ public:
   skv_local_kv_rocksdb_worker_t( const uint32_t aQueueLengths )
     : mStalledCommand( NULL ),
       mRequestQueue( aQueueLengths ),
-      mDedicatedQueue( aQueueLengths )
+  // worst case: each worker gets a request that got initially processed by one worker
+  // note that constructor limits the length to max lenght
+      mDedicatedQueue( aQueueLengths * SKV_LOCAL_KV_WORKER_POOL_SIZE )
     {
     };
   ~skv_local_kv_rocksdb_worker_t() {};

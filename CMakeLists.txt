@@ -231,7 +231,7 @@ foreach(_test ${TEST_SOURCES})
   add_executable(${TEST_NAME} ${_test})
   set_target_properties(${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS
     "SKV_CLIENT_UNI;SKV_NON_MPI")
-  target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
+  target_link_libraries(${TEST_NAME} skvc skv_client it_api skv_common fxlogger
     ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()
@@ -241,7 +241,7 @@ foreach(_test ${UNITTEST_SOURCES})
   add_executable(${TEST_NAME} ${_test})
   set_target_properties(${TEST_NAME} PROPERTIES COMPILE_DEFINITIONS
     "SKV_UNIT_TEST;SKV_CLIENT_UNI;SKV_NON_MPI")
-  target_link_libraries(${TEST_NAME} skvc skv_client skv_common it_api fxlogger
+  target_link_libraries(${TEST_NAME} skvc skv_client it_api skv_common fxlogger
     ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION unittest)
 endforeach()
@@ -249,8 +249,8 @@ endforeach()
 foreach(_test ${TEST_MPI_SOURCES})
   get_filename_component(TEST_NAME ${_test} NAME_WE)
   add_executable(${TEST_NAME} ${_test})
-  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi skv_common
-    ${IT_API_LINK_LIBRARIES} fxlogger
+  target_link_libraries(${TEST_NAME} skvc_mpi skv_client_mpi
+    ${IT_API_LINK_LIBRARIES} skv_common fxlogger
     ${MPI_CXX_LIBRARIES} ${SKV_COMMON_LINK_LIBRARIES})
   install(TARGETS ${TEST_NAME} DESTINATION bin)
 endforeach()

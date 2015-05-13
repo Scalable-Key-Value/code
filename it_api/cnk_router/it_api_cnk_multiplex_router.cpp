@@ -63,6 +63,9 @@ extern "C"
 #include <it_api.h>
 //#include "ordma_debug.h"
 };
+
+#include <skv/common/skv_config.hpp>
+
 #include <it_api_o_sockets_thread.h>
 #include <it_api_o_sockets_types.h>
 #include <it_api_o_sockets_cn_ion.hpp>
@@ -808,7 +811,7 @@ static struct context *s_ctx = NULL;
 
 static pthread_t setup_polling_thread(void) ;
 static void FreeClientId( const iWARPEM_StreamId_t aClient );
-static int ConnectToServers( int aMyRank );
+static int ConnectToServers( int aMyRank, const skv_configuration_t *config );
 
 enum {
   k_ListenQueueLength=64
@@ -819,7 +822,14 @@ int main(int argc, char **argv)
   struct rdma_cm_event *event = NULL;
   struct rdma_cm_id *listener = NULL;
   struct rdma_event_channel *ec = NULL;
-  uint16_t port = k_IONPort;
+
+  // get configuration to find servers
+  skv_configuration_t *config;
+  if( argc > 1 )
+    config = skv_configuration_t::GetSKVConfiguration( argv[ 1 ] );
+  else
+    config = skv_configuration_t::GetSKVConfiguration();
+
   int rc = 0;
   MPI_Init( &argc, &argv );
   int Rank;
@@ -828,22 +838,13 @@ int main(int argc, char **argv)
   MPI_Comm_size( MPI_COMM_WORLD, &NodeCount );
   FxLogger_Init( argv[ 0 ], Rank );
 
-  if (argc==2) {
-      port = atoi(argv[1]);
-      if (port==0) {
-          printf("Argument Error, setting port to default\n");
-          fflush(stdout) ;
-          port = k_IONPort;
-      }
-  }
-
-//  pthread_mutex_init(&allConnectionMutex, NULL) ;
-
   pthread_t socket_poll_thread = setup_polling_thread() ;
   if( socket_poll_thread == 0 )
   {
     die( "Error: Could not create socket polling thread.");
   }
+  uint16_t port = config->GetSKVForwarderPort();
+
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
   addr.sin_port = htons(port);
@@ -853,7 +854,7 @@ int main(int argc, char **argv)
     gClientIdMap[ n ] = IWARPEM_INVALID_CLIENT_ID;
 
   // connect the forwarder to all servers
-  rc = ConnectToServers( Rank );
+  rc = ConnectToServers( Rank, config );
   if( rc != 0 )
   {
     die("Error: Could not create connections to SKV Servers.");
@@ -1869,7 +1870,6 @@ static void process_uplink_element(struct connection *conn, unsigned int LocalEn
       break ;
     }
   }
-#include <skv/common/skv_config.hpp>
 #include <skv/common/skv_types.hpp>
 
 struct Server_Connection_t
@@ -1881,12 +1881,9 @@ struct Server_Connection_t
 };
 
 
-int ConnectToServers( int aMyRank )
+int ConnectToServers( int aMyRank, const skv_configuration_t *config )
 {
   int rc = 0;
-
-  // get configuration to find servers
-  skv_configuration_t *config = skv_configuration_t::GetSKVConfiguration();
 
   ifstream fin( config->GetMachineFile() );
 
