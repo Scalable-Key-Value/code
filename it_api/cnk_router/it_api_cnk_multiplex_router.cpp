@@ -2559,7 +2559,7 @@ void RemoveFromAckQueue( struct connection *conn )
     << EndLogLine ;
 
   // first entry?
-  if( conn == conn_ptr )
+  if(( conn == conn_ptr ) && ( conn != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR ))
   {
     gDeferredAckList = conn->mNextDeferredAck;
     return;
