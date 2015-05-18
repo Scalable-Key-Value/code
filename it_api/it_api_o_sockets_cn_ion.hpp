@@ -18,7 +18,7 @@
 #include <string.h>
 #include <it_api_o_sockets_types.h>
 
-#define CNK_ROUTER_BUFFER_SIZE ( 32 * 1024 * 1024ull )
+#define CNK_ROUTER_BUFFER_SIZE ( 16 * 1024 * 1024ull )
 
 enum {
   k_ApplicationBufferSize= CNK_ROUTER_BUFFER_SIZE ,
