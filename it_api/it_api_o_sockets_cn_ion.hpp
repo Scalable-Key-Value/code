@@ -368,7 +368,12 @@ public:
   pthread_spinlock_t mTransmitMutex ;
   class ion_cn_buffer_pair mTransmitBuffer ;
   class ion_cn_buffer_pair mReceiveBuffer ;
+
+  /* todo: this is unnecessary mem overhead (whole buffer for just 2 values)
+   * For ease of use, it just re-uses the cn_buffer code to do rdma
+   */
   class ion_cn_buffer mRemoteWrittenSendAckBytes;
+
   volatile bool mBufferRequiresAck;
   volatile bool mBufferAllowsAck;
   void Init(void)

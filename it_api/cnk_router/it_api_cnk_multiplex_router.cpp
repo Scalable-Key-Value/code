@@ -1298,51 +1298,66 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
   struct iWARPEM_Message_Hdr_t *rHdr;
   char *rData;
 
-  iWARPEM_Status_t status = aServerEP->GetNextMessageType( &msg_type, &client );
-
-  StrongAssertLogLine( status == IWARPEM_SUCCESS )
-    << "Message type retrieval failed: status=" << (int)status
-    << " Peer has probably gone down, no recovery."
-    << " remaining data:" << aServerEP->RecvDataAvailable()
-    << EndLogLine ;
-
   Crossbar_Entry_t *cb = NULL;
-  if( aServerEP->IsValidClient( client ) )
-    cb = aServerEP->GetClientEP( client );
-  else
-    {
-    BegLogLine( 1 )
-      << "client=" << client
-      << " has no crossbar entry"
-      << " message will be skipped/ignored"
-      << EndLogLine ;
-    status = aServerEP->ExtractNextMessage( &rHdr, &rData, &client );
+  iWARPEM_Status_t status;
 
-    return -1;
+  // read until the next message of valid client gets extracted
+  // in general, we'll only loop if there are messages for clients that went down
+  do
+  {
+    status = aServerEP->GetNextMessageType( &msg_type, &client );
+
+    if (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE )
+    {
+      BegLogLine(1)
+        << "LocalHdr.mMsg_Type=" << msg_type
+        << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
+        << " port=" << conn->upstream_ip_port[ client ]
+        << ". Hanging for diagnosis"
+        << EndLogLine ;
+      printf("mMsg_Type is out of range, hanging for diagnosis\n") ;
+      fflush(stdout) ;
+      for (;;) { sleep(10) ; }
     }
 
-  struct connection *conn = (struct connection*)cb->getDownLink();
-
-  if (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE )
-  {
-    BegLogLine(1)
-      << "LocalHdr.mMsg_Type=" << msg_type
-      << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
-      << " port=" << conn->upstream_ip_port[ client ]
-      << ". Hanging for diagnosis"
+    StrongAssertLogLine( status == IWARPEM_SUCCESS )
+      << "Message type retrieval failed: status=" << (int)status
+      << " Peer has probably gone down, no recovery."
+      << " remaining data:" << aServerEP->RecvDataAvailable()
       << EndLogLine ;
-    printf("mMsg_Type is out of range, hanging for diagnosis\n") ;
-    fflush(stdout) ;
-    for (;;) { sleep(1) ; }
+
+    // read the data (if client is invalid, we read to skip the message)
+    status = aServerEP->ExtractNextMessage( &rHdr, &rData, &client );
+
+    if( aServerEP->IsValidClient( client ) )
+    {
+      cb = aServerEP->GetClientEP( client );
+    }
+    else
+    {
+      BegLogLine( 1 )
+        << "client=" << client
+        << " has no crossbar entry"
+        << " message will be skipped/ignored"
+        << EndLogLine ;
+    }
+  } while ( (cb == NULL) && (aServerEP->RecvDataAvailable()) );
+
+  if( cb == NULL )
+  {
+    BegLogLine( 1 )
+      << "No data for valid client found. Exiting EP processing for this event..."
+      << EndLogLine;
+    return -1;
   }
+
+  struct connection *conn = (struct connection*)cb->getDownLink();
 
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "conn=0x" << (void *) conn
     << " client=" << client
     << " msg_type=" << msg_type
     << EndLogLine ;
-
-  status = aServerEP->ExtractNextMessage( &rHdr, &rData, &client );
 
   if( status == IWARPEM_SUCCESS )
   {
