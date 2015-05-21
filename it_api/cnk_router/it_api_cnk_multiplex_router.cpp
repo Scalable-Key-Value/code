@@ -874,14 +874,21 @@ int main(int argc, char **argv)
     << " RDMA server on port " << port
     << EndLogLine ;
 
-  while (rdma_get_cm_event(ec, &event) == 0) {
+  while (rdma_get_cm_event(ec, &event) == 0)
+  {
     struct rdma_cm_event event_copy;
 
-    memcpy(&event_copy, event, sizeof(*event));
-    rdma_ack_cm_event(event);
+    memcpy(&event_copy, event, sizeof(struct rdma_cm_event));
+
+    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+      << "New CM event: " << event->event
+      << " Copy: " << event_copy.event
+      << EndLogLine;
 
     if (on_event(&event_copy))
       break;
+
+    rdma_ack_cm_event(event);
   }
 
   rdma_destroy_id(listener);
@@ -1309,7 +1316,7 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
 
     if (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE )
     {
-      BegLogLine(1)
+      BegLogLine( 1 )
         << "LocalHdr.mMsg_Type=" << msg_type
         << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
         << " port=" << conn->upstream_ip_port[ client ]
@@ -1335,7 +1342,7 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
     }
     else
     {
-      BegLogLine( 1 )
+      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
         << "client=" << client
         << " has no crossbar entry"
         << " message will be skipped/ignored"
@@ -1345,7 +1352,7 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
 
   if( cb == NULL )
   {
-    BegLogLine( 1 )
+    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
       << "No data for valid client found. Exiting EP processing for this event..."
       << EndLogLine;
     return -1;
@@ -2082,7 +2089,7 @@ static void do_cq_slih_processing(struct endiorec * endiorec, int * requireFlush
       bzero( conn, sizeof( struct connection ) );
       free( conn );
       free( endiorec );
-      *requireFlushUplinks = 0;
+      *requireFlushUplinks = 1;
       break;
     }
     default:
