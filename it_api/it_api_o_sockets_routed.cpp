@@ -571,50 +571,82 @@ static void *rdma_responder(void *voidVC)
   }
 
 void VerbsChannel::Init(void)
-   {
-     mBuffer.Init() ;
-     mEven = false ;
-     mRdmaSendBlocks = 0 ;
-     mConfig = skv_configuration_t::GetSKVConfiguration();
-     uint32_t IONPort = mConfig->GetSKVForwarderPort();
-     int rc_open = Kernel_RDMAOpen(&mRdmaSocket) ;
-     BegLogLine(FXLOG_IONCN_BUFFER)
-       << "Kernel_RDMAOpen rc=" << rc_open
-       << EndLogLine ;
-     int rc_connect = Kernel_RDMAConnect(mRdmaSocket,IONPort) ;
-     BegLogLine(FXLOG_IONCN_BUFFER)
-       << "Kernel_RDMAConnect rc=" << rc_connect
-       << EndLogLine ;
-     Kernel_RDMARegion_t routermemreg ;
-     routermemreg.address = ( void *) &mBuffer ;
-     routermemreg.length = sizeof(mBuffer) ;
-     int rc_register = Kernel_RDMARegisterMem(mRdmaSocket,& routermemreg) ;
-     BegLogLine(FXLOG_IONCN_BUFFER)
-       << "Kernel_RDMARegisterMem routermemreg rc=" << rc_register
-       << EndLogLine ;
-     mBuffer.mLkey = routermemreg.lkey ;
-     unsigned int LocalEndPoint = 0 ;
-     mBuffer.LockTransmit();
-     mBuffer.AppendToBuffer(&LocalEndPoint,sizeof(LocalEndPoint)) ;
-     iWARPEM_Message_Hdr_t Hdr ;
-     memset(&Hdr,0xff,sizeof(Hdr)) ;
-     Hdr.mMsg_Type=iWARPEM_KERNEL_CONNECT_TYPE ;
-     Hdr.mTotalDataLen=0;
-     Hdr.mOpType.mKernelConnect.mRouterBuffer_addr=(uint64_t)&mBuffer ;
-     Hdr.mOpType.mKernelConnect.mRoutermemreg_lkey=routermemreg.lkey ;
-     Hdr.mOpType.mKernelConnect.mClientRank=my_rank() ;
-     mBuffer.AppendToBuffer(&Hdr,sizeof(Hdr)) ;
-     mBuffer.UnlockTransmit();
-     mBuffer.Transmit() ;
-     BegLogLine(FXLOG_IONCN_BUFFER)
-       << "Creating the RDMA responder thread"
-       << EndLogLine ;
-     mResponderKeepRunning = true;
-     int rc=pthread_create(&mRdmaResponderThread,NULL, rdma_responder, this) ;
-     StrongAssertLogLine(rc == 0)
-       << "pthread_create failed, rc=" << rc
-       << EndLogLine ;
-   }
+{
+  mBuffer.Init();
+  mEven = false ;
+  mRdmaSendBlocks = 0 ;
+  mConfig = skv_configuration_t::GetSKVConfiguration();
+  if( mConfig == NULL )
+  {
+    BegLogLine( 1 )
+      << "Error getting configuration. Check config file name and file."
+      << " Note that CNK clients only work with default configuration file: ${HOME}/.skv_server.conf"
+      << EndLogLine;
+  }
+  uint32_t IONPort = mConfig->GetSKVForwarderPort();
+
+  int rc_open = Kernel_RDMAOpen(&mRdmaSocket);
+  StrongAssertLogLine( rc_open == 0 )
+    << "Failed to open RDMA device."
+    << " rc = " << rc_open
+    << EndLogLine;
+  BegLogLine(FXLOG_IONCN_BUFFER)
+    << "Kernel_RDMAOpen rc=" << rc_open
+    << EndLogLine;
+
+  int rc_connect = Kernel_RDMAConnect(mRdmaSocket,IONPort);
+  StrongAssertLogLine( rc_connect == 0 )
+    << "Failed to connect RDMA socket=" << mRdmaSocket
+    << " rc=" << rc_connect
+    << EndLogLine;
+  BegLogLine(FXLOG_IONCN_BUFFER)
+    << "Kernel_RDMAConnect rc=" << rc_connect
+    << EndLogLine;
+
+  Kernel_RDMARegion_t routermemreg;
+  routermemreg.address = ( void *) &mBuffer;
+  routermemreg.length = sizeof(mBuffer);
+
+  int rc_register = Kernel_RDMARegisterMem(mRdmaSocket,& routermemreg);
+  StrongAssertLogLine( rc_register == 0 )
+    << "Failed to register memory. socket=" << mRdmaSocket
+    << " addr=0x" << (void*)&mBuffer
+    << " len=" << routermemreg.length
+    << " rc=" << rc_register
+    << EndLogLine;
+  BegLogLine(FXLOG_IONCN_BUFFER)
+    << "Kernel_RDMARegisterMem routermemreg rc=" << rc_register
+    << EndLogLine;
+
+  mBuffer.mLkey = routermemreg.lkey;
+  unsigned int LocalEndPoint = 0;
+
+  mBuffer.LockTransmit();
+  mBuffer.AppendToBuffer(&LocalEndPoint,sizeof(LocalEndPoint));
+  iWARPEM_Message_Hdr_t Hdr;
+  memset(&Hdr,0xff,sizeof(Hdr));
+  Hdr.mMsg_Type=iWARPEM_KERNEL_CONNECT_TYPE;
+  Hdr.mTotalDataLen=0;
+  Hdr.mOpType.mKernelConnect.mRouterBuffer_addr=(uint64_t)&mBuffer;
+  Hdr.mOpType.mKernelConnect.mRoutermemreg_lkey=routermemreg.lkey;
+  Hdr.mOpType.mKernelConnect.mClientRank=my_rank();
+  mBuffer.AppendToBuffer(&Hdr,sizeof(Hdr));
+  mBuffer.UnlockTransmit();
+
+  if( ! mBuffer.Transmit() )
+    StrongAssertLogLine( 0 )
+      << "Failed to transmit connection metadata (LocalEndPoint#, lkey, ...)"
+      << EndLogLine;
+
+  BegLogLine(FXLOG_IONCN_BUFFER)
+    << "Creating the RDMA responder thread"
+    << EndLogLine ;
+  mResponderKeepRunning = true;
+  int rc = pthread_create(&mRdmaResponderThread,NULL, rdma_responder, this);
+  StrongAssertLogLine(rc == 0)
+    << "pthread_create failed, rc=" << rc
+    << EndLogLine ;
+}
 
 bool VerbsChannel::QueueForTransmit(unsigned int LocalEndpointIndex,
                       const struct iWARPEM_Message_Hdr_t& Hdr,
