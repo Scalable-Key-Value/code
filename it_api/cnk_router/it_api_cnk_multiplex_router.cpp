@@ -816,6 +816,23 @@ static int ConnectToServers( int aMyRank, const skv_configuration_t *config );
 enum {
   k_ListenQueueLength=64
 };
+
+#if 0
+#include <rdma/rdma_cma.h>
+#define ofed_mvapich_workaround() \
+{ \
+  struct rdma_event_channel *ch = rdma_create_event_channel (); \
+  if( !ch )\
+  { \
+    printf("rdma_create_event_channel failed. returned: 0x%x\n", (void*)ch ); \
+    return -1; \
+  } \
+  rdma_destroy_event_channel( ch );  \
+}
+#else
+#define ofed_mvapich_workaround()
+#endif
+
 int main(int argc, char **argv)
 {
   struct sockaddr_in addr;
@@ -829,6 +846,8 @@ int main(int argc, char **argv)
     config = skv_configuration_t::GetSKVConfiguration( argv[ 1 ] );
   else
     config = skv_configuration_t::GetSKVConfiguration();
+
+  ofed_mvapich_workaround();
 
   int rc = 0;
   MPI_Init( &argc, &argv );
@@ -1818,12 +1837,10 @@ void FlushMarkedUplinks()
   }
 
   flushavg = (flushavg*0.995) + (flushedEPs*0.005);
-  if( ((flushcounts++) & 0xfff) == 0 )
-  {
-    BegLogLine( 1 )
-      << "average flushed uplinks: " << flushavg
-      << EndLogLine;
-  }
+
+  BegLogLine( 0 && ( ((flushcounts++) & 0xfff) == 0 ) )
+    << "average flushed uplinks: " << flushavg
+    << EndLogLine;
 }
 static void send_upstream( const iWARPEM_Router_Endpoint_t *aServerEP,
                            const iWARPEM_StreamId_t aClientId,
