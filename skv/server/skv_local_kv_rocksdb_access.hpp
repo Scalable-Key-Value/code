@@ -194,6 +194,7 @@ public:
           << EndLogLine;
 #endif
 
+      getSize = aValue->capacity();
     } while( oldp != aValue->data() );
 
     return rs;
