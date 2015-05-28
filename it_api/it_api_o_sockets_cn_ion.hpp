@@ -18,7 +18,9 @@
 #include <string.h>
 #include <it_api_o_sockets_types.h>
 
-#define CNK_ROUTER_BUFFER_SIZE ( 16 * 1024 * 1024ull )
+// crazy bgvrnic wr/sge limit, seems bgvrnic splits buffer into pages and makes SGEs with limit of 58 entries
+// (setting to 57 in case something is unaligned)
+#define CNK_ROUTER_BUFFER_SIZE ( 57 * 65536ull )
 
 enum {
   k_ApplicationBufferSize= CNK_ROUTER_BUFFER_SIZE ,
