@@ -51,8 +51,9 @@ public:
                 // Return the status and set the PDSId 
                 skv_cmd_open_resp_t* Resp = (skv_cmd_open_resp_t *) RecvBuff;
 
+                Resp->EndianConvert();
                 *(aCCB->mCommand.mCommandBundle.mCommandOpen.mPDSId) = Resp->mPDSId;
-                aCCB->mStatus                                        = Resp->mStatus;
+                aCCB->mStatus = Resp->mStatus;
 
                 // Command is completed, release resources 
                 int CommandOrd = Resp->mHdr.mCmdOrd;  

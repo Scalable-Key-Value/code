@@ -164,6 +164,7 @@ public:
               {
                 // Server returned an error.
                 skv_cmd_err_resp_t* ErrResp = (skv_cmd_err_resp_t *) RecvBuff;
+                ErrResp->EndianConvert();
 
                 BegLogLine( SKV_CLIENT_RETRIEVE_COMMAND_SM_LOG )
                   << "skv_client_retrieve_command_sm::Execute:: ERROR response from server: "

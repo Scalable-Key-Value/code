@@ -14,6 +14,10 @@
 #ifndef __SKV_CLIENT_RETRIEVE_DIST_COMMAND_SM_HPP__
 #define __SKV_CLIENT_RETRIEVE_DIST_COMMAND_SM_HPP__
 
+#ifndef SKV_CLIENT_RETRIEVE_DIST_LOG
+#define SKV_CLIENT_RETRIEVE_DIST_LOG ( 0 | SKV_LOGGING_ALL )
+#endif
+
 class skv_client_retrieve_dist_command_sm
 {
 public:
@@ -49,8 +53,14 @@ public:
               { 
                 // Return the status and set the PDSId 
                 skv_cmd_retrieve_dist_resp_t* Resp = (skv_cmd_retrieve_dist_resp_t *) RecvBuff;
+                Resp->EndianConvert();
 
-                aCCB->mStatus                         = Resp->mStatus;
+                BegLogLine( SKV_CLIENT_RETRIEVE_DIST_LOG )
+                  << "Retrieved: " << Resp->mDist
+                  << " status=" << Resp->mStatus
+                  << EndLogLine;
+
+                aCCB->mStatus = Resp->mStatus;
 
                 memcpy( (void *) aCCB->mCommand.mCommandBundle.mCommandRetrieveDist.mDist,
                         (void *) & (Resp->mDist),

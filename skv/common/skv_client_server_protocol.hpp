@@ -655,7 +655,8 @@ struct skv_cmd_open_resp_t
     BegLogLine(SKV_SERVER_ENDIAN_LOG)
       << "mStatus=" << mStatus
       << EndLogLine ;
-    mStatus=(skv_status_t)htonl(mStatus) ;
+    // pdsid shouldn't get endian-converted! Client just puts it in as the server sent it
+    mStatus=skv_status_byte_swap( mStatus );
     mHdr.EndianConvert() ;
   }
 };
@@ -689,7 +690,7 @@ struct skv_cmd_pdscntl_resp_t
     BegLogLine(SKV_SERVER_ENDIAN_LOG)
       << "mStatus=" << mStatus
       << EndLogLine ;
-    mStatus=(skv_status_t)htonl(mStatus) ;
+    mStatus=skv_status_byte_swap( mStatus );
     mHdr.EndianConvert() ;
     mPDSAttr.EndianConvert() ;
   }
@@ -710,7 +711,7 @@ struct skv_cmd_retrieve_dist_resp_t
     BegLogLine(SKV_SERVER_ENDIAN_LOG)
       << "mStatus=" << mStatus
       << EndLogLine ;
-    mStatus=(skv_status_t)htonl(mStatus) ;
+    mStatus=skv_status_byte_swap( mStatus );
     mHdr.EndianConvert() ;
     mDist.EndianConvert() ;
   }
@@ -736,6 +737,16 @@ struct skv_cmd_err_resp_t
 
   skv_status_t                       mStatus;
   uint64_t                           mChecksum;
+
+  void EndianConvert(void)
+  {
+    BegLogLine(SKV_SERVER_ENDIAN_LOG)
+      << "mStatus=" << mStatus
+      << EndLogLine ;
+    mStatus = skv_status_byte_swap( mStatus );
+    mHdr.EndianConvert();
+    mChecksum = be64toh( mChecksum );
+  }
 };
 
 struct skv_cmd_insert_resp_t
@@ -755,7 +766,7 @@ struct skv_cmd_insert_cmpl_t
     BegLogLine(SKV_SERVER_ENDIAN_LOG)
       << "mStatus=" << mStatus
       << EndLogLine ;
-    mStatus=(skv_status_t) ntohl(mStatus) ;
+    mStatus=skv_status_byte_swap( mStatus );
     mHdr.EndianConvert() ;
   }
 };
@@ -774,7 +785,7 @@ struct skv_cmd_remove_cmpl_t
     BegLogLine(SKV_SERVER_ENDIAN_LOG)
       << "mStatus=" << mStatus
       << EndLogLine ;
-    mStatus=(skv_status_t) ntohl(mStatus) ;
+    mStatus=skv_status_byte_swap( mStatus );
     mHdr.EndianConvert() ;
   }
 };
@@ -799,7 +810,7 @@ struct skv_cmd_retrieve_value_rdma_write_ack_t
     BegLogLine(SKV_CLIENT_ENDIAN_LOG)
       << "mStatus=" << mStatus
       << EndLogLine ;
-    mStatus=(skv_status_t) ntohl(mStatus) ;
+    mStatus=skv_status_byte_swap( mStatus );
     mValue.EndianConvert() ;
     mHdr.EndianConvert() ;
   }
@@ -821,8 +832,8 @@ struct skv_cmd_retrieve_n_keys_rdma_write_ack_t
       << "mStatus=" << mStatus
       << " mCachedKeysCount=" << mCachedKeysCount
       << EndLogLine ;
-    mStatus=(skv_status_t) ntohl(mStatus) ;
-    mCachedKeysCount=ntohl(mCachedKeysCount) ;
+    mStatus=skv_status_byte_swap( mStatus );
+    mCachedKeysCount=ntohl(mCachedKeysCount);
     mHdr.EndianConvert() ;
   }
 };

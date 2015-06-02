@@ -10,7 +10,7 @@
  * Contributors:
  *     arayshu, lschneid - initial implementation
  */
-
+#include <FxLogger.hpp>
 #include <skv/client/skv_client.hpp>
 #include <skv/client/skv_client_internal.hpp>
 #include <skv/common/skv_init.hpp>

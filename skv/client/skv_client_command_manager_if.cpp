@@ -47,7 +47,6 @@ TestAny( skv_client_cmd_hdl_t* aCmdHdl )
     mCCBMgrIF->AddToFreeCCBQueue( CCB );
 
     status = CCB->mStatus;
-    status=(skv_status_t)ntohl(status) ;
   }
 
   return status;
@@ -101,7 +100,6 @@ Test( skv_client_cmd_hdl_t aCmdHdl )
   if( aCmdHdl->mState == SKV_CLIENT_COMMAND_STATE_DONE )
   {
     status = aCmdHdl->mStatus;
-    status=(skv_status_t)ntohl(status) ;
     ReleaseAssumeDone( aCmdHdl );
   }
   else

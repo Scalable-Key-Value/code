@@ -58,9 +58,9 @@ private:
     // OpenResp->mHdr            = OpenReq->mHdr;
     OpenResp->mHdr.mEvent     = SKV_CLIENT_EVENT_CMD_COMPLETE;
     OpenResp->mStatus = rc;
-    OpenResp->mPDSId = PDSId;
+    OpenResp->mPDSId = PDSId;  // pdsid is used by the client as is (no endian-conversion)
 
-    OpenResp->EndianConvert() ;
+    OpenResp->EndianConvert();
 
     skv_status_t status = aEPState->Dispatch( aCommand,
                                               aSeqNo,

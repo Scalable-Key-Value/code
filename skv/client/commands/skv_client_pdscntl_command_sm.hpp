@@ -55,6 +55,8 @@ public:
                 // Return the status and set the PDSId 
                 skv_cmd_pdscntl_resp_t* Resp = (skv_cmd_pdscntl_resp_t *) RecvBuff;
 
+                Resp->EndianConvert();
+
                 // don't set any attributes in case of close command, since it doesn't require any responses
                 if( aCCB->mCommand.mType != SKV_COMMAND_CLOSE )
                   {
@@ -68,7 +70,7 @@ public:
                     << " got attribs: " << *(aCCB->mCommand.mCommandBundle.mCommandPDScntl.mPDSAttr)
                     << EndLogLine;
                   }
-                aCCB->mStatus                                                    = Resp->mStatus;
+                aCCB->mStatus = Resp->mStatus;
 
                 // Command is completed, release resources 
                 int CommandOrd = Resp->mHdr.mCmdOrd;  

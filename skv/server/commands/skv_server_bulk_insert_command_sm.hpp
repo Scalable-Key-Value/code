@@ -103,7 +103,6 @@ public:
       << EndLogLine;
 
     aCmpl->mStatus = aRC;
-
     aCmpl->EndianConvert() ;
 
     skv_status_t status = aEPState->Dispatch( aCommand,

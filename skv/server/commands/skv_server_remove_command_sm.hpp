@@ -65,8 +65,8 @@ private:
     else
       aCmpl->mHdr.mEvent = SKV_CLIENT_EVENT_ERROR;
 
-    aCmpl->mStatus     = aRC;
-    aCmpl->EndianConvert() ;
+    aCmpl->mStatus = aRC;
+    aCmpl->EndianConvert();
 
     BegLogLine( SKV_SERVER_REMOVE_COMMAND_LOG )
       << "skv_server_remove_command_sm::Execute()::"

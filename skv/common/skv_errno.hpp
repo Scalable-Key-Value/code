@@ -15,6 +15,7 @@
 #define __SKV_ERRNO_HPP__
 
 #include <stdio.h>
+#include <endian.h>
 
 typedef enum 
   {
@@ -59,9 +60,27 @@ typedef enum
     SKV_ERRNO_NEED_DATA_TRANSFER,                // Value data not in control message, need explicit rdma transfer
     SKV_ERRNO_LOCAL_KV_EVENT,                    // Local KV could only partially operate, need multi stage processing
     SKV_ERRNO_STATE_MACHINE_ERROR,               // Error in state machine, e.g. wrong event/command types/states - almost always fatal
-    SKV_ERRNO_UNSPECIFIED_ERROR
+    SKV_ERRNO_UNSPECIFIED_ERROR,
+    INTERN_MAX_STATUS_VALUE = 0x7fffffff // make sure the enum uses at least 4 bytes
   } skv_status_t;
 
+static inline
+const skv_status_t
+skv_status_byte_swap( const skv_status_t aStatus )
+{
+  BegLogLine( 0 )
+    << "Converting Status from " << aStatus
+    << " size " << sizeof( skv_status_t )
+    << " hex " << (void*)aStatus
+    << EndLogLine;
+
+  // note: htobe will change byte order each time it's called
+  // -> no reason to provide net-to-host and host-to-net separately
+  if( sizeof( skv_status_t ) == 4 )
+    return (const skv_status_t)htobe32( aStatus );
+
+  return (const skv_status_t)htobe64( aStatus );
+}
 
 static
 const char*

@@ -182,7 +182,7 @@ class skv_server_retrieve_n_keys_command_sm
       aCmpl->mHdr.mEvent = SKV_CLIENT_EVENT_ERROR;
       aCmpl->mCachedKeysCount = 0;
     }
-    aCmpl->mStatus          = aRC;
+    aCmpl->mStatus = aRC;
 
     aCmpl->EndianConvert() ;
 

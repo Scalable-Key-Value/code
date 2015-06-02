@@ -1336,11 +1336,6 @@ RetrieveDistribution( skv_distribution_t* aDist )
 
   status = Wait( CmdCtrlBlk );
 
-  /*
-   * Endian-convert the distribution function
-   */
-  mDistribution.EndianConvert() ;
-
   BegLogLine( SKV_CLIENT_RETRIEVE_DIST_LOG )
     << "skv_client_internal_t::RetrieveDistribution():: Leaving"
     << " mDistribution : " << mDistribution

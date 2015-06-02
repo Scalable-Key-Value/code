@@ -112,6 +112,7 @@ public:
               {
                 // Server returned an error.		
                 skv_cmd_err_resp_t* Resp = (skv_cmd_err_resp_t *) RecvBuff;
+                Resp->EndianConvert();
 
                 aCCB->mStatus = Resp->mStatus;
 
@@ -136,6 +137,7 @@ public:
                   << EndLogLine;
 
                 skv_cmd_insert_cmpl_t* Resp = (skv_cmd_insert_cmpl_t *) RecvBuff;
+                Resp->EndianConvert();
 
                 aCCB->mStatus = Resp->mStatus;
 

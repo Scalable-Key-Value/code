@@ -337,8 +337,6 @@ RetrieveNKeys( skv_client_cursor_handle_t  aCursorHdl,
 
   status = Wait( CmdCtrlBlk );  
 
-  status=(skv_status_t) ntohl(status) ;
-
   BegLogLine(SKV_CLIENT_RETRIEVE_N_KEYS_DIST_LOG)
     << "mEventType=" << Req->mHdr.mEventType
     << EndLogLine ;

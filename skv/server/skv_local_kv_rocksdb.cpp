@@ -23,6 +23,8 @@
 #include <memory>
 #include <string>
 
+#include <FxLogger.hpp>
+
 #include <skv/common/skv_errno.hpp>
 #include <skv/common/skv_types.hpp>
 #include <skv/utils/skv_trace_clients.hpp>
