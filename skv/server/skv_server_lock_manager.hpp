@@ -138,8 +138,7 @@ struct skv_server_record_lock_t
 // once there's a decision to accept C++11 features by default, this could be changed to an unordered map
 typedef std::map< skv_server_record_lock_key_t,
                   skv_server_ccb_t*,
-                  less< skv_server_record_lock_key_t >,
-                  skv_allocator_t< std::pair< skv_server_record_lock_key_t, skv_server_record_lock_t* >> > skv_server_record_lock_vault_t;;
+                  less< skv_server_record_lock_key_t > > skv_server_record_lock_vault_t;
 
 class skv_server_lock_manager_t
 {
