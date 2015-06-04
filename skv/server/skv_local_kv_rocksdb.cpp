@@ -984,40 +984,57 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
 
 
   skv_rdma_string *value;
-  value = new skv_rdma_string();
   size_t expSize = aReq->mRequest.mRetrieve.mValueSize;
 
-  size_t expAllocReq = SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE > expSize ? SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE : expSize + (expSize>>2);
-  if( ! mDataBuffer->ReqWillFit( expAllocReq * 2 ) )
-    {
+  if( ! mDataBuffer->ReqWillFit( (expSize * 3) >> 1 ) )
+  {
     BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
       << "RDMA-Buffer space shortage: req=" << expSize
       << " left=" << mDataBuffer->MaxSizeFit()
       << EndLogLine;
     mStalledCommand = aReq;
     return SKV_ERRNO_NOT_DONE;
-    }
+  }
 
+  size_t reqOffset = aReq->mRequest.mRetrieve.mValueOffset;
+  size_t reqSize = aReq->mRequest.mRetrieve.mValueSize;
+
+  std::string TmpValue;
   rocksdb::Status rs;
-  rs = mDBAccess->GetData( *key, value, expSize );
+  rs = mDBAccess->GetData( *key, &TmpValue );
 
-  if( rs.ok() ) {
+  if( rs.ok() )
+  {
     BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
       << "skv_local_kv_rocksdb: rocksdb.Get() complete. len=" << value->length()
       << EndLogLine;
 
     status = SKV_SUCCESS;
 
-    TotalSize = value->length();
-    if( aReq->mRequest.mRetrieve.mValueOffset > TotalSize )
+    TotalSize = TmpValue.length();
+
+    if( ( reqOffset >= TotalSize ) ||
+        ( ( aReq->mRequest.mRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN ) && ( reqSize + reqOffset > TotalSize )) )
     {
       BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
-        << "skv_local_kv_rocksdb: retrieve offset out of range"
+        << "skv_local_kv_rocksdb: request out of range"
         << " vlen=" << TotalSize
         << " rsize=" << aReq->mRequest.mRetrieve.mValueSize
         << " roffs=" << aReq->mRequest.mRetrieve.mValueOffset
         << EndLogLine;
       status = SKV_ERRNO_VALUE_TOO_LARGE;
+    }
+    else
+    {
+      // totalsize reported is actually the remaining size from offset to end of record
+      TotalSize -= reqOffset;
+      reqSize = std::min( TotalSize, reqSize );
+
+      // if user requests exact reqSize, adjust TotalSize accordingly (oversize case captured above)
+      if( aReq->mRequest.mRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN )
+        TotalSize = reqSize;
+
+      value = new skv_rdma_string( *( reinterpret_cast<skv_rdma_string*>(&TmpValue)), reqOffset, reqSize );
     }
   }
   else
@@ -1031,23 +1048,13 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
   ReleaseKey( *key );
   delete key;
 
-//  if( status == SKV_SUCCESS )
-//    status = mDataBuffer->AcquireDataArea( aReq->mRequest.mRetrieve.mValueSize, StoredValueRep );
-
   if( status == SKV_SUCCESS )
   {
-    int RetrieveSize = aReq->mRequest.mRetrieve.mValueSize;
-    // adjust the max retrieve size to fit the available data and the client candidate buffer
-    if( RetrieveSize > TotalSize - aReq->mRequest.mRetrieve.mValueOffset )
-      RetrieveSize = TotalSize - aReq->mRequest.mRetrieve.mValueOffset;
-
-
     StoredValueRep.InitAbs( mDataBuffer->GetLMR(),
-                            (char*)((uintptr_t)value->data() + aReq->mRequest.mRetrieve.mValueOffset),
-                            RetrieveSize );
+                            (char*)( (uintptr_t)value->data() ),
+                            reqSize );
 
-    int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
-    int ValueFitsInBuff = (RetrieveSize <= RoomForData);
+    int ValueFitsInBuff = ((skv_header_as_cmd_buffer_t*)aReq)->GetRoomForData( reqSize );
 
     if( !(aReq->mRequest.mRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) && !(ValueFitsInBuff) )
     {

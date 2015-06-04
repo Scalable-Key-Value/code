@@ -174,29 +174,11 @@ public:
     return mDataDBHndl->KeyMayExist( mPDSrdopts, aKey, &value, &getval );
   }
   /* since rocksdb doesn't have the option to retrieve the value size,
-   * we'll start with a min-size and adjust after the first get failed
+   * we'll have to retrieve into a tmp string and then copy to rdma registered buffer
    */
-  rocksdb::Status GetData( const rocksdb::Slice &aKey, skv_rdma_string *aValue, size_t aExpSize )
+  rocksdb::Status GetData( const rocksdb::Slice &aKey, std::string *aTmpValue )
   {
-    rocksdb::Status rs;
-    const char *oldp = aValue->data();
-    size_t getSize = SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE > aExpSize ? SKV_LOCAL_KV_ROCKSDB_MIN_GET_SIZE : aExpSize + (aExpSize>>2);
-    do
-    {
-      aValue->resize( getSize );
-      oldp = aValue->data();
-      rs = mDataDBHndl->Get( mPDSrdopts, aKey, reinterpret_cast<std::string*>(aValue) );
-
-#if (SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG != 0)
-      if( oldp != aValue->data() )
-        BegLogLine( 1 )
-          << "skv_local_kv_rocksdb_access_t: need to resize value to " << aValue->length()
-          << EndLogLine;
-#endif
-
-      getSize = aValue->capacity();
-    } while( oldp != aValue->data() );
-
+    rocksdb::Status rs = mDataDBHndl->Get( mPDSrdopts, aKey, aTmpValue );
     return rs;
   }
   rocksdb::Status LookupData( const rocksdb::Slice &aKey, std::string *aValue )
