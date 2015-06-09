@@ -53,6 +53,12 @@ class skv_server_event_source_t :
 protected:
   event_manager_t  *mEventManager;
 
+  skv_server_event_source_t( event_manager_t *aEVMgr = NULL,
+                             int aPrio = SKV_SERVER_EVENT_SOURCE_DEFAULT_PRIO )
+  {
+    SetPriority( aPrio );
+    SetEventManager( aEVMgr );
+  }
 public:
   skv_status_t Init( event_manager_t *aEVMgr,
                       int aPrio = SKV_SERVER_EVENT_SOURCE_DEFAULT_PRIO )

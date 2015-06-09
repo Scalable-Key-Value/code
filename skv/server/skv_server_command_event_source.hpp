@@ -33,14 +33,23 @@ class skv_server_command_event_source_t :
   skv_server_command_thread_args_t mCommandFetchArgs;
 
 public:
-  skv_server_command_event_source_t()
+  skv_server_command_event_source_t( skv_server_epstate_map_t *aEVMgr = NULL,
+                                     int aPrio = SKV_SERVER_EVENT_SOURCE_DEFAULT_PRIO )
   {
+    SetEventManager( aEVMgr );
+    SetPriority( aPrio );
+
     mCommandFetchArgs.mBufferList = &mBufferList;
     mCommandFetchArgs.mEventSource = this;
     mCommandFetchArgs.mKeepRunning = true;
     mCommandFetchArgs.mMaxEventCount = SKV_SERVER_EVENTS_MAX_COUNT;
 
-    pthread_create( &mPollThread, NULL, CommandFetchThread, (void*)&mCommandFetchArgs );
+    if( GetEventManager() != NULL )
+      pthread_create( &mPollThread, NULL, CommandFetchThread, (void*)&mCommandFetchArgs );
+    else
+      StrongAssertLogLine( 0 )
+        << "Impossible to create command_event_source without event manager."
+        << EndLogLine;
   }
   virtual ~skv_server_command_event_source_t()
   {

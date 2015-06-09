@@ -1395,10 +1395,8 @@ Init( int   aRank,
     << "mEPStateMap != NULL"
     << EndLogLine;
 
-  mEventSources[ SKV_SERVER_COMMAND_EVENT_SRC_INDEX ] = new skv_server_command_event_source_t();
-  ((skv_server_command_event_source_t*)(mEventSources[ SKV_SERVER_COMMAND_EVENT_SRC_INDEX ]))->Init( mEPStateMap,
-                                                                                                     SKV_SERVER_COMMAND_SRC_PRIORITY );
-
+  mEventSources[ SKV_SERVER_COMMAND_EVENT_SRC_INDEX ] = new skv_server_command_event_source_t( mEPStateMap,
+                                                                                               SKV_SERVER_COMMAND_SRC_PRIORITY);
 
   skv_status_t status = mLocalKV.Init( Rank,
                                        PartitionSize,
