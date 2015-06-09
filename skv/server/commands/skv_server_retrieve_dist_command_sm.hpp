@@ -84,7 +84,8 @@ private:
 public:
   static
   skv_status_t
-  Execute( skv_local_kv_t *aLocalKV,
+  Execute( skv_server_internal_event_manager_if_t* aEventQueueManager,
+           skv_local_kv_t *aLocalKV,
            skv_server_ep_state_t *aEPState,
            int aCommandOrdinal,
            skv_server_event_t *aEvent,
@@ -158,20 +159,26 @@ public:
             cookie->Set( aCommandOrdinal, aEPState );
             skv_status_t status = aLocalKV->GetDistribution( &dist, cookie );
 
-            if( status == SKV_ERRNO_LOCAL_KV_EVENT )
+            switch( status )
             {
-              create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
-              Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_INDEX_OP );
-            }
-            else
-            {
-              dist_post_response( aEPState,
-                                  Command,
-                                  aCommandOrdinal,
-                                  aSeqNo,
-                                  status,
-                                  dist );
-              Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
+              case SKV_ERRNO_LOCAL_KV_EVENT:
+                create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_INDEX_OP );
+                break;
+
+              case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                aEventQueueManager->Enqueue( aEvent );
+                break;
+
+              default:
+                dist_post_response( aEPState,
+                                    Command,
+                                    aCommandOrdinal,
+                                    aSeqNo,
+                                    status,
+                                    dist );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
             }
             break;
           }

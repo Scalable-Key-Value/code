@@ -77,7 +77,8 @@ public:
 
   static
   skv_status_t
-  Execute( skv_local_kv_t *aLocalKV,
+  Execute( skv_server_internal_event_manager_if_t* aEventQueueManager,
+           skv_local_kv_t *aLocalKV,
            skv_server_ep_state_t *aEPState,
            int aCommandOrdinal,
            skv_server_event_t *aEvent,
@@ -149,19 +150,25 @@ public:
               << " status: " << skv_status_to_string( status )
               << EndLogLine;
 
-            if( status == SKV_ERRNO_LOCAL_KV_EVENT )
+            switch( status )
             {
-              status = open_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
-              Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_INDEX_OP );
-            }
-            else
-            {
-              status = open_post_response( aEPState,
-                                           Command,
-                                           aCommandOrdinal,
-                                           aSeqNo,
-                                           status,
-                                           PDSId );
+              case SKV_ERRNO_LOCAL_KV_EVENT:
+                status = open_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                Command->Transit( SKV_SERVER_COMMAND_STATE_LOCAL_KV_INDEX_OP );
+                break;
+
+              case SKV_ERRNO_COMMAND_LIMIT_REACHED:
+                status = open_create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
+                aEventQueueManager->Enqueue( aEvent );
+                break;
+
+              default:
+                status = open_post_response( aEPState,
+                                             Command,
+                                             aCommandOrdinal,
+                                             aSeqNo,
+                                             status,
+                                             PDSId );
             }
             break;
           }
