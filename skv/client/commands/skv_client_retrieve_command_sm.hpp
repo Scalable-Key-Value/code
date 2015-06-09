@@ -120,7 +120,7 @@ public:
                 }
 
                 // get value data out of response if the actually transferred size fits in control message
-                int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1;  // -1 because of trailling msg-complete flag
+                int RoomForData = ((skv_header_as_cmd_buffer_t*)Ack)->GetRoomForData( sizeof( skv_cmd_retrieve_value_rdma_write_ack_t) );
                 if( copySize <= RoomForData )
                   {
                     void* valueBuffer = aCCB->mCommand.mCommandBundle.mCommandRetrieve.mValueAddr;

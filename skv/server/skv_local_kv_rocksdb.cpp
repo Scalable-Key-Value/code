@@ -1035,6 +1035,22 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
         TotalSize = reqSize;
 
       value = new skv_rdma_string( *( reinterpret_cast<skv_rdma_string*>(&TmpValue)), reqOffset, reqSize );
+
+#if SKV_LOCAL_KV_BACKEND_LOG
+      HexDump RDBFxString( (void*)TmpValue.c_str(), TmpValue.length() );
+      HexDump FxString( (void*)value->c_str(), reqSize );
+      HexDump KeyString( (void*)key->data(), key->size());
+
+      BegLogLine( 1 )
+        << "rdb size: " << TmpValue.length()
+        << " key:" << KeyString
+        << " content: " << RDBFxString
+        << EndLogLine;
+      BegLogLine( 1 )
+        << "new size: " << reqSize
+        << " content: " << FxString
+        << EndLogLine;
+#endif
     }
   }
   else
@@ -1048,22 +1064,21 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
   ReleaseKey( *key );
   delete key;
 
+  int RoomForValue = ((skv_header_as_cmd_buffer_t*)aReq)->GetRoomForData( sizeof( skv_cmd_retrieve_value_rdma_write_ack_t) );
+
   if( status == SKV_SUCCESS )
   {
     StoredValueRep.InitAbs( mDataBuffer->GetLMR(),
                             (char*)( (uintptr_t)value->data() ),
                             reqSize );
 
-    int ValueFitsInBuff = ((skv_header_as_cmd_buffer_t*)aReq)->GetRoomForData( reqSize );
-
-    if( !(aReq->mRequest.mRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG) && !(ValueFitsInBuff) )
-    {
+    if( RoomForValue < reqSize )
       status = SKV_ERRNO_NEED_DATA_TRANSFER;
-    }
   }
 
   BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
     << "skv_local_kv_rocksdb: LMR=" << StoredValueRep
+    << " space=" << RoomForValue
     << " status=" << skv_status_to_string( status )
     << EndLogLine;
 

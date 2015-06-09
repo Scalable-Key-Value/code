@@ -303,7 +303,7 @@ struct skv_header_as_cmd_buffer_t
   {
     *((SKV_CHECKSUM_TYPE*) &mData.mBuffer[ SKV_CONTROL_MESSAGE_SIZE - SKV_CHECKSUM_BYTES ]) = aChkSum;
   }
-  inline size_t GetRoomForData( const size_t aContentSize ) const
+  inline int GetRoomForData( const int aContentSize ) const
   {
     return SKV_CONTROL_MESSAGE_SIZE - aContentSize - SKV_CHECKSUM_BYTES;
   }

@@ -171,6 +171,7 @@ void generate_data( char *aBuf,
 
   for( int i=0; i<aSize; i++ )
   {
+    // aBuf[i] = (char)(i + aKeySeed);
     aBuf[i] = (char)random();
   }
 }
@@ -187,6 +188,7 @@ bool verify_data( char *aBuf,
 
   for( int i=0; i<aSize; i++ )
   {
+    // if( aBuf[i] != (char)(i+aKeySeed) )
     if( aBuf[i] != (char)random() )
     {
       std::cout << "!!"; std::flush( std::cout );
@@ -381,7 +383,16 @@ skv_status_t skv_base_test_retrieve( const char *aPDSName,
                                   value, aDataSize, &retrieved, aOffset,
                                   aFlags );
   if( (status == SKV_SUCCESS) && (!verify_data( value, aDataSize, aKey, aOffset)) )
+    {
+    HexDump FxString( value, aDataSize );
+
+    BegLogLine( 1 )
+      << "new size: " << aDataSize
+      << " content: " << FxString
+      << EndLogLine;
+
     status = SKV_ERRNO_CHECKSUM_MISMATCH;
+    }
 
   if(( retrieved != aDataSize )&&(status == SKV_SUCCESS))
     BegLogLine( 1 )
@@ -489,6 +500,15 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
     char value[ 65536 ];
     generate_data( value, DataSize, *Key, 0 );
 
+    HexDump KeyString( pureKey, aKeySize );
+    HexDump FxString( value, DataSize );
+
+    BegLogLine( 0 )
+      << "in size: " << DataSize
+      << " key:" << KeyString
+      << " content: " << FxString
+      << EndLogLine;
+
     status = gdata.Client.Insert( BulkLoaderHandle,
                                   pureKey,
                                   aKeySize,
@@ -514,23 +534,40 @@ skv_status_t skv_base_test_bulkinsert( const char *aPDSName,
     test_level = 1;
   }
 
+  srandom( aRndSeed );
+  // fill larger keys with constant random data and update only lower portion
+  if( aKeySize > sizeof(uint64_t) )
+  {
+    for (int n=0; n<aKeySize; n++)
+      KeyBuffer[n] = random() & 0xFF;
+  }
+
   for( int i=0; ( test_level >= 1 ) && ( ( status == SKV_SUCCESS ) && ( i < aKeyCount ) ); i++ )
   {
     *Key = htobe64( aRndSeed+i );
     int DataSize = random() % aMaxDataSize + 1;
     int Retrieved;
     char value[ 65536 ];
+    bzero( value, 65536 );
     status = gdata.Client.Retrieve( &PDSId, pureKey, aKeySize,
                                     value, aMaxDataSize, &Retrieved, 0,
                                     SKV_COMMAND_RIU_FLAGS_NONE );
 
     if( (status == SKV_SUCCESS) && (!verify_data( value, Retrieved, *Key, 0)) )
     {
+      HexDump KeyString( pureKey, aKeySize );
+      HexDump FxString( value, Retrieved );
+
+      BegLogLine( 1 )
+        << "ou size: " << Retrieved
+        << " key:" << KeyString
+        << " content: " << FxString
+        << EndLogLine;
+
       status = SKV_ERRNO_CHECKSUM_MISMATCH;
       break;
     }
   }
-
 
   if( (test_level >= 1) && (gdata.Client.Close( &PDSId ) != SKV_SUCCESS) )
   {
