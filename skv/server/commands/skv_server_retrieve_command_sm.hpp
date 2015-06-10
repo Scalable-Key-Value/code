@@ -293,7 +293,9 @@ public:
             switch( status )
             {
               case SKV_SUCCESS:
-                AssertLogLine( ValueMemRep.GetLen() <= SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1 )
+              {
+                int RoomForData = ((skv_header_as_cmd_buffer_t*)Req)->GetRoomForData( sizeof( skv_cmd_retrieve_value_rdma_write_ack_t) );
+                AssertLogLine( ValueMemRep.GetLen() <= RoomForData )
                   << "skv_server_retrieve_command_sm:: BUG: incorrect return code: data doesn't fit into Ctrl-msg."
                   << EndLogLine;
 
@@ -322,6 +324,7 @@ public:
                                              aSeqNo );
                 Command->Transit( SKV_SERVER_COMMAND_STATE_INIT );
                 break;
+              }
               case SKV_ERRNO_NEED_DATA_TRANSFER:
                 status = create_multi_stage( aEPState, aLocalKV, Command, aCommandOrdinal );
                 // update the references for the potentially new send buffer
@@ -427,8 +430,8 @@ public:
               case SKV_SUCCESS:
               {
                 skv_lmr_triplet_t *ValueMemRep = &(Command->mLocalKVData.mRDMA.mValueRDMADest);
-
-                AssertLogLine( ValueMemRep->GetLen() <= SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - 1 )
+                int RoomForData = ((skv_header_as_cmd_buffer_t*)Req)->GetRoomForData( sizeof( skv_cmd_retrieve_value_rdma_write_ack_t) );
+                AssertLogLine( ValueMemRep->GetLen() <= RoomForData )
                   << "skv_server_retrieve_command_sm:: BUG: incorrect return code: data doesn't fit into Ctrl-msg."
                   << EndLogLine;
 
