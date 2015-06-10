@@ -227,7 +227,7 @@ struct skv_cmd_RIU_req_t
     mKeyValue.mKeySize = aKeySize;
     mKeyValue.mValueSize = aValueSize;
 
-    int inlineDataSize = 0;
+    int inlineDataSize = sizeof( mKeyValue.mKeySize ) + sizeof( mKeyValue.mValueSize );
 
     // get the key into the request
     if( aFlags & (SKV_COMMAND_RIU_INSERT_KEY_VALUE_FIT_IN_CTL_MSG |
@@ -262,7 +262,7 @@ struct skv_cmd_RIU_req_t
     if( aFlags & SKV_COMMAND_RIU_INSERT_KEY_FITS_IN_CTL_MSG )
     {
       it_lmr_handle_t lmrHandle;
-      it_rmr_context_t rmrHandle;   // watch out for ambigous usage of this: with lmr_create it's the handle, with rmr_get_context it's the rkey!!
+      it_rmr_context_t rmrHandle;   // watch out for ambiguous usage of this: with lmr_create it's the handle, with rmr_get_context it's the rkey!!
 
       it_mem_priv_t privs = (it_mem_priv_t) (IT_PRIV_LOCAL | IT_PRIV_REMOTE);
       it_lmr_flag_t lmr_flags = IT_LMR_FLAG_NON_SHAREABLE;

@@ -112,7 +112,7 @@ struct skv_client_to_server_cmd_hdr_t
   void
   SetCmdLength( int aCmdLength )
   {
-    StrongAssertLogLine( (aCmdLength>0) && (aCmdLength<SKV_CONTROL_MESSAGE_SIZE-SKV_CHECKSUM_BYTES) )
+    StrongAssertLogLine( (aCmdLength>0) && (aCmdLength<=SKV_CONTROL_MESSAGE_SIZE-SKV_CHECKSUM_BYTES) )
       << "ERROR Invalid command length"
       << " 0 < " << aCmdLength << " < " << SKV_CONTROL_MESSAGE_SIZE
       << EndLogLine;
