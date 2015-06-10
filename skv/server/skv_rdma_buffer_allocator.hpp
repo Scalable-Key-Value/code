@@ -14,13 +14,18 @@
 
 #include <sstream>
 #include <unordered_map>
+#include <skv/common/skv_mutex.hpp>
 
 class skv_thread_id_map_t
 {
   static skv_thread_id_map_t *mThreadMap;
+  skv_mutex_t *mLock;
   std::unordered_map< std::thread::id, skv_local_kv_rdma_data_buffer_t* > mRDBMap;
 
-  skv_thread_id_map_t() : mRDBMap() {}
+  skv_thread_id_map_t() : mRDBMap()
+  {
+    mLock = new skv_mutex_t;
+  }
 
 public:
   static skv_thread_id_map_t* GetThreadIdMap( )
@@ -42,7 +47,10 @@ public:
       << "skv_thread_id_map_t: retrieving rdb for thread_id: " << s
       << EndLogLine;
 #endif
-    return mRDBMap.find( aID )->second;
+    mLock->lock();
+    skv_local_kv_rdma_data_buffer_t* retval = mRDBMap.find( aID )->second;
+    mLock->unlock();
+    return retval;
   }
   skv_status_t InsertRDB( skv_local_kv_rdma_data_buffer_t *aRDB )
   {
@@ -55,22 +63,32 @@ public:
       << " for thread_id: " << s
       << EndLogLine;
 #endif
+    skv_status_t status;
+    mLock->lock();
     std::pair<std::thread::id, skv_local_kv_rdma_data_buffer_t*> entry ( std::this_thread::get_id(), aRDB );
     if( mRDBMap.insert( entry ).second == true )
-      return SKV_SUCCESS;
+      status = SKV_SUCCESS;
     else
-      return SKV_ERRNO_NOT_DONE;
+      status = SKV_ERRNO_NOT_DONE;
+    mLock->unlock();
+    return status;
   }
   skv_status_t RemoveRDB( )
   {
+    skv_status_t status;
+    mLock->lock();
     if( mRDBMap.erase( std::this_thread::get_id() ) != 0 )
-      return SKV_SUCCESS;
+      status = SKV_SUCCESS;
     else
-      return SKV_ERRNO_KEY_NOT_FOUND;
+      status = SKV_ERRNO_KEY_NOT_FOUND;
+    mLock->unlock();
+    return status;
   }
   skv_status_t ResetRDB()
   {
+    mLock->lock();
     mRDBMap.clear();
+    mLock->unlock();
     return SKV_SUCCESS;
   }
 };
