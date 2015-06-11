@@ -36,7 +36,7 @@
 #endif
 
 #ifndef SKV_BENCH_RESULT_LOG
-#define SKV_BENCH_RESULT_LOG ( 1 )
+#define SKV_BENCH_RESULT_LOG ( 0 )
 #endif
 
 //#define DEBUG_CONNECT
@@ -50,6 +50,7 @@
 #define DEFAULT_AVG_ERROR ( 5.0 )
 #define DEFAULT_TIME_LIMIT ( 1 )
 #define DEFAULT_PDS_NAME "SKV_BENCH_PDS"
+#define DEFAULT_RESULT_LOG_LEVEL ( 0 )
 
 // queue length for gliding average
 #define SKV_BENCH_STAT_LEN ( 7 )
@@ -211,6 +212,7 @@ public:
   int mTimeLimit;
   int mBatchSize;
   bool mDataCheck;
+  int mResultLogLevel;
 
 // Settings and defaults set internally
   int mRank;
@@ -228,14 +230,15 @@ public:
     mBatchSize( DEFAULT_BATCH_COUNT ),
     mDataCheck( DEFAULT_DATA_CHECK ),
     mTimeLimit( DEFAULT_TIME_LIMIT ),
-    mPDSName( DEFAULT_PDS_NAME )
+    mPDSName( DEFAULT_PDS_NAME ),
+    mResultLogLevel ( DEFAULT_RESULT_LOG_LEVEL )
   {}
 
   int Parse( int aArgC, char **aArgV )
   {
     int rc = 0;
     int op;
-    while ((op = getopt(aArgC, aArgV, "b:ce:hk:q:t:v:")) != -1)
+    while ((op = getopt(aArgC, aArgV, "b:cd:e:hk:q:t:v:")) != -1)
     {
       char *endp;
       switch(op)
@@ -253,6 +256,7 @@ public:
           std::cout << " -c                                 : enable data check (default: " << (DEFAULT_DATA_CHECK?"ON":"OFF") << ")"<< std::endl;
           std::cout << " -t <seconds>                       : time limit for each test loop (default: " << (DEFAULT_TIME_LIMIT) << ")" << std::endl;
           std::cout << " -e <percent>                       : max allowed error to achieve converged measurement in percent (default: " << DEFAULT_AVG_ERROR << ")" << std::endl;
+          std::cout << " -d <log-level>                     : amount of console output (default: " << (DEFAULT_RESULT_LOG_LEVEL) << ")" << std::endl;
           std::cout << std::endl;
           break;
         }
@@ -261,6 +265,9 @@ public:
           break;
         case 'c':
           mDataCheck = true;
+          break;
+        case 'd':
+          mResultLogLevel = (int)atoi( optarg );
           break;
         case 'e':
           mAvgError = (double)atoi( optarg );
@@ -1217,12 +1224,10 @@ main(int argc, char **argv)
         converged = glAvg.Converged( config.mAvgError, &sdev );
         if( config.mRank == 0 )
           {
-#if ( SKV_BENCH_RESULT_LOG == 0 )
+          if ( config.mResultLogLevel <= 0 )
             std::cout << ".";
-#else
+          else
             std::cout << std::setw(SB_OUT_KVLEN) << " *" << " |*|" << bench << ": " << sdev << "%" << std::endl;
-#endif
-            // std::cout << std::setw(SB_OUT_KVLEN) << " *" << " |*|" << glAvg << std::endl;
           }
 
         CurrentTime = MPI_Wtime();
