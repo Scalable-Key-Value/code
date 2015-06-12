@@ -193,11 +193,11 @@ public:
         << EndLogLine ;
       memcpy(mApplicationBuffer+aDest,aSrc,aLength) ;
     } ;
-  void IssueRDMARead(struct connection *conn, unsigned long Offset, unsigned long Length) ;
+  int IssueRDMARead(struct connection *conn, unsigned long Offset, unsigned long Length) ;
   int ProcessCall(struct connection *conn) ;
   void ProcessRead(struct connection *conn);
   void ProcessReceiveBuffer(struct connection *conn, bool contained_ack ) ;
-  void PostReceive(struct connection *conn) ;
+  int PostReceive(struct connection *conn) ;
   };
 
 enum {

@@ -75,6 +75,22 @@ extern "C"
 
 #define IT_API_MAX_ROUTER_SOCKETS ( 128 )
 
+#if 1
+#include <rdma/rdma_cma.h>
+#define ofed_mvapich_workaround() \
+{ \
+  struct rdma_event_channel *ch = rdma_create_event_channel (); \
+  if( !ch )\
+  { \
+    printf("rdma_create_event_channel failed. returned: 0x%x\n", (void*)ch ); \
+    return -1; \
+  } \
+  rdma_destroy_event_channel( ch );  \
+}
+#else
+#define ofed_mvapich_workaround()
+#endif
+
 class Crossbar_Entry_t;
 #include <cnk_router/it_api_cnk_router_ep.hpp>
 typedef iWARPEM_WriteV_Socket_Buffer_t SendBufferType;
@@ -322,7 +338,7 @@ struct termination_entry_t
 static void add_conn_to_flush_queue(struct connection *conn);
 static void add_conn_to_deferred_ack( struct connection *conn, bool aDownStreamWaitFlush = false );
 
-void ion_cn_buffer::PostReceive(struct connection *conn)
+int ion_cn_buffer::PostReceive(struct connection *conn)
   {
     BegLogLine(FXLOG_IONCN_BUFFER)
         << " Receive buffer at 0x" << (void *) this
@@ -346,6 +362,7 @@ void ion_cn_buffer::PostReceive(struct connection *conn)
       << " addr=0x" << (void *) sge.addr
       << EndLogLine ;
 
+    // double check if the qp is still alive:
     rc = ( conn->mDisconnecting ) ? 0 : ibv_post_recv(conn->qp, &wr, &bad_wr);
     if (rc!=0)
       {
@@ -359,10 +376,10 @@ void ion_cn_buffer::PostReceive(struct connection *conn)
           << EndLogLine ;
       }
     conn->ibv_post_recv_count += 1 ;
-
+    return rc;
   }
 
-void ion_cn_buffer::IssueRDMARead(struct connection *conn, unsigned long Offset, unsigned long Length)
+int ion_cn_buffer::IssueRDMARead(struct connection *conn, unsigned long Offset, unsigned long Length)
   {
 //    conn->upstream_length = Length ;
     struct ibv_send_wr wr;
@@ -400,6 +417,7 @@ void ion_cn_buffer::IssueRDMARead(struct connection *conn, unsigned long Offset,
     BegLogLine( rc != 0 )
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
+    return rc;
   }
 
 static void process_uplink_element(struct connection *conn, unsigned int LocalEndpointIndex, const struct iWARPEM_Message_Hdr_t& Hdr, const void * message) ;
@@ -425,6 +443,15 @@ static void UnlockDownStreamFlush( void )
     << "Unlocked DownStreamFlush."
     << EndLogLine;
 }
+static pthread_spinlock_t gCMEventLock;
+static void LockCMEventStream( void )
+{
+  pthread_spin_lock( &gCMEventLock );
+}
+static void UnlockCMEventStream( void )
+{
+  pthread_spin_unlock( &gCMEventLock );
+}
 
 static bool post_ack_only( struct connection * conn )
 {
@@ -438,7 +465,7 @@ static bool post_ack_only( struct connection * conn )
 
   // if even the ACK fails, the connection has to be queued for another attempt to flush
   conn->mBuffer.UnlockTransmit();
-  if( ! rc_ack )
+  if(( ! rc_ack ) && ( ! conn->mDisconnecting ))
   {
     BegLogLine(FXLOG_ITAPI_ROUTER_FRAMES)
       << "Problem: Flush and ACK failed or skipped! conn=0x" << (void*)conn
@@ -625,8 +652,7 @@ int ion_cn_buffer::ProcessCall(struct connection *conn)
              << " BytesInThisCall=" << BytesInThisCall
              << "Issuing RDMA read to pick up rest of receive buffer"
              << EndLogLine ;
-         IssueRDMARead(conn,k_InitialRDMASend,BytesInThisCall) ;
-         return 0;
+         return IssueRDMARead(conn,k_InitialRDMASend,BytesInThisCall) ;;
        }
      else
        {
@@ -790,11 +816,11 @@ bool ion_cn_buffer::rawTransmit(struct connection *conn, unsigned long aTransmit
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
 
-    return true ;
-
+    return ( rc == 0 );
   }
 
 static void die(const char *reason);
+void drain_cm_queue( rdma_event_channel *aEC );
 static void build_context(struct ibv_context *verbs);
 static void build_qp_attr(struct ibv_qp_init_attr *qp_attr);
 static void * poll_cq(void *);
@@ -816,22 +842,6 @@ static int ConnectToServers( int aMyRank, const skv_configuration_t *config );
 enum {
   k_ListenQueueLength=64
 };
-
-#if 0
-#include <rdma/rdma_cma.h>
-#define ofed_mvapich_workaround() \
-{ \
-  struct rdma_event_channel *ch = rdma_create_event_channel (); \
-  if( !ch )\
-  { \
-    printf("rdma_create_event_channel failed. returned: 0x%x\n", (void*)ch ); \
-    return -1; \
-  } \
-  rdma_destroy_event_channel( ch );  \
-}
-#else
-#define ofed_mvapich_workaround()
-#endif
 
 int main(int argc, char **argv)
 {
@@ -893,21 +903,37 @@ int main(int argc, char **argv)
     << " RDMA server on port " << port
     << EndLogLine ;
 
-  while (rdma_get_cm_event(ec, &event) == 0)
+  // make sure the rdma_get_cm_event is non-blocking to allow multi-fetch within a critical section
+  socket_nonblock_on( ec->fd );
+
+  int status = 0;
+  while( status == 0 )
   {
-    struct rdma_cm_event event_copy;
+    status = rdma_get_cm_event(ec, &event);
+    if(( status != 0 ) && ( errno == EAGAIN ))
+    {
+      status = 0;
+      continue;
+    }
 
-    memcpy(&event_copy, event, sizeof(struct rdma_cm_event));
+    if( status == 0 )
+    {
+      struct rdma_cm_event event_copy;
 
-    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
-      << "New CM event: " << event->event
-      << " Copy: " << event_copy.event
-      << EndLogLine;
+      memcpy(&event_copy, event, sizeof(struct rdma_cm_event));
 
-    if (on_event(&event_copy))
-      break;
+      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+        << "New CM event: " << event->event
+        << " Copy: " << event_copy.event
+        << EndLogLine;
 
-    rdma_ack_cm_event(event);
+      status = on_event(&event_copy);
+
+      rdma_ack_cm_event(event);
+
+      if( event_copy.event == RDMA_CM_EVENT_DISCONNECTED )
+        drain_cm_queue( ec );
+    }
   }
 
   rdma_destroy_id(listener);
@@ -934,6 +960,33 @@ void wc_stat_echo(struct ibv_wc *wc)
 {
     printf("Status: %u Opcode: %u\n", wc->status, wc->opcode);
     fflush(stdout) ;
+}
+
+/* in case of a disconnect, we need to first check
+ * for further disconnects to mark dead connections as dead
+ * before drain_cq() tries to operate on those dead connections
+ */
+void drain_cm_queue( rdma_event_channel *aEC )
+{
+  LockCMEventStream();
+  struct rdma_cm_event *event = NULL;
+
+  while( rdma_get_cm_event( aEC, &event ) == 0 )
+  {
+    struct rdma_cm_event event_copy;
+
+    memcpy(&event_copy, event, sizeof(struct rdma_cm_event));
+
+    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+      << "New CM event: " << event->event
+      << " Copy: " << event_copy.event
+      << EndLogLine;
+
+    on_event(&event_copy);
+
+    rdma_ack_cm_event(event);
+  }
+  UnlockCMEventStream();
 }
 
 enum {
@@ -1333,15 +1386,15 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
   {
     status = aServerEP->GetNextMessageType( &msg_type, &client );
 
-    if (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE )
+    if( (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE ) )
     {
-      BegLogLine( 1 )
+      BegLogLine( aServerEP->IsValidClient( client ) )
         << "LocalHdr.mMsg_Type=" << msg_type
         << " Upstream IP address=0x" << (void *) conn->upstream_ip_address[ client ]
         << " port=" << conn->upstream_ip_port[ client ]
         << ". Hanging for diagnosis"
         << EndLogLine ;
-      printf("mMsg_Type is out of range, hanging for diagnosis\n") ;
+      printf("client (%d) or mMsg_Type (%d) is out of range, hanging for diagnosis\n", client, msg_type) ;
       fflush(stdout) ;
       for (;;) { sleep(10) ; }
     }
@@ -2216,7 +2269,7 @@ enum {
 
 enum {
   k_wc_array_size=64 ,
-  k_drain_loop=0
+  k_drain_loop=1
 };
 static void drain_cq(void)
   {
@@ -2351,13 +2404,18 @@ rearm:
       ibv_req_notify_cq(cq, 0) ;
 
 again:
+    LockCMEventStream();
     while( gTerminationQueue.GetCount() )
     {
       struct termination_entry_t *ConnToTerm = NULL;
       rv = gTerminationQueue.Dequeue( &ConnToTerm );
       if(( rv == 0 ) && ( ConnToTerm ))
       {
+        LockDownStreamFlush();
         drain_cq();
+        UnlockDownStreamFlush();
+
+        AckAllConnections();
 
         BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
           << "Retrieving TermEntry=0x" << (void*)ConnToTerm
@@ -2367,6 +2425,7 @@ again:
         TerminateConnection( ConnToTerm );
       }
     }
+    UnlockCMEventStream();
 
 #define UPSTREAM_BURSTLEN ( 32 )
     int requests_count = 0;
@@ -2660,8 +2719,6 @@ int on_disconnect(struct rdma_cm_id *id)
   conn->mDisconnecting = true ;
   LockDownStreamFlush();
 
-  drain_cq();
-
   // remove conn from all Ack and Flush lists
   if( conn->mNextDeferredAck != NULL )
     RemoveFromAckQueue( conn );
@@ -2670,15 +2727,6 @@ int on_disconnect(struct rdma_cm_id *id)
     RemoveFromFlushList( conn, gFlushListIndex );
 
   UnlockDownStreamFlush();
-
-  // make sure we flush the active FlushQueue to remove conn from the active list
-  AckAllConnections();
-
-  BegLogLine( 0 )
-    << "Flush stats: "
-    << " AckConn: " << gAckConnectionCount
-    << " FlushConn: " << gFlushConnectionCount
-    << EndLogLine;
 
   struct termination_entry_t *ConnToTerm = new struct termination_entry_t;
 
@@ -2699,16 +2747,23 @@ int on_event(struct rdma_cm_event *event)
 {
   int r = 0;
 
-  if (event->event == RDMA_CM_EVENT_CONNECT_REQUEST)
-    r = on_connect_request(event->id);
-  else if (event->event == RDMA_CM_EVENT_ESTABLISHED)
-    r = on_connection(event->id->context);
-  else if (event->event == RDMA_CM_EVENT_DISCONNECTED) {
-      r = on_disconnect(event->id);
-  }
-  else
-    die("on_event: unknown event.");
+  switch( event->event )
+  {
+    case RDMA_CM_EVENT_CONNECT_REQUEST:
+      r = on_connect_request(event->id);
+      break;
 
+    case RDMA_CM_EVENT_ESTABLISHED:
+      r = on_connection(event->id->context);
+      break;
+
+    case RDMA_CM_EVENT_DISCONNECTED:
+      r = on_disconnect(event->id);
+      break;
+
+    default:
+      r = -1;
+  }
   return r;
 }
 
