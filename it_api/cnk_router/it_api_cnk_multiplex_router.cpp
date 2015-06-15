@@ -417,6 +417,8 @@ int ion_cn_buffer::IssueRDMARead(struct connection *conn, unsigned long Offset, 
     BegLogLine( rc != 0 )
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
+    if( rc != 0 )
+      conn->mDisconnecting = true;
     return rc;
   }
 
@@ -751,6 +753,8 @@ bool ion_cn_buffer::pushAckOnly( struct connection *conn, unsigned long aSentByt
     << "ibv_post_send fails, rc=" << rc
     << EndLogLine ;
 
+  if( rc != 0 )
+    conn->mDisconnecting = true;
   return (rc == 0);
 }
 
@@ -816,17 +820,16 @@ bool ion_cn_buffer::rawTransmit(struct connection *conn, unsigned long aTransmit
       << "ibv_post_send fails, rc=" << rc
       << EndLogLine ;
 
+    if( rc != 0 )
+      conn->mDisconnecting = true;
     return ( rc == 0 );
   }
 
 static void die(const char *reason);
-void drain_cm_queue( rdma_event_channel *aEC );
+static int drain_cm_queue( rdma_event_channel *aEC );
 static void build_context(struct ibv_context *verbs);
 static void build_qp_attr(struct ibv_qp_init_attr *qp_attr);
 static void * poll_cq(void *);
-static void post_receives(struct connection *conn, int rcount);
-static void post_all_call_buffers(struct connection *conn);
-static void post_call_buffer(struct connection *conn, volatile struct callBuffer *callBuffer) ;
 static void register_memory(struct connection *conn);
 static int on_connect_request(struct rdma_cm_id *id);
 static int on_connection(void *context);
@@ -921,6 +924,7 @@ int main(int argc, char **argv)
       struct rdma_cm_event event_copy;
 
       memcpy(&event_copy, event, sizeof(struct rdma_cm_event));
+      rdma_ack_cm_event(event);
 
       BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
         << "New CM event: " << event->event
@@ -929,10 +933,8 @@ int main(int argc, char **argv)
 
       status = on_event(&event_copy);
 
-      rdma_ack_cm_event(event);
-
       if( event_copy.event == RDMA_CM_EVENT_DISCONNECTED )
-        drain_cm_queue( ec );
+        status = drain_cm_queue( ec );
     }
   }
 
@@ -966,27 +968,28 @@ void wc_stat_echo(struct ibv_wc *wc)
  * for further disconnects to mark dead connections as dead
  * before drain_cq() tries to operate on those dead connections
  */
-void drain_cm_queue( rdma_event_channel *aEC )
+int drain_cm_queue( rdma_event_channel *aEC )
 {
   LockCMEventStream();
   struct rdma_cm_event *event = NULL;
+  int status = 0;
 
-  while( rdma_get_cm_event( aEC, &event ) == 0 )
+  while( (rdma_get_cm_event( aEC, &event ) == 0 ) && ( status == 0) )
   {
     struct rdma_cm_event event_copy;
 
     memcpy(&event_copy, event, sizeof(struct rdma_cm_event));
+    rdma_ack_cm_event(event);
 
     BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
       << "New CM event: " << event->event
       << " Copy: " << event_copy.event
       << EndLogLine;
 
-    on_event(&event_copy);
-
-    rdma_ack_cm_event(event);
+    status = on_event( &event_copy );
   }
   UnlockCMEventStream();
+  return status;
 }
 
 enum {
@@ -1043,7 +1046,6 @@ enum {
 };
 
 static void add_socket_to_poll(iWARPEM_Router_Endpoint_t *conn) ;
-static void remove_socket_from_poll(struct connection *conn, unsigned int LocalEndpointIndex, int fd) ;
 
 static void process_control_message(const struct iWARPEM_MultiplexedSocketControl_Hdr_t & SocketControl_Hdr)
   {
@@ -1152,25 +1154,6 @@ static void wait_for_downstream_buffer(struct connection * conn)
     conn->downstream_sequence=downstream_sequence+1 ;
   }
 
-static void fetch_downstreamCompleteBuffer(struct connection *conn)
-  {
-//    size_t downstreaml=((struct downstreamLength *)(&((conn->routerBuffer).downstreamCompleteBuffer)))->downstreaml ;
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-        << "conn=0x" << (void *) conn
-//        << " downstreaml=" << downstreaml
-        << EndLogLine ;
-  }
-static
-inline
-iWARPEM_Status_t
-RecvRaw( iWARPEM_Router_Endpoint_t *rEP, char *buff, int len, int* wlen )
-{
-  iWARPEM_Status_t status = IWARPEM_SUCCESS;
-  iWARPEM_StreamId_t client;
-  status = rEP->ExtractRawData( buff, len, wlen, &client );
-  return status;
-}
-
 // Point the connection at the start of its downlink buffer
 static void rewind_downstream_buffer(struct connection *conn)
   {
@@ -1270,7 +1253,7 @@ static void flush_all_downstream(void)
     struct connection *next_conn = conn->mNextConnToAck[ ThisFlushListIndex ] ;
     conn->mNextConnToAck[ ThisFlushListIndex ]=NULL ;
 
-    if( ! rc_flush )
+    if( ! rc_flush  &&  ! conn->mDisconnecting )
     {
       // Re-queue this connection because the attempted transmit didn't go anywhere
       add_conn_to_flush_queue(conn) ;
@@ -1764,20 +1747,6 @@ static void add_socket_to_poll(iWARPEM_Router_Endpoint_t *conn )
       << "Wrong length write, errno=" << errno
       << EndLogLine ;
 
-  }
-static void remove_socket_from_poll_and_close( iWARPEM_Router_Endpoint_t *aServerEP, int fd)
-  {
-    BegLogLine(FXLOG_ITAPI_ROUTER)
-      << "EP=0x" << (void *)aServerEP
-      << " fd=" << aServerEP->GetRouterFd()
-      << EndLogLine ;
-    iWARPEM_MultiplexedSocketControl_Hdr_t SocketControl ;
-    SocketControl.mOpType=IWARPEM_SOCKETCONTROL_TYPE_REMOVE ;
-    SocketControl.mServerEP=aServerEP ;
-    int rc=write(drc_cli_socket,(void *)&SocketControl,sizeof(SocketControl)) ;
-    StrongAssertLogLine(rc == sizeof(SocketControl))
-      << "Wrong length write, errno=" << errno
-      << EndLogLine ;
   }
 static
 iWARPEM_Router_Endpoint_t*
