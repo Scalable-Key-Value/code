@@ -2151,9 +2151,13 @@ static void do_cq_processing(struct ibv_wc& wc)
     << " from ibv_poll_cq"
     << EndLogLine ;
 
-  struct endiorec * endiorec = ( struct endiorec * )wc.wr_id ;
+  struct endiorec * endiorec = ( struct endiorec * )wc.wr_id;
   enum optype optype = endiorec->optype ;
   struct connection *conn = endiorec->conn ;
+
+  if( !conn || conn->mDisconnecting )
+    return;
+
   size_t byte_len = wc.byte_len ;
   if ( optype == k_wc_recv)
   {
@@ -2177,9 +2181,6 @@ static void do_cq_processing(struct ibv_wc& wc)
     << " ibv_poll_cq_send_count=" << conn->ibv_poll_cq_send_count
     << " ibv_send_last_optype=" << conn->ibv_send_last_optype
     << EndLogLine ;
-
-  if( conn->mDisconnecting )
-    return;
 
   conn->sequence_in += 1 ;
   switch(optype)
@@ -2350,10 +2351,159 @@ void TerminateConnection( struct termination_entry_t *aTerm )
   cqSlihQueue.Enqueue( term_marker );
 }
 
+typedef enum
+{
+  DOWNLINK_STATUS_IDLE,
+  DOWNLINK_STATUS_QUEUING,
+  DOWNLINK_STATUS_PROCESSING,
+  DOWNLINK_STATUS_FLUSH,
+  DOWNLINK_STATUS_DISCONNECTS,
+  DOWNLINK_STATUS_ERROR
+}  downlink_status_t;
+
+#define UPSTREAM_BURSTLEN ( 32 )
+
+static inline
+downlink_status_t downlink_sm( const downlink_status_t aState,
+                               struct ibv_cq *aCQ )
+{
+  static int64_t idlecount = 0;
+  static int RequestIndex = 0;
+  static int RequestCount = 0;
+  static downlink_status_t saved_status = aState;
+
+  static struct ibv_wc wc[k_wc_array_size];
+  downlink_status_t entry_status = aState;
+  downlink_status_t return_status = aState;
+
+  if( gTerminationQueue.GetCount() )
+    entry_status = DOWNLINK_STATUS_DISCONNECTS;
+
+  switch( entry_status )
+  {
+    case DOWNLINK_STATUS_IDLE:
+    {
+      int rv = ibv_poll_cq(aCQ, k_wc_array_size, wc);
+      if( rv > 0 )
+      {
+        idlecount = 0;
+        RequestCount = rv;
+        RequestIndex = 0;
+        return_status = DOWNLINK_STATUS_QUEUING;
+      }
+      else if ( rv == 0 )
+      {
+        return_status = DOWNLINK_STATUS_IDLE;
+
+        idlecount++;
+        if( idlecount > 200000 )
+        {
+          idlecount--;
+          BegLogLine( 0 )
+            << "usleep hit: idlecount=" << idlecount
+            << EndLogLine;
+          usleep( idlecount );
+        }
+      }
+      else
+      {
+        BegLogLine( 1 )
+          << "poll_cq processing ends because ibv_poll_cq returns with rv=" << rv
+          << " exiting state machine."
+          << EndLogLine ;
+        return_status == DOWNLINK_STATUS_ERROR;
+      }
+      break;
+    }
+
+    case DOWNLINK_STATUS_QUEUING:
+      // if there are events: process them - i.e. Queue them for slih-processing
+      do_cq_processing( wc[ RequestIndex ]);
+      RequestIndex++;
+      if( RequestIndex >= RequestCount )
+      {
+        RequestIndex = 0;
+        return_status = DOWNLINK_STATUS_PROCESSING;
+      }
+      break;
+
+    case DOWNLINK_STATUS_PROCESSING:
+    {
+      struct endiorec * endiorec ;
+      static int requireFlushUplinks = 0 ;
+      int flushUplinks = 0;
+      int rc = cqSlihQueue.Dequeue(&endiorec);
+      if ( 0 == rc)
+      {
+        idlecount = 0;
+        do_cq_slih_processing(endiorec, &flushUplinks);
+        requireFlushUplinks |= flushUplinks;
+        RequestIndex++;
+      }
+      else
+        return_status = DOWNLINK_STATUS_IDLE;
+
+      if ( k_LazyFlushUplinks &&
+          ( RequestIndex >= RequestCount ) && ( 0 != requireFlushUplinks ) )
+      {
+        BegLogLine( 0 )
+          << " UpLinkFlush -----------------------------------------------------------------"
+          << EndLogLine;
+        FlushMarkedUplinks();
+        requireFlushUplinks = 0 ;
+        saved_status = DOWNLINK_STATUS_IDLE;
+        return_status = DOWNLINK_STATUS_FLUSH;
+      }
+      break;
+    }
+
+    case DOWNLINK_STATUS_DISCONNECTS:
+      LockCMEventStream();
+      while( gTerminationQueue.GetCount() )
+      {
+        struct termination_entry_t *ConnToTerm = NULL;
+        int rv = gTerminationQueue.Dequeue( &ConnToTerm );
+        if(( rv == 0 ) && ( ConnToTerm ))
+        {
+          idlecount = 0;
+          AckAllConnections();
+
+          BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+            << "Retrieving TermEntry=0x" << (void*)ConnToTerm
+            << " conn=0x" << (void*)ConnToTerm->mConn
+            << " id=0x" << (void*)ConnToTerm->mRdmaId
+            << EndLogLine;
+          TerminateConnection( ConnToTerm );
+        }
+      }
+      return_status = saved_status; // continue at the previous state
+      UnlockCMEventStream();
+      break;
+
+    case DOWNLINK_STATUS_FLUSH:
+      // in case there's any ACK to be send downstream
+      // first get any waiting connections into the main ACK list...
+      if( gDeferredAckList != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
+        AddAckCandidatesToQueue();
+
+      if( gFirstConnToAck != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
+        AckAllConnections();
+
+      return_status = saved_status; // continue at the previous state
+      break;
+
+    case DOWNLINK_STATUS_ERROR:
+    default:
+      printf("downlink state machine error! unknown state = %d", entry_status );
+      return_status = DOWNLINK_STATUS_ERROR;
+      break;
+  }
+  return return_status;
+}
+
 static void * poll_cq(void *ctx)
 {
   struct ibv_cq *cq;
-  struct ibv_wc wc[k_wc_array_size];
 
   cqSlihQueue.Init(k_CompletionQueueSize) ;
   gTerminationQueue.Init(k_CompletionQueueSize);
@@ -2361,127 +2511,12 @@ static void * poll_cq(void *ctx)
   BegLogLine(FXLOG_ITAPI_ROUTER)
     << "cq=" << (void *) cq
     << EndLogLine ;
-  int requireFlushUplinks = 0 ;
-  unsigned long idlecount=0 ;
-  // Follow Bernard Metzler's completion handling sequence
-  while(1)
+
+  downlink_status_t sm_state = DOWNLINK_STATUS_IDLE;
+  while( sm_state != DOWNLINK_STATUS_ERROR )
   {
-    int rv ;
-
-rearm:
-    if ( 0 == k_spin_poll)
-      ibv_req_notify_cq(cq, 0) ;
-
-again:
-    LockCMEventStream();
-    while( gTerminationQueue.GetCount() )
-    {
-      struct termination_entry_t *ConnToTerm = NULL;
-      rv = gTerminationQueue.Dequeue( &ConnToTerm );
-      if(( rv == 0 ) && ( ConnToTerm ))
-      {
-        LockDownStreamFlush();
-        drain_cq();
-        UnlockDownStreamFlush();
-
-        AckAllConnections();
-
-        BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
-          << "Retrieving TermEntry=0x" << (void*)ConnToTerm
-          << " conn=0x" << (void*)ConnToTerm->mConn
-          << " id=0x" << (void*)ConnToTerm->mRdmaId
-          << EndLogLine;
-        TerminateConnection( ConnToTerm );
-      }
-    }
-    UnlockCMEventStream();
-
-#define UPSTREAM_BURSTLEN ( 32 )
-    int requests_count = 0;
-    while( requests_count < UPSTREAM_BURSTLEN )
-    {
-      rv = ibv_poll_cq(cq, k_wc_array_size, wc) ;
-      BegLogLine(FXLOG_ITAPI_ROUTER && idlecount < 4 )
-        << "rv=" << rv
-        << " idlecount=" << idlecount
-        << EndLogLine ;
-      StrongAssertLogLine( rv >= 0 )
-        << "poll_cq processing ends because ibv_poll_cq returns with rv=" << rv
-        << EndLogLine ;
-
-      // if there are events: process them - i.e. Queue them for slih-processing
-      if ( rv > 0 )
-      {
-        idlecount = 0 ;
-        requests_count += rv;
-        for ( unsigned int wc_index=0; wc_index<rv;wc_index+=1)
-          do_cq_processing( wc[wc_index]) ;
-      }
-      else
-        break; // switch to other phase
-    }
-
-    requests_count = 0;
-    while( requests_count < UPSTREAM_BURSTLEN )
-    {
-      struct endiorec * endiorec ;
-      int rc=cqSlihQueue.Dequeue(&endiorec) ;
-      if ( 0 == rc)
-      {
-        int flushUplinks = 0;
-        do_cq_slih_processing(endiorec, &flushUplinks);
-        requireFlushUplinks |= flushUplinks;
-        requests_count ++;
-        idlecount = 0;
-      }
-      else
-        break;
-    }
-    idlecount += 1;
-
-    if ( k_LazyFlushUplinks && 0 != requireFlushUplinks )
-    {
-      BegLogLine( 0 )
-        << " UpLinkFlush -----------------------------------------------------------------"
-        << EndLogLine;
-      FlushMarkedUplinks();
-      requireFlushUplinks = 0 ;
-    }
-    // first get any waiting connections into the main ACK list...
-    if( gDeferredAckList != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
-      AddAckCandidatesToQueue();
-
-    if( gFirstConnToAck != FORWARDER_MAGIC_FLUSH_QUEUE_TERMINATOR )
-      AckAllConnections();
-
-    if( idlecount > 200000 )
-      {
-      idlecount--;
-      BegLogLine( 0 )
-        << "usleep hit: idlecount=" << idlecount
-        << EndLogLine;
-      usleep( idlecount );
-      }
-
-    if ( 0 == k_spin_poll)
-    {
-      struct ibv_cq *next_cq ;
-
-      rv=ibv_get_cq_event(s_ctx->comp_channel, &next_cq, &ctx) ;
-      if ( rv )
-      {
-        StrongAssertLogLine(0)
-          << "poll_cq processing ends because ibv_get_cq_event returns with rv=" << rv
-          << EndLogLine ;
-        break ;
-      }
-      AssertLogLine(cq == next_cq)
-        << "CQ changed from " << (void *) cq
-        << " to " << next_cq
-        << EndLogLine ;
-      ibv_ack_cq_events(cq, 1);
-      goto rearm ;
-    }
+    sm_state = downlink_sm( sm_state,
+                            cq );
   }
   return NULL;
 }

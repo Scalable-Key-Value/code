@@ -239,7 +239,7 @@ public:
     return IWARPEM_SUCCESS;
   }
 
-  inline bool RecvDataAvailable() { return ( mReceiveBuffer->RecvDataAvailable() ); }
+  inline bool RecvDataAvailable() const { return ( mReceiveBuffer->RecvDataAvailable() ); }
 
   // if *aClient is passed as NULL, data is extracted without the multiplexed message header - pure raw retrieval
   // user has to make sure that this doesn't break the protocol!!
@@ -287,7 +287,7 @@ public:
     return IWARPEM_SUCCESS;
   }
   // needs to make sure to not change the status of the receive buffer
-  iWARPEM_Status_t GetNextMessageType( iWARPEM_Msg_Type_t *aMsgType, iWARPEM_StreamId_t *aClient )
+  iWARPEM_Status_t GetNextMessageType( iWARPEM_Msg_Type_t *aMsgType, iWARPEM_StreamId_t *aClient ) const
   {
     iWARPEM_Status_t status = IWARPEM_SUCCESS;
     if( ! RecvDataAvailable() )
