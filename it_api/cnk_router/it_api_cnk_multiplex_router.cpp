@@ -934,7 +934,13 @@ int main(int argc, char **argv)
       status = on_event(&event_copy);
 
       if( event_copy.event == RDMA_CM_EVENT_DISCONNECTED )
+        {
         status = drain_cm_queue( ec );
+        BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+          << "Completed CM queue drain: " << status
+          << EndLogLine;
+        }
+
     }
   }
 
@@ -2370,14 +2376,18 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
   static int64_t idlecount = 0;
   static int RequestIndex = 0;
   static int RequestCount = 0;
-  static downlink_status_t saved_status = aState;
+  static downlink_status_t saved_status = DOWNLINK_STATUS_IDLE;
 
   static struct ibv_wc wc[k_wc_array_size];
   downlink_status_t entry_status = aState;
   downlink_status_t return_status = aState;
 
   if( gTerminationQueue.GetCount() )
+    {
     entry_status = DOWNLINK_STATUS_DISCONNECTS;
+    if( aState != DOWNLINK_STATUS_DISCONNECTS )
+      saved_status = aState;
+    }
 
   switch( entry_status )
   {
@@ -2393,7 +2403,8 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
       }
       else if ( rv == 0 )
       {
-        return_status = DOWNLINK_STATUS_IDLE;
+        saved_status = aState;
+        return_status = DOWNLINK_STATUS_FLUSH;
 
         idlecount++;
         if( idlecount > 200000 )
@@ -2418,13 +2429,10 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
 
     case DOWNLINK_STATUS_QUEUING:
       // if there are events: process them - i.e. Queue them for slih-processing
-      do_cq_processing( wc[ RequestIndex ]);
-      RequestIndex++;
-      if( RequestIndex >= RequestCount )
-      {
-        RequestIndex = 0;
-        return_status = DOWNLINK_STATUS_PROCESSING;
-      }
+      for( int i = 0; i < RequestCount; i++ )
+        do_cq_processing( wc[ i ]);
+
+      return_status = DOWNLINK_STATUS_PROCESSING;
       break;
 
     case DOWNLINK_STATUS_PROCESSING:
@@ -2444,20 +2452,26 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         return_status = DOWNLINK_STATUS_IDLE;
 
       if ( k_LazyFlushUplinks &&
-          ( RequestIndex >= RequestCount ) && ( 0 != requireFlushUplinks ) )
+           (( RequestIndex % UPSTREAM_BURSTLEN == 0 ) || ( return_status == DOWNLINK_STATUS_IDLE )) && 
+            ( 0 != requireFlushUplinks ) )
       {
         BegLogLine( 0 )
           << " UpLinkFlush -----------------------------------------------------------------"
           << EndLogLine;
         FlushMarkedUplinks();
         requireFlushUplinks = 0 ;
-        saved_status = DOWNLINK_STATUS_IDLE;
+        saved_status = return_status;
         return_status = DOWNLINK_STATUS_FLUSH;
       }
       break;
     }
 
     case DOWNLINK_STATUS_DISCONNECTS:
+      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+        << "SM-STATE:" << entry_status
+        << " entering"
+        << EndLogLine;
+
       LockCMEventStream();
       while( gTerminationQueue.GetCount() )
       {
@@ -2478,6 +2492,11 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
       }
       return_status = saved_status; // continue at the previous state
       UnlockCMEventStream();
+
+      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+        << "SM-STATE:" << entry_status
+        << " finished. Next state: " << return_status
+        << EndLogLine ;
       break;
 
     case DOWNLINK_STATUS_FLUSH:
