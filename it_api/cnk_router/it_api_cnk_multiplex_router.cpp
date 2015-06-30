@@ -1855,11 +1855,6 @@ void FlushMarkedUplinks()
     {
       (*ServerEP)->FlushSendBuffer();
       flushedEPs++;
-      for( int n=0; n<IT_API_MULTIPLEX_MAX_PER_SOCKET; n++ )
-      {
-        if( (*ServerEP)->IsValidClient( n ) )
-          Crossbar_Entry_t *cb = (*ServerEP)->GetClientEP( n );
-      }
     }
     ServerEP++;
   }
@@ -2490,7 +2485,9 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
           TerminateConnection( ConnToTerm );
         }
       }
+      FlushMarkedUplinks();
       return_status = saved_status; // continue at the previous state
+      saved_status = DOWNLINK_STATUS_IDLE; // and reset the saved_status to idle
       UnlockCMEventStream();
 
       BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
