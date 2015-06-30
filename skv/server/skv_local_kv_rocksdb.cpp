@@ -1006,7 +1006,7 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
   if( rs.ok() )
   {
     BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
-      << "skv_local_kv_rocksdb: rocksdb.Get() complete. len=" << value->length()
+      << "skv_local_kv_rocksdb: rocksdb.Get() complete. len=" << TmpValue.length()
       << EndLogLine;
 
     status = SKV_SUCCESS;
