@@ -2379,8 +2379,6 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
               << " SendWR: " << (void *) SendWR
               << EndLogLine;
 
-            iwarpem_flush_queue( (iWARPEM_Object_EndPoint_t *) SendWR->ep_handle, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
-
 #ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
             {
@@ -2389,7 +2387,11 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
               iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ EP->ConnFd ]->connect_sevd_handle );
               rEP->RemoveClient( EP->ClientId );
             }
+            else
 #endif
+            {
+              iwarpem_flush_queue( (iWARPEM_Object_EndPoint_t *) SendWR->ep_handle, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
+            }
 
             free( SendWR );
                 
@@ -4713,7 +4715,7 @@ it_status_t iwarpem_it_ep_disconnect_resp ( iWARPEM_Object_EndPoint_t* aLocalEnd
   SendWR->mMessageHdr.EndianConvert() ;
   SendWR->segments_array             = NULL;
 
-  BegLogLine( FXLOG_IT_API_O_SOCKETS ) 
+  BegLogLine( FXLOG_IT_API_O_SOCKETS | FXLOG_ITAPI_ROUTER_CLEANUP ) 
     << "iwarpem_it_ep_disconnect_resp(): About to enqueue"
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
