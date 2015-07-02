@@ -1375,7 +1375,7 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
   {
     status = aServerEP->GetNextMessageType( &msg_type, &client );
 
-    if( (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE ) )
+    if( (status == IWARPEM_SUCCESS) && (msg_type <= 0 || msg_type > iWARPEM_SOCKET_CLOSE_REQ_TYPE ) )
     {
       BegLogLine( aServerEP->IsValidClient( client ) )
         << "LocalHdr.mMsg_Type=" << msg_type
@@ -1884,6 +1884,10 @@ static void send_upstream( const iWARPEM_Router_Endpoint_t *aServerEP,
       << " client: " << aClientId
       << EndLogLine;
 
+    BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP && (Hdr.mMsg_Type == iWARPEM_DISCONNECT_REQ_TYPE))
+      << "DISCONNECT TYPE Message"
+      << EndLogLine;
+
     iWARPEM_Status_t status = ((iWARPEM_Router_Endpoint_t*)aServerEP)->InsertMessage( aClientId, &Hdr, (const char*)message, Hdr.mTotalDataLen );
 
     AssertLogLine( (status == IWARPEM_SUCCESS) )
@@ -1919,6 +1923,12 @@ static void process_uplink_element(struct connection *conn, unsigned int LocalEn
       open_socket_send_private_data(conn,LocalEndpointIndex,Hdr.mOpType.mSocketConnect,*(const iWARPEM_Private_Data_t *)message);
       break ;
     case iWARPEM_SOCKET_CLOSE_REQ_TYPE:
+      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+        << "CLOSING CONNECTION: "
+        << " conn=0x" << (void*)conn
+        << " clientRank=" << conn->clientRank
+        << " clientId=" << conn->clientId
+        << EndLogLine;
       close_crossbar_link(conn,LocalEndpointIndex) ;
       break ;
     default:
@@ -2326,6 +2336,11 @@ void TerminateConnection( struct termination_entry_t *aTerm )
   for( int n=0; n < IT_API_MAX_ROUTER_SOCKETS; n++ )
   {
     Crossbar_Entry_t *cb = conn->socket_fds[ n ];
+    BegLogLine( 0 )
+      << "CrossBar of conn=0x" << (void*)conn
+      << " at index=" << n
+      << " is 0x" << (void*)cb
+      << EndLogLine;
     if( cb != NULL )
     {
       iWARPEM_StreamId_t client = cb->getClientId();
@@ -2391,6 +2406,10 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
       int rv = ibv_poll_cq(aCQ, k_wc_array_size, wc);
       if( rv > 0 )
       {
+      BegLogLine( 0 )
+        << "IDLE STATE found new requests: " << rv
+        << EndLogLine;
+
         idlecount = 0;
         RequestCount = rv;
         RequestIndex = 0;
@@ -2424,6 +2443,9 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
 
     case DOWNLINK_STATUS_QUEUING:
       // if there are events: process them - i.e. Queue them for slih-processing
+      BegLogLine( 0 )
+        << "QUEUEING STATE: preprocessing " << RequestCount << " new entries"
+        << EndLogLine;
       for( int i = 0; i < RequestCount; i++ )
         do_cq_processing( wc[ i ]);
 
@@ -2432,6 +2454,10 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
 
     case DOWNLINK_STATUS_PROCESSING:
     {
+      BegLogLine( 0 )
+        << "PROCESSING STATE: Index=" << RequestIndex
+        << EndLogLine;
+
       struct endiorec * endiorec ;
       static int requireFlushUplinks = 0 ;
       int flushUplinks = 0;

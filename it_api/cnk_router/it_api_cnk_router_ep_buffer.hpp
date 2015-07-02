@@ -311,6 +311,7 @@ public:
       << " socket: " << aSocket
       << " version: " << mHeader->ProtocolVersion
       << " datalen: " << mHeader->DataLen
+      << " HdrCorrect: " << (int)HdrCorrect
       << EndLogLine;
 
     return HdrCorrect;

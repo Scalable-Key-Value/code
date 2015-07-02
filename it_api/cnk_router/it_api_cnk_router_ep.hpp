@@ -584,6 +584,9 @@ public:
 
   iWARPEM_Status_t InsertCloseRequest( const iWARPEM_StreamId_t aClientId )
   {
+    BegLogLine( 1 )
+      << "Inserting CLOSE Request for client: " << aClientId
+      << EndLogLine;
     iWARPEM_Message_Hdr_t Hdr;
     Hdr.mMsg_Type = iWARPEM_SOCKET_CLOSE_REQ_TYPE;
     Hdr.mTotalDataLen = 0;
@@ -593,8 +596,23 @@ public:
 
   iWARPEM_Status_t InsertDisconnectRequest( const iWARPEM_StreamId_t aClientId )
   {
+    BegLogLine( 1 )
+      << "Inserting DISCONNECT Request for client: " << aClientId
+      << EndLogLine;
     iWARPEM_Message_Hdr_t Hdr;
     Hdr.mMsg_Type = iWARPEM_DISCONNECT_REQ_TYPE;
+    Hdr.mTotalDataLen = 0;
+    char *data = (char*)&Hdr.mTotalDataLen;
+    return InsertMessage( aClientId, &Hdr, data, 0 );
+  }
+
+  iWARPEM_Status_t InsertDisconnectResponse( const iWARPEM_StreamId_t aClientId )
+  {
+    BegLogLine( 1 )
+      << "Inserting DISCONNECT Response for client: " << aClientId
+      << EndLogLine;
+    iWARPEM_Message_Hdr_t Hdr;
+    Hdr.mMsg_Type = iWARPEM_DISCONNECT_RESP_TYPE;
     Hdr.mTotalDataLen = 0;
     char *data = (char*)&Hdr.mTotalDataLen;
     return InsertMessage( aClientId, &Hdr, data, 0 );

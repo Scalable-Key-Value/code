@@ -63,6 +63,12 @@
 #define FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG ( 0 )
 #endif
 
+#ifdef WITH_CNK_ROUTER
+#ifndef FXLOG_ITAPI_ROUTER_CLEANUP
+#define FXLOG_ITAPI_ROUTER_CLEANUP ( 0 )
+#endif
+#endif
+
 #include <it_api_o_sockets_thread.h>
 #include <iwarpem_socket_access.hpp>
 #include <iwarpem_types.hpp>
@@ -1043,6 +1049,12 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
       << " errno: " << errno
       << EndLogLine;
 
+    BegLogLine( 1 )
+      << "terminating"
+      << " rlen=" << rlen
+      << " exp=" << rlen_expected
+      << " istatus=" << istatus
+      << EndLogLine;
     iwarpem_generate_conn_termination_event( SocketFd );
     return;
   }
@@ -1080,34 +1092,47 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
 
       iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_RECV_QUEUE_FLAG );
 
-      struct epoll_event EP_Event;
-      EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
-      EP_Event.data.fd = SocketFd;
+#ifdef WITH_CNK_ROUTER
+      if( EPisVirtual )
+      {
+        iWARPEM_StreamId_t client;
+        iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ LocalEndPoint->ConnFd ]->connect_sevd_handle );
+        rEP->RemoveClient( ClientId );
+      }
+      else
+      {
+#endif
+        struct epoll_event EP_Event;
+        EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
+        EP_Event.data.fd = SocketFd;
 
-      int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
-                                    EPOLL_CTL_DEL,
-                                    SocketFd,
-                                    & EP_Event );
+        int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
+                                            EPOLL_CTL_DEL,
+                                            SocketFd,
+                                            & EP_Event );
 
-      StrongAssertLogLine( mapepoll_ctl_rc == 0 )
-        << "iWARPEM_DataReceiverThread:: mapepoll_ctl() failed"
-        << " errno: " << errno
-        << EndLogLine;
+        StrongAssertLogLine( mapepoll_ctl_rc == 0 )
+          << "iWARPEM_DataReceiverThread:: mapepoll_ctl() failed"
+          << " errno: " << errno
+          << EndLogLine;
 
-      BegLogLine( FXLOG_IT_API_O_SOCKETS )
-        << "iWARPEM_DataReceiverThread:: Before close() "
-        << " SocketFd: " << SocketFd
-        << EndLogLine;
+        BegLogLine( FXLOG_IT_API_O_SOCKETS )
+          << "iWARPEM_DataReceiverThread:: Before close() "
+          << " SocketFd: " << SocketFd
+          << EndLogLine;
 
-      close( SocketFd );
+        close( SocketFd );
 
-      BegLogLine( FXLOG_IT_API_O_SOCKETS )
-        << "iWARPEM_DataReceiverThread:: After close() "
-        << " SocketFd: " << SocketFd
-        << EndLogLine;
+        BegLogLine( FXLOG_IT_API_O_SOCKETS )
+          << "iWARPEM_DataReceiverThread:: After close() "
+          << " SocketFd: " << SocketFd
+          << EndLogLine;
 
-      gSockFdToEndPointMap[ SocketFd ] = NULL;
+        gSockFdToEndPointMap[ SocketFd ] = NULL;
 
+#ifdef WITH_CNK_ROUTER
+      }
+#endif
       LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
 
       /**********************************************
@@ -1142,11 +1167,10 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
         << EndLogLine ;
 
       // Clear send queue for the associated end point
-      // iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
-      iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_RECV_QUEUE_FLAG );
+      iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
 
       // BegLogLine( FXLOG_IT_API_O_SOCKETS )
-      BegLogLine( FXLOG_IT_API_O_SOCKETS )
+      BegLogLine( 1 | FXLOG_IT_API_O_SOCKETS )
         << "iWARPEM_DataReceiverThread(): iWARPEM_DISCONNECT_REQ_TYPE: "
         << " LocalEndPoint: " << *LocalEndPoint
         << " SocketFd: " << SocketFd
@@ -1267,6 +1291,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
                     << " errno: " << errno
                     << EndLogLine;
 
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
                   iwarpem_generate_conn_termination_event( SocketFd );
                   error = 1;
                   break;
@@ -1444,6 +1469,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
             << " errno: " << errno
             << EndLogLine;
 
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
           iwarpem_generate_conn_termination_event( SocketFd );
           return;
         }
@@ -1559,6 +1585,7 @@ BegLogLine(FXLOG_IT_API_O_SOCKETS)
                 << " errno: " << errno
                 << EndLogLine;
 
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
               iwarpem_generate_conn_termination_event( SocketFd );
               error = 1;
               break;
@@ -1764,7 +1791,7 @@ iWARPEM_DataReceiverThread( void* args )
 	      ( InEvents[ i ].events & EPOLLHUP ) ||
 	      ( InEvents[ i ].events & EPOLLRDHUP ) )
 	    {
-	      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+	      BegLogLine(1|FXLOG_IT_API_O_SOCKETS)
 	          << "Error or hangup"
 	          << EndLogLine ;
 
@@ -1782,6 +1809,7 @@ iWARPEM_DataReceiverThread( void* args )
 		<< " errno: " << errno
 		<< EndLogLine;
 
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
 	      iwarpem_generate_conn_termination_event( SocketFd );
 
 	      continue;
@@ -1868,7 +1896,7 @@ iWARPEM_DataReceiverThread( void* args )
 	      BegLogLine( FXLOG_IT_API_O_SOCKETS )
 	        << "Msg on socket: " << SocketFd
 	        << " EP-type: " << LocalEndPoint->ConnType
-                << EndLogLine;
+            << EndLogLine;
 	      if( LocalEndPoint->ConnType == IWARPEM_CONNECTION_TYPE_MULTIPLEX )
 	      {
                 iWARPEM_Router_Endpoint_t *RouterEP = (iWARPEM_Router_Endpoint_t*)LocalEndPoint->connect_sevd_handle;
@@ -1878,7 +1906,45 @@ iWARPEM_DataReceiverThread( void* args )
                 do
                 {
                   iWARPEM_Msg_Type_t msg_type;
+                  iWARPEM_Message_Hdr_t *Hdr = NULL;
+                  char *Data = NULL;
                   status = RouterEP->GetNextMessageType( &msg_type, &Client );
+
+                  if( status != IWARPEM_SUCCESS )
+                    {
+                    struct epoll_event EP_Event;
+                    EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
+                    EP_Event.data.fd = SocketFd;
+
+                    int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
+                                                        EPOLL_CTL_DEL,
+                                                        SocketFd,
+                                                        & EP_Event );
+
+                    StrongAssertLogLine( mapepoll_ctl_rc == 0 )
+                      << "iWARPEM_DataReceiverThread:: mapepoll_ctl() failed"
+                      << " errno: " << errno
+                      << EndLogLine;
+
+                    break;
+                    }
+
+                  if( (msg_type != iWARPEM_SOCKET_CONNECT_REQ_TYPE) &&
+                      ( ! RouterEP->IsValidClient( Client ) ) )
+                    {
+                    BegLogLine( 1 )
+                      << "Client: " << Client
+                      << " is not a valid entry. Skipping message...!!!"
+                      << " type=" << msg_type
+                      << EndLogLine;
+                    iWARPEM_Message_Hdr_t *Hdr = NULL;
+                    char *Data = NULL;
+                    RouterEP->ExtractNextMessage( &Hdr, &Data, &Client );
+                    if( RouterEP->RecvDataAvailable() )
+                      continue;
+                    else
+                      break;
+                    }
 
                   // handle connects and disconnects of clients here
                   switch( msg_type )
@@ -1899,43 +1965,23 @@ iWARPEM_DataReceiverThread( void* args )
                         << " status: " << status
                         << " EP: " << (void*)RouterEP->GetClientEP( Client )
                         << EndLogLine;
-                      break;
 
-                    case iWARPEM_DISCONNECT_REQ_TYPE:
-                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
-                        << "Received DISCONNECT_REQ_TYPE on socket " << SocketFd
-                        << EndLogLine;
+                      // message extraction and processing in ProcessMessage()
                       break;
 
                     case iWARPEM_SOCKET_CONNECT_REQ_TYPE:
                     {
-                      iWARPEM_Message_Hdr_t *Hdr = NULL;
-                      char *Data = NULL;
                       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
                         << "Received SOCKET_CONNECT_REQ_TYPE on socket " << SocketFd
                         << EndLogLine;
 
                       status = RouterEP->ExtractNextMessage( &Hdr, &Data, &Client );
-                      switch( status )
+                      if( status != IWARPEM_SUCCESS )
                       {
-                        case IWARPEM_SUCCESS:
-                          break;
-                        default:
-                        {
-                          struct epoll_event EP_Event;
-                          EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
-                          EP_Event.data.fd = SocketFd;
-
-                          int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
-                                                              EPOLL_CTL_DEL,
-                                                              SocketFd,
-                                                              & EP_Event );
-
-                          StrongAssertLogLine( mapepoll_ctl_rc == 0 )
-                            << "iWARPEM_DataReceiverThread:: mapepoll_ctl() failed"
-                            << " errno: " << errno
-                            << EndLogLine;
-                        }
+                        BegLogLine( 1 )
+                          << "Connection message extraction failed. Skipping creation of new multiplexed connection."
+                          << EndLogLine;
+                        continue;
                       }
 
                       iWARPEM_Object_ConReqInfo_t* ConReqInfo = (iWARPEM_Object_ConReqInfo_t*) malloc(sizeof(iWARPEM_Object_ConReqInfo_t));
@@ -2007,41 +2053,35 @@ iWARPEM_DataReceiverThread( void* args )
                       free(ConReqEvent) ; /* So efence will trace it */
                       it_api_o_sockets_signal_accept() ;
 
+                      // no ProcessMessage() we just did exactly that...
                       continue;
                     }
+                    case iWARPEM_DISCONNECT_REQ_TYPE:
+                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG | FXLOG_ITAPI_ROUTER_CLEANUP)
+                        << "Received DISCONNECT_REQ_TYPE on socket " << SocketFd
+                        << EndLogLine;
+
                     case iWARPEM_SOCKET_CLOSE_REQ_TYPE:
                     {
-                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                      BegLogLine( (FXLOG_ITAPI_ROUTER_CLEANUP | FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG) && ( msg_type != iWARPEM_DISCONNECT_REQ_TYPE ) )
                         << "Received SOCKET_CONNECT_CLOSE_REQ_TYPE on socket " << SocketFd
                         << " client: " << Client
                         << EndLogLine;
 
-                      iWARPEM_Message_Hdr_t *Hdr = NULL;
-                      char *Data = NULL;
                       status = RouterEP->ExtractNextMessage( &Hdr, &Data, &Client );
-                      switch( status )
+                      if( status != IWARPEM_SUCCESS )
                       {
-                        case IWARPEM_SUCCESS:
-                          break;
-                        default:
-                        {
-                          struct epoll_event EP_Event;
-                          EP_Event.events = EPOLLIN | EPOLLRDHUP | EPOLLHUP ;
-                          EP_Event.data.fd = SocketFd;
-
-                          int mapepoll_ctl_rc = mapepoll_ctl( epoll_fd,
-                                                              EPOLL_CTL_DEL,
-                                                              SocketFd,
-                                                              & EP_Event );
-
-                          StrongAssertLogLine( mapepoll_ctl_rc == 0 )
-                            << "iWARPEM_DataReceiverThread:: mapepoll_ctl() failed"
-                            << " errno: " << errno
-                            << EndLogLine;
-
-                          //iwarpem_generate_conn_termination_event( SocketFd );
-                        }
+                        BegLogLine( 1 )
+                          << "CLOSE_REQ message extraction failed. Skipping close of multiplexed connection."
+                          << EndLogLine;
+                        continue;
                       }
+
+                      AssertLogLine( RouterEP->IsValidClient( Client ) )
+                        << "ExtractNextMessage() returns with invalid client=" << Client
+                        << EndLogLine;
+
+                      iWARPEM_Object_EndPoint_t *virtEP = RouterEP->GetClientEP( Client );
 
                       iWARPEM_Object_Event_t* CompletionEvent = (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
                       BegLogLine(FXLOG_IT_API_O_SOCKETS)
@@ -2050,20 +2090,44 @@ iWARPEM_DataReceiverThread( void* args )
 
                       it_connection_event_t* conne = (it_connection_event_t *) & CompletionEvent->mEvent;
 
-                      if( LocalEndPoint->ConnectedFlag == IWARPEM_CONNECTION_FLAG_PASSIVE_SIDE_PENDING_DISCONNECT )
-                        conne->event_number = IT_CM_MSG_CONN_DISCONNECT_EVENT;
-                      else
+                      if( virtEP->ConnectedFlag == IWARPEM_CONNECTION_FLAG_PASSIVE_SIDE_PENDING_DISCONNECT )
+                      {
+                        BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP ) 
+                          << " Connection already in PENDING_DISCONNECT - consider it BROKEN now"
+                          << EndLogLine;
+                        virtEP->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
                         conne->event_number = IT_CM_MSG_CONN_BROKEN_EVENT;
+                      }
+                      else
+                      {
+                        BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
+                          << " Setting PENDING_DISCONNECT"
+                          << EndLogLine;
+                        virtEP->ConnectedFlag = IWARPEM_CONNECTION_FLAG_PASSIVE_SIDE_PENDING_DISCONNECT;
+                        conne->event_number = IT_CM_MSG_CONN_DISCONNECT_EVENT;
+                      }
 
-                      conne->evd = LocalEndPoint->connect_sevd_handle;
-                      conne->ep = (it_ep_handle_t) LocalEndPoint;
+                      conne->evd = virtEP->connect_sevd_handle;
+                      conne->ep = (it_ep_handle_t) virtEP;
 
-                      iWARPEM_Object_EventQueue_t* ConnCmplEventQueue =
-                        (iWARPEM_Object_EventQueue_t*) conne->evd;
+                      iWARPEM_Object_EventQueue_t *ConnCmplEventQueue = (iWARPEM_Object_EventQueue_t*)virtEP->connect_sevd_handle;
+
+                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                        << "Extracted message for client: " << Client
+                        << EndLogLine;
+
+                      status = RouterEP->FlushSendBuffer();
+                      if( status != IWARPEM_SUCCESS )
+                        {
+                        BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                          << "Failed to Flush the multiplexed EP sendbuffer. Connection is broken now."
+                          << EndLogLine;
+                        conne->event_number = IT_CM_MSG_CONN_BROKEN_EVENT;
+                        }
 
                       int enqrc = ConnCmplEventQueue->Enqueue( CompletionEvent );
 
-                      BegLogLine(FXLOG_IT_API_O_SOCKETS)
+                      BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP | FXLOG_IT_API_O_SOCKETS)
                         << "ConnCmplEventQueue=" << ConnCmplEventQueue
                         << " conne->event_number=" << conne->event_number
                         << " conne->evd=" << conne->evd
@@ -2073,27 +2137,28 @@ iWARPEM_DataReceiverThread( void* args )
                       StrongAssertLogLine( enqrc == 0 )
                         << "iWARPEM_DataReceiverThread()::Failed to enqueue connection request event"
                         << EndLogLine;
+
+                      if( gAEVD )
+                        it_api_o_sockets_signal_accept();
                       /*********************************************/
 
-                      LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
+                      // Wait for the active side to call close
+                      iwarpem_it_ep_disconnect_resp( virtEP );
 
-                      RouterEP->RemoveClient( Client );
-                      status = IWARPEM_ERRNO_CONNECTION_CLOSED;
-                      break;
+                      status = IWARPEM_SUCCESS;
+                      continue;
                     }
                     case iWARPEM_DISCONNECT_RESP_TYPE:
                       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
                         << "Received DISCONNECT_RESP_TYPE on socket " << SocketFd
                         << EndLogLine;
-                      RouterEP->RemoveClient( Client );
                       status = IWARPEM_ERRNO_CONNECTION_CLOSED;
                       break;
 
                     case iWARPEM_SOCKET_CLOSE_TYPE:
-                      BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                      BegLogLine( 1 | FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
                         << "Received CLOSE_TYPE on socket " << SocketFd
                         << EndLogLine;
-                      RouterEP->RemoveClient( Client );
                       status = IWARPEM_ERRNO_CONNECTION_CLOSED;
                       break;
 
@@ -2110,19 +2175,19 @@ iWARPEM_DataReceiverThread( void* args )
 
                   // otherwise create the proper message header and continue the protocol?
 
-                  LocalEndPoint = RouterEP->GetClientEP( Client );
-                  if( ! RouterEP->IsValidClient( Client ) )
+                  if( RouterEP->IsValidClient( Client ) )
                     {
-                    BegLogLine( 1 )
-                      << "Client: " << Client
-                      << " is not a valid entry. Skipping message...!!!"
+                    LocalEndPoint = RouterEP->GetClientEP( Client );
+                    StrongAssertLogLine( LocalEndPoint->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL )
+                      << "Entering ProcessMessage for LocalEndPoint 0x" << (void*)LocalEndPoint
+                      << " with wrong ConnType: " << LocalEndPoint->ConnType
                       << EndLogLine;
-                    iWARPEM_Message_Hdr_t *Hdr = NULL;
-                    char *Data = NULL;
-                    RouterEP->ExtractNextMessage( &Hdr, &Data, &Client );
+                    ProcessMessage( LocalEndPoint, SocketFd, epoll_fd );
                     }
                   else
-                    ProcessMessage( LocalEndPoint, SocketFd, epoll_fd );
+                    BegLogLine( 1 ) 
+                      << "Message processing from invalid client skipped.."
+                      << EndLogLine;
                 } while( RouterEP->RecvDataAvailable() && ( status == IWARPEM_SUCCESS ));
 	      }
 	      else
@@ -2258,6 +2323,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                                                 & wlen );
             if( istatus != IWARPEM_SUCCESS )
               {
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
                 iwarpem_generate_conn_termination_event( EP->ConnFd );
                 return;
               }
@@ -2295,6 +2361,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                                                 & wlen );
             if( istatus != IWARPEM_SUCCESS )
               {
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
                 iwarpem_generate_conn_termination_event( EP->ConnFd );
                 return;
               }
@@ -2339,6 +2406,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                                                 & wlen );
             if( istatus != IWARPEM_SUCCESS )
               {
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
                 iwarpem_generate_conn_termination_event( EP->ConnFd );
                 return;
               }
@@ -2451,6 +2519,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                                & wlen );
             if( istatus != IWARPEM_SUCCESS )
               {
+              BegLogLine( 1 ) << "terminating" << EndLogLine;
                 iwarpem_generate_conn_termination_event( EP->ConnFd );
                 error = 1;
                 break;
@@ -3813,7 +3882,7 @@ iWARPEM_AcceptThread( void* args )
 
           MultiplexedEP->RecvWrQueue.Init( IWARPEM_RECV_WR_QUEUE_MAX_SIZE );
 
-          BegLogLine( 1 )
+          BegLogLine( 0 )
             << "Data of RouterEP: " << iWARPEM_Router_EP->GetRouterFd()
             << EndLogLine;
 
@@ -5189,11 +5258,14 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
             return IT_SUCCESS;
           }
       }
-    pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
+
     /************************************************************/
 
     // take a current snapshot of the event counter and only process this number regardless of counter updates
     int storedCount = AEVD->mEventCounter;
+
+    pthread_mutex_unlock( & ( AEVD->mEventCounterMutex ) );
+
     int gatheredEventCount = 0;
 
     // check if we need a gathered counter correction for the send queue events
@@ -5204,7 +5276,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 //    /***********************************************************************************
 //     * Dequeue AFF Events
 //     ***********************************************************************************/
-    int availableEventSlotsCount = max_event_count;
+    int availableEventSlotsCount = std::min( storedCount, (int)max_event_count );
     int deviceCount = 1 ;
     /*
      * Dequeue CMM events
@@ -5216,74 +5288,76 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 
     iWARPEM_Object_Event_t *EventPtr;
 
-        int rc = CMMEVQObj->Dequeue( & EventPtr );
-        int eventCountInCMMQueue = ( rc == 0 ) ? 1 : 0 ;
-        if ( eventCountInCMMQueue != 0 )
-          {
-            BegLogLine(FXLOG_IT_API_O_SOCKETS )
-              << "AEVD->mCMMEVQObj=" << AEVD->mCMMEVQObj
-              << EndLogLine ;
-        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-          << " eventCountInCMMQueue=" << eventCountInCMMQueue
-          << EndLogLine ;
-          }
-        if( eventCountInCMMQueue > 0 )
-          {
-            int eventCount = min( availableEventSlotsCount, eventCountInCMMQueue );
-//            eventCount = min( eventCount, (storedCount - gatheredEventCount) );
+    int rc = CMMEVQObj->Dequeue( & EventPtr );
+    int eventCountInCMMQueue = ( rc == 0 ) ? 1 : 0 ;
+    if ( eventCountInCMMQueue != 0 )
+    {
+      BegLogLine(FXLOG_IT_API_O_SOCKETS )
+        << "AEVD->mCMMEVQObj=" << AEVD->mCMMEVQObj
+        << EndLogLine ;
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+        << " eventCountInCMMQueue=" << eventCountInCMMQueue
+        << EndLogLine ;
+    }
+    if(( eventCountInCMMQueue > 0 ) && ( availableEventSlotsCount > 0 ) )
+    {
+      int eventCount = min( availableEventSlotsCount, eventCountInCMMQueue );
+//     eventCount = min( eventCount, (storedCount - gatheredEventCount) );
 
-                events[ gatheredEventCount ] = EventPtr->mEvent;
-                BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-                  << "events[" << gatheredEventCount
-                  << "].event_number=" << events[gatheredEventCount].event_number
-                  << EndLogLine ;
-                BegLogLine( FXLOG_IT_API_O_SOCKETS )
-                  << "About to call free( " << (void *) EventPtr << " )"
-                  << EndLogLine;
-                free( EventPtr );
+      events[ gatheredEventCount ] = EventPtr->mEvent;
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+        << "events[" << gatheredEventCount
+        << "].event_number=" << events[gatheredEventCount].event_number
+        << " stored=" << storedCount
+        << EndLogLine ;
+      BegLogLine( FXLOG_IT_API_O_SOCKETS )
+        << "About to call free( " << (void *) EventPtr << " )"
+        << EndLogLine;
+      free( EventPtr );
 
-                gatheredEventCount++;
-                availableEventSlotsCount--;
-                BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
-                  << "CMM-Event complete: "
-                  << " gathered: " << gatheredEventCount
-                  << EndLogLine;
-          }
+      gatheredEventCount++;
+      availableEventSlotsCount--;
+      BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+        << "CMM-Event complete: "
+        << " gathered: " << gatheredEventCount
+        << EndLogLine;
+    }
 
     /*
      * Dequeue CM events
      */
-      BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
-        << "CMQueue=" << CMQueue
+    BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
+      << "CMQueue=" << CMQueue
+      << EndLogLine ;
+    int eventCountInCMQueue = CMQueue->GetCount();
+    if ( eventCountInCMQueue != 0 )
+    {
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+        << " eventCountInCMQueue=" << eventCountInCMQueue
         << EndLogLine ;
-          int eventCountInCMQueue = CMQueue->GetCount();
-          if ( eventCountInCMQueue != 0 )
-            {
-          BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-            << " eventCountInCMQueue=" << eventCountInCMQueue
-            << EndLogLine ;
-            }
-          if( eventCountInCMQueue > 0 )
-            {
-              int eventCount = min( availableEventSlotsCount, eventCountInCMQueue );
-//              eventCount = min( eventCount, (storedCount - gatheredEventCount) );
+    }
+    if(( eventCountInCMQueue > 0 ) && ( availableEventSlotsCount > 0 ))
+    {
+      int eventCount = min( availableEventSlotsCount, eventCountInCMQueue );
+//     eventCount = min( eventCount, (storedCount - gatheredEventCount) );
 
-              for( int i = 0; i < eventCount; i++ )
-                {
-                  CMQueue->Dequeue( & events[ gatheredEventCount ] );
-                  BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-                    << "events[" << gatheredEventCount
-                    << "].event_number=" << events[gatheredEventCount].event_number
-                    << EndLogLine ;
-                  gatheredEventCount++;
-                  availableEventSlotsCount--;
-                  BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
-                    << "CM-Event complete: "
-                    << " gathered: " << gatheredEventCount
-                    << EndLogLine;
+      for( int i = 0; ( i < eventCount ) && ( availableEventSlotsCount > 0 ); i++ )
+      {
+        CMQueue->Dequeue( & events[ gatheredEventCount ] );
+        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
+          << "events[" << gatheredEventCount
+          << "].event_number=" << events[gatheredEventCount].event_number
+          << " stored=" << storedCount
+          << EndLogLine ;
+        gatheredEventCount++;
+        availableEventSlotsCount--;
+        BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+          << "CM-Event complete: "
+          << " gathered: " << gatheredEventCount
+          << EndLogLine;
 
-                }
-            }
+      }
+    }
 
 
     /***********************************************************************************
@@ -5296,71 +5370,71 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 
     int sendQueueEventCount = 0;
     for( int deviceOrd = 0; deviceOrd < deviceCount; deviceOrd++ )
+    {
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
+        << "&AEVD->mSendQueues[" << deviceOrd
+        << "]=" << &AEVD->mSendQueues[ deviceOrd ]
+        << EndLogLine ;
+      int eventCountInQueue = AEVD->mSendQueues[ deviceOrd ].GetCount();
+      if( eventCountInQueue > 0 )
       {
-        BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
-          << "&AEVD->mSendQueues[" << deviceOrd
-          << "]=" << &AEVD->mSendQueues[ deviceOrd ]
-          << EndLogLine ;
-        int eventCountInQueue = AEVD->mSendQueues[ deviceOrd ].GetCount();
-        if( eventCountInQueue > 0 )
+        int eventCount = min( availableEventSlotsCount, eventCountInQueue );
+//       eventCount = min( eventCount, (storedCount - gatheredEventCount) );
+
+        BegLogLine( FXLOG_IT_API_O_SOCKETS_QUEUE_LENGTHS_LOG )
+          << "itx_aevd_wait():: send events: " << eventCount
+          << EndLogLine;
+
+        for( int i = 0; ( i < eventCount ) && ( availableEventSlotsCount > 0 ); i++ )
+        {
+          it_event_t* ievent = & events[ gatheredEventCount ];
+
+          AEVD->mSendQueues[ deviceOrd ].Dequeue( ievent );
+          availableEventSlotsCount--;
+          gatheredEventCount++;
+          BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+            << "SendQ-Event complete: "
+            << " gathered: " << gatheredEventCount
+            << EndLogLine;
+          sendQueueEventCount += sendQueueCorrectionIncrement;
+
+          switch( ievent->event_number )
           {
-            int eventCount = min( availableEventSlotsCount, eventCountInQueue );
-//            eventCount = min( eventCount, (storedCount - gatheredEventCount) );
-
-            BegLogLine( FXLOG_IT_API_O_SOCKETS_QUEUE_LENGTHS_LOG )
-              << "itx_aevd_wait():: send events: " << eventCount
-              << EndLogLine;
-
-            for( int i = 0; i < eventCount; i++ )
-              {
-                it_event_t* ievent = & events[ gatheredEventCount ];
-
-                AEVD->mSendQueues[ deviceOrd ].Dequeue( ievent );
-                availableEventSlotsCount--;
-                gatheredEventCount++;
-                BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
-                  << "SendQ-Event complete: "
-                  << " gathered: " << gatheredEventCount
-                  << EndLogLine;
-                sendQueueEventCount += sendQueueCorrectionIncrement;
-
-                switch( ievent->event_number )
-                  {
-                  case IT_DTO_RDMA_READ_CMPL_EVENT:
-                    {
+            case IT_DTO_RDMA_READ_CMPL_EVENT:
+            {
 //                      gITAPI_RDMA_READ_AT_WAIT.HitOE( IT_API_TRACE,
 //                                                      gITAPI_RDMA_READ_AT_WAIT_Name,
 //                                                      gTraceRank,
 //                                                      gITAPI_RDMA_READ_AT_WAIT );
-                      break;
-                    }
-                  case IT_DTO_RDMA_WRITE_CMPL_EVENT:
-                    {
+              break;
+            }
+            case IT_DTO_RDMA_WRITE_CMPL_EVENT:
+            {
 //                      gITAPI_RDMA_WRITE_AT_WAIT.HitOE( IT_API_TRACE,
 //                                                       gITAPI_RDMA_WRITE_AT_WAIT_Name,
 //                                                       gTraceRank,
 //                                                       gITAPI_RDMA_WRITE_AT_WAIT );
-                      break;
-                    }
-                  case IT_DTO_SEND_CMPL_EVENT:
-                    {
+              break;
+            }
+            case IT_DTO_SEND_CMPL_EVENT:
+            {
 //                      gITAPI_SEND_AT_WAIT.HitOE( IT_API_TRACE,
 //                                                 gITAPI_SEND_AT_WAIT_Name,
 //                                                 gTraceRank,
 //                                                 gITAPI_SEND_AT_WAIT );
-                      break;
-                    }
-                  default:
-                    {
-                      StrongAssertLogLine( 0 )
-                        << "ERROR: "
-                        << " ievent->event_number: " << ievent->event_number
-                        << EndLogLine;
-                    }
-                  }
-              }
+              break;
+            }
+            default:
+            {
+              StrongAssertLogLine( 0 )
+                << "ERROR: "
+                << " ievent->event_number: " << ievent->event_number
+                << EndLogLine;
+            }
           }
+        }
       }
+    }
     /************************************************************************************/
 
 
@@ -5375,38 +5449,38 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
       << EndLogLine;
 
     for( int deviceOrd = 0; deviceOrd < deviceCount; deviceOrd++ )
+    {
+      BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
+        << "&AEVD->mRecvQueues[" << deviceOrd
+        << "]=" << &AEVD->mRecvQueues[ deviceOrd ]
+        << EndLogLine ;
+      int eventCountInQueue = AEVD->mRecvQueues[ deviceOrd ].GetCount();
+      if( eventCountInQueue > 0 )
       {
-        BegLogLine(FXLOG_IT_API_O_SOCKETS_LOOP )
-          << "&AEVD->mRecvQueues[" << deviceOrd
-          << "]=" << &AEVD->mRecvQueues[ deviceOrd ]
-          << EndLogLine ;
-        int eventCountInQueue = AEVD->mRecvQueues[ deviceOrd ].GetCount();
-        if( eventCountInQueue > 0 )
-          {
-            int eventCount = min( availableEventSlotsCount, eventCountInQueue );
-//            eventCount = min( eventCount, (storedCount - gatheredEventCount) );
+        int eventCount = min( availableEventSlotsCount, eventCountInQueue );
+//       eventCount = min( eventCount, (storedCount - gatheredEventCount) );
 
-            BegLogLine( FXLOG_IT_API_O_SOCKETS_QUEUE_LENGTHS_LOG )
-              << "itx_aevd_wait():: recv events: " << eventCount
-              << EndLogLine;
+        BegLogLine( FXLOG_IT_API_O_SOCKETS_QUEUE_LENGTHS_LOG )
+          << "itx_aevd_wait():: recv events: " << eventCount
+          << EndLogLine;
 
-            for( int i = 0; i < eventCount; i++ )
-              {
-                AEVD->mRecvQueues[ deviceOrd ].Dequeue( & events[ gatheredEventCount ] );
-                gatheredEventCount++;
-                BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
-                  << "RecvQ-Event complete: "
-                  << " gathered: " << gatheredEventCount
-                  << EndLogLine;
-                availableEventSlotsCount--;
+        for( int i = 0; ( i < eventCount ) && ( availableEventSlotsCount > 0 ); i++ )
+        {
+          AEVD->mRecvQueues[ deviceOrd ].Dequeue( & events[ gatheredEventCount ] );
+          gatheredEventCount++;
+          BegLogLine( FXLOG_IT_API_O_SOCKETS_LOOP )
+            << "RecvQ-Event complete: "
+            << " gathered: " << gatheredEventCount
+            << EndLogLine;
+          availableEventSlotsCount--;
 
 //                gITAPI_RECV_AT_WAIT.HitOE( IT_API_TRACE,
 //                                           gITAPI_RECV_AT_WAIT_Name,
 //                                           gTraceRank,
 //                                           gITAPI_RECV_AT_WAIT );
-              }
-          }
+        }
       }
+    }
     /************************************************************************************/
 
     AssertLogLine( availableEventSlotsCount >= 0 )

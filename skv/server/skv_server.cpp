@@ -548,10 +548,16 @@ ProcessEvent( skv_server_state_t  aState,
             << " StateForEP: " << (void *) StateForEP
             << EndLogLine;
 
-          StrongAssertLogLine( StateForEP != NULL )
-            << "skv_server_t::ProcessEvent::ERROR:: "
-            << " No state found for EP: " << (void *) aEvent->mEventMetadata.mEP.mIT_EP
-            << EndLogLine;
+          if( StateForEP == NULL )
+          {
+            BegLogLine( SKV_SERVER_CLEANUP_LOG )
+              << "No StateForEP found via event data. EP: 0x" << (void*)aEvent->mEventMetadata.mEP.mIT_EP
+              << " event_type: " << aEvent->mEventType
+              << " Skipping processing"
+              << EndLogLine;
+            status = SKV_SUCCESS;
+            break;
+          }
 
           int ConnCommandOrdinal = StateForEP->GetConnCommandOrdinal();
 
