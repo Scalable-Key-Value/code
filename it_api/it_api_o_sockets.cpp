@@ -2668,7 +2668,9 @@ iWARPEM_FlushActiveSockets( ActiveSocketsQueue_t &aASQ )
     if( EP != NULL )
     {
       int sock = EP->ConnFd;
-      iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
+      iWARPEM_Router_Endpoint_t *rEP = NULL;
+      if(( sock < SOCK_FD_TO_END_POINT_MAP_COUNT ) && ( gSockFdToEndPointMap[ sock ] != NULL ))
+        rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
 
       if(( rEP != NULL ) && (rEP->NeedsFlush() ))
         status = rEP->FlushSendBuffer();
