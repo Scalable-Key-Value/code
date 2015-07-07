@@ -445,7 +445,7 @@ Connect( const char* aConfigFile,
   int IterCount = 0;
 
   srand( mMyRankInGroup );
-  RankInx = (int) (mServerConnCount * (rand() / (RAND_MAX + 1.0)));
+  RankInx = rand() % mServerConnCount;
 
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
     << "skv_client_conn_manager_if_t::Connect():: "
@@ -454,17 +454,18 @@ Connect( const char* aConfigFile,
 
   while( IterCount < mServerConnCount )
   {
-    mServerConns[RankInx].Init( *mPZ_Hdl );
+    int RealIdx = RankInx % mServerConnCount;
+    mServerConns[ RealIdx ].Init( *mPZ_Hdl );
 
-    skv_status_t status = ConnectToServer( RankInx,
-                                           ServerAddrs[RankInx],
-                                           &mServerConns[RankInx] );
+    skv_status_t status = ConnectToServer( RealIdx,
+                                           ServerAddrs[ RealIdx ],
+                                           &mServerConns[ RealIdx ] );
 
     if( status != SKV_SUCCESS )
     {
       BegLogLine ( SKV_CLIENT_CONN_INFO_LOG )
         << "skv_client_conn_manager_if_t::Connect():: "
-        << " ERROR returned from ConnectToServer( " << RankInx
+        << " ERROR returned from ConnectToServer( " << RealIdx
         << " ) "
         << EndLogLine;
 
@@ -472,22 +473,18 @@ Connect( const char* aConfigFile,
     }
     else
     {
-      StrongAssertLogLine( mServerConns[ RankInx ].mState == SKV_CLIENT_CONN_CONNECTED )
+      StrongAssertLogLine( mServerConns[ RealIdx ].mState == SKV_CLIENT_CONN_CONNECTED )
         << "skv_client_conn_manager_if_t::Connect():: ERROR: "
         << EndLogLine;
 
       BegLogLine ( SKV_CLIENT_CONN_INFO_LOG )
         << "skv_client_conn_manager_if_t::Connect():: "
-        << " Connection: " << RankInx
-        << " EP: " << ( void* )( &mServerConns[ RankInx ] )
+        << " Connection: " << RealIdx
+        << " EP: " << ( void* )( &mServerConns[ RealIdx ] )
         << EndLogLine;
     }
 
-    if( RankInx == (mServerConnCount - 1) )
-      RankInx = 0;
-    else
-      RankInx++;
-
+    RankInx++;
     IterCount++;
   }
 
@@ -495,7 +492,9 @@ Connect( const char* aConfigFile,
   ServerAddrs = NULL;
 
   BegLogLine( SKV_CLIENT_CONN_INFO_LOG )
-    << "skv_client_conn_manager_if_t::Connect():: Exiting"
+    << "skv_client_conn_manager_if_t::Connect():: Exiting connected to " << IterCount
+    << "/" << mServerConnCount
+    << " Servers"
     << EndLogLine;
 
 #ifndef SKV_CLIENT_UNI
