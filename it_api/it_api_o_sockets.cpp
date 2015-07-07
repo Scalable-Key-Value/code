@@ -2330,7 +2330,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 
 #ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
-              gActiveSocketsQueue.push( EP );
+              gActiveSocketsQueue.push( gSockFdToEndPointMap[ EP->ConnFd ] );
 #endif
 
             AssertLogLine( wlen == LenToSend )
@@ -2382,7 +2382,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 #ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
             {
-              gActiveSocketsQueue.push( EP );
+              gActiveSocketsQueue.push( gSockFdToEndPointMap[ EP->ConnFd ] );
 
               iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ EP->ConnFd ]->connect_sevd_handle );
               rEP->RemoveClient( EP->ClientId );
@@ -2415,7 +2415,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 
 #ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
-              gActiveSocketsQueue.push( EP );
+              gActiveSocketsQueue.push( gSockFdToEndPointMap[ EP->ConnFd ] );
 #endif
 
             AssertLogLine( wlen == LenToSend )
@@ -2529,7 +2529,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 
 #ifdef WITH_CNK_ROUTER
             if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
-              gActiveSocketsQueue.push( EP );
+              gActiveSocketsQueue.push( gSockFdToEndPointMap[ EP->ConnFd ] );
 #endif
             StrongAssertLogLine(wlen == ntohl( SendWR->mMessageHdr.mTotalDataLen ) + sizeof(SendWR->mMessageHdr))
               << "Wrong length write, wlen=" << wlen
@@ -2665,19 +2665,15 @@ iWARPEM_FlushActiveSockets( ActiveSocketsQueue_t &aASQ )
     iWARPEM_Object_EndPoint_t *EP = aASQ.front();
     aASQ.pop();
 
-    if( EP != NULL )
+    if(( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_MULTIPLEX ))
     {
-      int sock = EP->ConnFd;
-      iWARPEM_Router_Endpoint_t *rEP = NULL;
-      if(( sock < SOCK_FD_TO_END_POINT_MAP_COUNT ) && ( gSockFdToEndPointMap[ sock ] != NULL ))
-        rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ sock ]->connect_sevd_handle );
-
+      iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)EP->connect_sevd_handle;;
       if(( rEP != NULL ) && (rEP->NeedsFlush() ))
         status = rEP->FlushSendBuffer();
     }
     else
       BegLogLine( 1 )
-        << "Found NULL pointer in ActiveSocketsQueue!! Skipping..."
+        << "Found non-multiplexed EP in ActiveSocketsQueue - this is likely a BUG!! Skipping Flush for this socket..."
         << EndLogLine;
   }
   return status;
