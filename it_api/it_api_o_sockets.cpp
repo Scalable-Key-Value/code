@@ -2032,18 +2032,18 @@ iWARPEM_DataReceiverThread( void* args )
                       else
                         icre->private_data_present = IT_FALSE;
 
-                      iWARPEM_Object_EventQueue_t *cevq = (iWARPEM_Object_EventQueue_t*)RouterEP->GetListenerContext()->connect_evd;
-                      int enqrc = cevq->Enqueue( ConReqEvent );
+                      // iWARPEM_Object_EventQueue_t *cevq = (iWARPEM_Object_EventQueue_t*)RouterEP->GetListenerContext()->connect_evd;
+                      // int enqrc = cevq->Enqueue( ConReqEvent );
 
-                      StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
-                      BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
-                        << "iWARPEM_AcceptThread(): "
-                        << " ConReqInfo@ "    << (void*) ConReqInfo
-                        << " Posted to connect_evd@ " << (void*) cevq
-                        << EndLogLine;
-                      BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
-                        << "Posted to CMQueue=" << CMQueue
-                        << EndLogLine ;
+                      // StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
+                      // BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                      //   << "iWARPEM_AcceptThread(): "
+                      //   << " ConReqInfo@ "    << (void*) ConReqInfo
+                      //   << " Posted to connect_evd@ " << (void*) cevq
+                      //   << EndLogLine;
+                      // BegLogLine(FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
+                      //   << "Posted to CMQueue=" << CMQueue
+                      //   << EndLogLine ;
                 //      it_event_t *event =(it_event_t *)malloc(sizeof(it_event_t));
                 //
                 //      event->event_number=IT_CM_REQ_CONN_REQUEST_EVENT ;
