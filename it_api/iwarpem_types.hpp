@@ -128,7 +128,7 @@ struct iWARPEM_Object_EndPoint_t
   it_ep_handle_t            ep_handle;
 
   // added infrastructure
-  iWARPEM_Connection_Flags_t  ConnectedFlag;
+  volatile iWARPEM_Connection_Flags_t  ConnectedFlag;
 #ifdef WITH_CNK_ROUTER
   iWARPEM_Connection_Type_t   ConnType;
   uint16_t                    ClientId;

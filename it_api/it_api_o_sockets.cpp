@@ -2380,7 +2380,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
               << EndLogLine;
 
 #ifdef WITH_CNK_ROUTER
-            if( ( EP != NULL ) && ( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL ) )
+            if( EP->ConnType == IWARPEM_CONNECTION_TYPE_VIRUTAL )
             {
               gActiveSocketsQueue.push( gSockFdToEndPointMap[ EP->ConnFd ] );
 
@@ -2393,6 +2393,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
               iwarpem_flush_queue( (iWARPEM_Object_EndPoint_t *) SendWR->ep_handle, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
             }
 
+            EP->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
             free( SendWR );
                 
             break;
@@ -2408,7 +2409,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                                                 & wlen );
             if( istatus != IWARPEM_SUCCESS )
               {
-              BegLogLine( 1 ) << "terminating" << EndLogLine;
+                BegLogLine( 1 ) << "terminating" << EndLogLine;
                 iwarpem_generate_conn_termination_event( EP->ConnFd );
                 return;
               }
@@ -4481,10 +4482,23 @@ it_status_t it_ep_free (
 
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_ep_free()" << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "IN        it_ep_handle_t        ep_handle,          " <<   *(iWARPEM_Object_EndPoint_t *)ep_handle           << EndLogLine;
-  iWARPEM_Object_EndPoint_t* EPObj = (iWARPEM_Object_EndPoint_t *) ep_handle;
+  iWARPEM_Object_EndPoint_t * EPObj = (iWARPEM_Object_EndPoint_t *) ep_handle;
+
+  int timeout = 1000000;
+  while( timeout && ( EPObj->ConnectedFlag != IWARPEM_CONNECTION_FLAG_DISCONNECTED ) )
+    {
+    pthread_mutex_unlock( & gITAPIFunctionMutex );
+    _bgp_msync();
+    timeout--;
+    pthread_mutex_lock( & gITAPIFunctionMutex );
+    }
+
+  BegLogLine( timeout == 0 )
+    << "Timeout exceeded. Finalizing EP anyway..."
+    << EndLogLine;
 
   EPObj->RecvWrQueue.Finalize();    
-
+  bzero( EPObj, sizeof( iWARPEM_Object_EndPoint_t ) );
   free( EPObj ); 
 
   pthread_mutex_unlock( & gITAPIFunctionMutex );
