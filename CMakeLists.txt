@@ -47,7 +47,7 @@ set_property(CACHE SKV_MPI
 include(Platform/${SKV_ENV})
 
 if(SKV_MPI MATCHES "AUTO")
-  find_package(MPI REQUIRED)
+  common_package(MPI REQUIRED)
 else()
   include(MPI/${SKV_MPI})
 endif()
@@ -72,9 +72,9 @@ set_property(CACHE SKV_LOCAL_KV_BACKEND
 
 set(LOCAL_KV_BACKEND ${SKV_LOCAL_KV_BACKEND})
 if(LOCAL_KV_BACKEND MATCHES "rocksdb" OR LOCAL_KV_BACKEND MATCHES "auto")
-  find_package(ZLIB)
-  find_package(BZip2)
-  find_package(rocksdb)
+  common_package(ZLIB)
+  common_package(BZip2)
+  common_package(rocksdb)
   if(NOT ROCKSDB_FOUND)
     if(LOCAL_KV_BACKEND MATCHES "rocksdb")
       message(FATAL_ERROR "rocksdb not found. Check rocksdb search path (-DROCKSDB_ROOT=) or configure another backend (-DSKV_LOCAL_KV_BACKEND=<inmem|asyncmem>)!")
@@ -91,7 +91,7 @@ set_property(CACHE SKV_COMM_API_TYPE
   PROPERTY STRINGS "verbs" "sockets" "sockets_routed")
 
 if(SKV_COMM_API_TYPE MATCHES "verbs")
-  find_package(OFED REQUIRED)
+  common_package(OFED REQUIRED)
   set( IT_API_LIBS ${OFED_LIBRARIES} pthread rt )
   add_definitions(
     # enable workaround for missing RoQ loopback functionality
@@ -107,7 +107,7 @@ if(SKV_COMM_API_TYPE MATCHES "sockets")
   set( IT_API_LIBS pthread rt )
 endif()
 if(SKV_COMM_API_TYPE MATCHES "sockets_routed")
-  find_package(SPI REQUIRED)
+  common_package(SPI REQUIRED)
   set( IT_API_LIBS  pthread rt ${SPI_LIBRARIES} )
 endif()
 
@@ -185,7 +185,7 @@ add_subdirectory(skv)
 
 if(WITH_CNK_ROUTER)
 # OFED libs required for Router <-> CN communication
-  find_package(OFED REQUIRED)
+  common_package(OFED REQUIRED)
 
   add_subdirectory(it_api/cnk_router)
   add_definitions(
@@ -195,6 +195,8 @@ if(WITH_CNK_ROUTER)
     unittest/test_skv_cnk_router_connector.cpp
   )
 endif()
+common_package_post()
+
 #------------------------------------------------------------------------------
 # Define test source files
 #------------------------------------------------------------------------------
