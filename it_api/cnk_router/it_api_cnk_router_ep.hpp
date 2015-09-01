@@ -52,7 +52,7 @@ class iWARPEM_Multiplexed_Endpoint_t
   ReceiveBufferType *mReceiveBuffer;
   size_t mReceiveDataLen;
 
-  uint16_t mPendingRequests;
+  volatile uint16_t mPendingRequests;
   bool mNeedsBufferFlush;
 
 #ifdef MULTIPLEX_STATISTICS
@@ -60,6 +60,8 @@ class iWARPEM_Multiplexed_Endpoint_t
   uint32_t mFlushCount;
   double mMsgAvg;
 #endif
+
+  pthread_spinlock_t mAccessLock;
 
   inline void ResetSendBuffer()
   {
@@ -92,6 +94,7 @@ public:
     mClientEPs = new MultiplexedConnectionType*[ aMaxClientCount ];
     bzero( mClientEPs, sizeof( MultiplexedConnectionType*) * aMaxClientCount );
 
+    pthread_spin_init( &mAccessLock, PTHREAD_PROCESS_PRIVATE );
     mListenerContext = aListenerCtx;
     mSendBuffer = new SocketBufferType();
     mReceiveBuffer = new ReceiveBufferType();
@@ -127,6 +130,7 @@ public:
     delete mClientEPs;
     delete mSendBuffer;
     delete mReceiveBuffer;
+    pthread_spin_destroy( &mAccessLock );
 
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
       << "Destroyed multiplexed router endpoint."
@@ -145,8 +149,20 @@ public:
   inline void SetRouterFd( int aRouterFd = 0 ) { mRouterConnFd = aRouterFd; }
   inline iWARPEM_Router_Info_t* GetRouterInfoPtr() const { return (iWARPEM_Router_Info_t*)&mRouterInfo; }
   inline iWARPEM_Object_Accept_t* GetListenerContext() const { return mListenerContext; }
-  inline void IncreasePendingRequest() { mPendingRequests++; };
-  inline void DecreasePendingRequests() { mPendingRequests--; if( !mPendingRequests ) FlushSendBuffer(); }
+  inline void IncreasePendingRequest() { mPendingRequests++; _bgp_msync(); };
+  inline void DecreasePendingRequests()
+    {
+      _bgp_msync();
+      mPendingRequests--;
+      // if( !mPendingRequests ) 
+      {
+        // BegLogLine( 1 )
+        //   << "Flushing socket: " << mRouterConnFd
+        // //   << " needed: " << NeedsFlush()
+        //   << EndLogLine;
+        FlushSendBuffer(); 
+      }
+    }
 
   inline MultiplexedConnectionType* GetClientEP( iWARPEM_StreamId_t aClientId ) const
   {
@@ -246,6 +262,7 @@ public:
   iWARPEM_Status_t ExtractRawData( char *aBuffer, int aSize, int *aRecvd, iWARPEM_StreamId_t *aClient = NULL )
   {
     iWARPEM_Status_t status = IWARPEM_SUCCESS;
+    pthread_spin_lock( &mAccessLock );
     if( ! RecvDataAvailable() )
     {
       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
@@ -260,9 +277,11 @@ public:
           BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
             << "Error while reading data from router endpoint."
             << EndLogLine;
+          pthread_spin_unlock( &mAccessLock );
           return status;
       }
     }
+    pthread_spin_unlock( &mAccessLock );
     // data can only be an iWARPEM_Message_Hdr_t if the client is requested too
     if( aClient != NULL )
     {
@@ -287,9 +306,10 @@ public:
     return IWARPEM_SUCCESS;
   }
   // needs to make sure to not change the status of the receive buffer
-  iWARPEM_Status_t GetNextMessageType( iWARPEM_Msg_Type_t *aMsgType, iWARPEM_StreamId_t *aClient ) const
+  iWARPEM_Status_t GetNextMessageType( iWARPEM_Msg_Type_t *aMsgType, iWARPEM_StreamId_t *aClient )
   {
     iWARPEM_Status_t status = IWARPEM_SUCCESS;
+    pthread_spin_lock( &mAccessLock );
     if( ! RecvDataAvailable() )
     {
       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
@@ -306,9 +326,11 @@ public:
             << EndLogLine;
           *aClient = IWARPEM_INVALID_CLIENT_ID;
           *aMsgType = iWARPEM_UNKNOWN_REQ_TYPE;
+          pthread_spin_unlock( &mAccessLock );
           return status;
       }
     }
+    pthread_spin_unlock( &mAccessLock );
     size_t hdrlen = sizeof( iWARPEM_Multiplexed_Msg_Hdr_t );
     iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mReceiveBuffer->GetHdrPtr( &hdrlen, 0 );
     AssertLogLine( hdrlen == sizeof( iWARPEM_Multiplexed_Msg_Hdr_t ) )
@@ -340,6 +362,7 @@ public:
   iWARPEM_Status_t ExtractNextMessage( iWARPEM_Message_Hdr_t **aHdr, char **aData, iWARPEM_StreamId_t *aClientId )
   {
     iWARPEM_Status_t status = IWARPEM_SUCCESS;
+    pthread_spin_lock( &mAccessLock );
     if( ! RecvDataAvailable() )
     {
       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
@@ -354,9 +377,11 @@ public:
           BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
             << "Error while reading data from router endpoint."
             << EndLogLine;
+          pthread_spin_unlock( &mAccessLock );
           return status;
       }
     }
+    pthread_spin_unlock( &mAccessLock );
     size_t rlen = sizeof( iWARPEM_Multiplexed_Msg_Hdr_t );
     iWARPEM_Multiplexed_Msg_Hdr_t *MultHdr = (iWARPEM_Multiplexed_Msg_Hdr_t*)mReceiveBuffer->GetHdrPtr( &rlen );
     AssertLogLine( rlen == sizeof( iWARPEM_Multiplexed_Msg_Hdr_t ) )
@@ -399,18 +424,22 @@ public:
   {
     int wlen = 0;
     mNeedsBufferFlush = false;
+
+    pthread_spin_lock( &mAccessLock );
     size_t DataLen = mSendBuffer->GetDataLen();
     if( DataLen == 0)
     {
       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
         << "Buffer is empty. Nothing to send."
         << EndLogLine;
+      pthread_spin_unlock( &mAccessLock );
       return IWARPEM_SUCCESS;
     }
     iWARPEM_Status_t status = mSendBuffer->FlushToSocket( mRouterConnFd, &wlen );
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
       << "Sent " << (int)(wlen)
       << " payload: " << mSendBuffer->GetDataLen()
+      << " socket: " << mRouterConnFd
       << EndLogLine;
 
 #ifdef MULTIPLEX_STATISTICS
@@ -422,6 +451,7 @@ public:
 
 #endif
     ResetSendBuffer();
+    pthread_spin_unlock( &mAccessLock );
 
     return status;
   }
@@ -457,6 +487,7 @@ public:
         << EndLogLine;
     }
 
+    pthread_spin_lock( &mAccessLock );
     // create the multiplex header from the client id
     iWARPEM_StreamId_t *client = (iWARPEM_StreamId_t*)&aClientID;
     mSendBuffer->AddHdr( (const char*)client, sizeof( iWARPEM_StreamId_t ) );
@@ -467,6 +498,7 @@ public:
     if( aSize > 0 )
       mSendBuffer->AddData( aData, aSize );
 
+    pthread_spin_unlock( &mAccessLock );
 #if (FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG != 0)
     iWARPEM_Msg_Type_t MsgType = iWARPEM_UNKNOWN_REQ_TYPE;
     if( aHdr )
@@ -533,6 +565,7 @@ public:
     if( status == IWARPEM_SUCCESS )
       *aLen += send_size;
 
+    pthread_spin_lock( &mAccessLock );
     i++;
     for( ; (i < aIOV_Count ) && ( status == IWARPEM_SUCCESS ); i++ )
     {
@@ -547,6 +580,7 @@ public:
       mSendBuffer->AddDataContigous( (const char*)aIOV[ i ].iov_base, aIOV[ i ].iov_len );
       *aLen += send_size;
     }
+    pthread_spin_unlock( &mAccessLock );
 
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
     << "Inserted Message Vector to send buffer: "

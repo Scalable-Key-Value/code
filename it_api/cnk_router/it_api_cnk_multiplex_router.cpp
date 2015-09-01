@@ -1422,9 +1422,9 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
   struct connection *conn = (struct connection*)cb->getDownLink();
 
   BegLogLine(FXLOG_ITAPI_ROUTER)
-    << "conn=0x" << (void *) conn
+    << "CONNECTION RESPONSE conn=0x" << (void *) conn
     << " client=" << client
-    << " msg_type=" << msg_type
+    << " msg_type=" << iWARPEM_Msg_Type_to_string( msg_type )
     << EndLogLine ;
 
   if( status == IWARPEM_SUCCESS )
@@ -1454,6 +1454,14 @@ static int process_downlink( iWARPEM_Router_Endpoint_t *aServerEP )
         << " server=" << cb->getServerId()
         << EndLogLine ;
       close_crossbar_link( conn, cb->getServerId() );
+    }
+    if (msg_type == iWARPEM_SOCKET_CONNECT_RESP_TYPE)
+    {
+      BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
+        << "Forwarded a CONNECT RESPONSE"
+        << " client=" << client
+        << " server=" << cb->getServerId()
+        << EndLogLine ;
     }
   }
   else
@@ -1821,7 +1829,9 @@ static void open_socket_send_private_data( struct connection *conn,
     conn->socket_fds[ LocalEndpointIndex ] = cb ;
 
     BegLogLine(FXLOG_ITAPI_ROUTER_CLEANUP)
-        << "Opened: conn=0x" << (void *) conn
+        << "CONNECT TO UPLINK conn=0x" << (void *) conn
+        << " client=" << cb->getClientId()
+        << " server=" << cb->getServerId()
         << " LocalEndpointIndex=" << LocalEndpointIndex
         << " ipv4_address=0x" << (void*)SocketConnect.ipv4_address
         << " ipv4_port=" << SocketConnect.ipv4_port
@@ -1937,6 +1947,12 @@ static void process_uplink_element(struct connection *conn, unsigned int LocalEn
           << " is out of range"
           << EndLogLine ;
       Crossbar_Entry_t *cb = conn->socket_fds[ LocalEndpointIndex ];
+
+      BegLogLine( 0 )
+          << "Hdr.mMsg_Type=" << Msg_Type
+          << " cb: 0x" << (void*)cb
+          << EndLogLine ;
+
       if( cb != NULL )
         send_upstream( cb->getUpLink(), cb->getClientId(), Hdr, message) ;
       break ;

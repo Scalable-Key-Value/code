@@ -1097,6 +1097,9 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
       {
         iWARPEM_StreamId_t client;
         iWARPEM_Router_Endpoint_t *rEP = (iWARPEM_Router_Endpoint_t*)( gSockFdToEndPointMap[ LocalEndPoint->ConnFd ]->connect_sevd_handle );
+        BegLogLine( 0 )
+          << "Removing client ep: 0x" << (void*)rEP->GetClientEP( ClientId )
+          << EndLogLine;
         rEP->RemoveClient( ClientId );
       }
       else
@@ -1170,7 +1173,7 @@ void ProcessMessage( iWARPEM_Object_EndPoint_t *LocalEndPoint, int SocketFd, int
       iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
 
       // BegLogLine( FXLOG_IT_API_O_SOCKETS )
-      BegLogLine( 1 | FXLOG_IT_API_O_SOCKETS )
+      BegLogLine( FXLOG_IT_API_O_SOCKETS )
         << "iWARPEM_DataReceiverThread(): iWARPEM_DISCONNECT_REQ_TYPE: "
         << " LocalEndPoint: " << *LocalEndPoint
         << " SocketFd: " << SocketFd
@@ -1973,8 +1976,9 @@ iWARPEM_DataReceiverThread( void* args )
                     {
                       BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
                         << "Received SOCKET_CONNECT_REQ_TYPE on socket " << SocketFd
+                        << " client: " << Client
                         << EndLogLine;
-
+                      _bgp_msync();
                       status = RouterEP->ExtractNextMessage( &Hdr, &Data, &Client );
                       if( status != IWARPEM_SUCCESS )
                       {
@@ -4730,6 +4734,7 @@ it_status_t iwarpem_it_ep_disconnect_resp ( iWARPEM_Object_EndPoint_t* aLocalEnd
   BegLogLine( FXLOG_IT_API_O_SOCKETS | FXLOG_ITAPI_ROUTER_CLEANUP ) 
     << "iwarpem_it_ep_disconnect_resp(): About to enqueue"
     << " SendWR: " << (void *) SendWR
+    << " EP: 0x" << (void*)SendWR->ep_handle
     << EndLogLine;
 
   // aLocalEndPoint->SendWrQueue.Enqueue( SendWR );    
@@ -5320,7 +5325,7 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 
       events[ gatheredEventCount ] = EventPtr->mEvent;
       BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-        << "events[" << gatheredEventCount
+        << "CMM: events[" << gatheredEventCount
         << "].event_number=" << events[gatheredEventCount].event_number
         << " stored=" << storedCount
         << EndLogLine ;
@@ -5358,8 +5363,8 @@ itx_aevd_wait( IN  it_evd_handle_t evd_handle,
       for( int i = 0; ( i < eventCount ) && ( availableEventSlotsCount > 0 ); i++ )
       {
         CMQueue->Dequeue( & events[ gatheredEventCount ] );
-        BegLogLine(FXLOG_IT_API_O_SOCKETS_CONNECT)
-          << "events[" << gatheredEventCount
+        BegLogLine( FXLOG_IT_API_O_SOCKETS_CONNECT)
+          << "CM: events[" << gatheredEventCount
           << "].event_number=" << events[gatheredEventCount].event_number
           << " stored=" << storedCount
           << EndLogLine ;
@@ -5668,6 +5673,8 @@ it_status_t itx_ep_accept_with_rmr (
 
     BegLogLine( FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG )
       << "Accept with private data len: " << PrivateData.mLen
+      << " Socket: " << s
+      << " Client:" << ConReqInfoPtr->ClientId
       << EndLogLine;
     RouterEP->AddClient( ConReqInfoPtr->ClientId, LocalEndPoint );
     RouterEP->InsertAcceptResponse( ConReqInfoPtr->ClientId, &PrivateData );
