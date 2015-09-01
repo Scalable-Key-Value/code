@@ -984,20 +984,18 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
 
 
   skv_rdma_string *value;
-  size_t expSize = aReq->mRequest.mRetrieve.mValueSize;
+  size_t reqOffset = aReq->mRequest.mRetrieve.mValueOffset;
+  size_t reqSize = aReq->mRequest.mRetrieve.mValueSize;
 
-  if( ! mDataBuffer->ReqWillFit( (expSize * 3) >> 1 ) )
+  if( ! mDataBuffer->ReqWillFit( (reqSize * 3) >> 1 ) )
   {
     BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
-      << "RDMA-Buffer space shortage: req=" << expSize
+      << "RDMA-Buffer space shortage: req=" << reqSize
       << " left=" << mDataBuffer->MaxSizeFit()
       << EndLogLine;
     mStalledCommand = aReq;
     return SKV_ERRNO_NOT_DONE;
   }
-
-  size_t reqOffset = aReq->mRequest.mRetrieve.mValueOffset;
-  size_t reqSize = aReq->mRequest.mRetrieve.mValueSize;
 
   std::string TmpValue;
   rocksdb::Status rs;

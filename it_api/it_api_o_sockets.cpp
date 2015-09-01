@@ -63,10 +63,8 @@
 #define FXLOG_IT_API_O_SOCKETS_MULTIPLEX_LOG ( 0 )
 #endif
 
-#ifdef WITH_CNK_ROUTER
 #ifndef FXLOG_ITAPI_ROUTER_CLEANUP
 #define FXLOG_ITAPI_ROUTER_CLEANUP ( 0 )
-#endif
 #endif
 
 #include <it_api_o_sockets_thread.h>

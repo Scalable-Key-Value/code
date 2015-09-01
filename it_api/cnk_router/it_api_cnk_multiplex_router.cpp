@@ -2489,8 +2489,9 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         return_status = DOWNLINK_STATUS_IDLE;
 
       if ( k_LazyFlushUplinks &&
-           (( RequestIndex % UPSTREAM_BURSTLEN == 0 ) || ( return_status == DOWNLINK_STATUS_IDLE )) && 
-            ( 0 != requireFlushUplinks ) )
+          ( 0 != requireFlushUplinks ) &&
+          (( RequestIndex % UPSTREAM_BURSTLEN == 0 ) || ( return_status == DOWNLINK_STATUS_IDLE ))
+      )
       {
         BegLogLine( 0 )
           << " UpLinkFlush -----------------------------------------------------------------"
