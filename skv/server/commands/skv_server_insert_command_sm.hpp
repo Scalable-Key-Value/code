@@ -14,7 +14,7 @@
 #ifndef __SKV_SERVER_INSERT_COMMAND_SM_HPP__
 #define __SKV_SERVER_INSERT_COMMAND_SM_HPP__
 
-#ifndef SKV_SERVER_INSERT_LOG 
+#ifndef SKV_SERVER_INSERT_LOG
 #define SKV_SERVER_INSERT_LOG  ( 0 | SKV_LOGGING_ALL )
 #endif
 
@@ -339,7 +339,7 @@ public:
       << " Command: " << (void *) Command
       << " State: " << skv_server_command_state_to_string( State )
       << " Event: " << skv_server_event_type_to_string( EventType )
-      << " Hdr: " << (void*) Command->GetSendBuff() 
+      << " Hdr: " << (void*) Command->GetSendBuff()
       << " Ord: " << aCommandOrdinal
       << EndLogLine;
 
@@ -709,4 +709,3 @@ public:
   }
 };
 #endif
-
