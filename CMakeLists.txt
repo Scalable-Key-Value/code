@@ -107,7 +107,7 @@ if(SKV_COMM_API_TYPE MATCHES "sockets")
   set( IT_API_LIBS pthread rt )
 endif()
 if(SKV_COMM_API_TYPE MATCHES "sockets_routed")
-  common_package(SPI REQUIRED)
+  find_package(SPI REQUIRED)
   set( IT_API_LIBS  pthread rt ${SPI_LIBRARIES} )
 endif()
 
