@@ -971,7 +971,7 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
 {
   skv_status_t status;
   size_t TotalSize = 0;
-  skv_lmr_triplet_t StoredValueRep;
+  skv_lmr_triplet_t *StoredValueRep;
 
   BegLogLine(SKV_LOCAL_KV_BACKEND_LOG )
     << "skv_local_kv_rocksdb:: retrieving: " << aReq->mRequest.mRetrieve.mValueSize
@@ -983,7 +983,7 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
   skv_local_kv_rocksdb_reqctx_t *reqCtx = NULL;
 
 
-  skv_rdma_string *value;
+  char *value;
   size_t reqOffset = aReq->mRequest.mRetrieve.mValueOffset;
   size_t reqSize = aReq->mRequest.mRetrieve.mValueSize;
 
@@ -1032,7 +1032,9 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
       if( aReq->mRequest.mRetrieve.mFlags & SKV_COMMAND_RIU_RETRIEVE_SPECIFIC_VALUE_LEN )
         TotalSize = reqSize;
 
-      value = new skv_rdma_string( *( reinterpret_cast<skv_rdma_string*>(&TmpValue)), reqOffset, reqSize );
+      StoredValueRep = new skv_lmr_triplet_t;
+      mDataBuffer->AcquireDataArea( reqSize, StoredValueRep );
+      memcpy( (char*)StoredValueRep->GetAddr(), TmpValue.c_str()+reqOffset, reqSize );
 
 #if SKV_LOCAL_KV_BACKEND_LOG
       HexDump RDBFxString( (void*)TmpValue.c_str(), TmpValue.length() );
@@ -1064,15 +1066,8 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
 
   int RoomForValue = ((skv_header_as_cmd_buffer_t*)aReq)->GetRoomForData( sizeof( skv_cmd_retrieve_value_rdma_write_ack_t) );
 
-  if( status == SKV_SUCCESS )
-  {
-    StoredValueRep.InitAbs( mDataBuffer->GetLMR(),
-                            (char*)( (uintptr_t)value->data() ),
-                            reqSize );
-
-    if( RoomForValue < reqSize )
-      status = SKV_ERRNO_NEED_DATA_TRANSFER;
-  }
+  if(( status == SKV_SUCCESS ) && ( RoomForValue < reqSize ))
+    status = SKV_ERRNO_NEED_DATA_TRANSFER;
 
   BegLogLine( SKV_LOCAL_KV_BACKEND_LOG )
     << "skv_local_kv_rocksdb: LMR=" << StoredValueRep
@@ -1082,10 +1077,10 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformRetrieve( skv_local_kv_reques
 
   reqCtx = new skv_local_kv_rocksdb_reqctx_t;
   reqCtx->mWorker= this;
-  reqCtx->mUserData = value;
+  reqCtx->mUserData = StoredValueRep;
 
   status = InitKVRDMAEvent( aReq->mCookie,
-                            &StoredValueRep,
+                            StoredValueRep,
                             (skv_local_kv_req_ctx_t)reqCtx,
                             TotalSize,
                             status );
@@ -1431,9 +1426,10 @@ skv_status_t skv_local_kv_rocksdb_worker_t::PerformAsyncInsertCleanup( skv_local
 skv_status_t skv_local_kv_rocksdb_worker_t::PerformAsyncRetrieveCleanup( skv_local_kv_request_t *aReq )
 {
   skv_local_kv_rocksdb_reqctx_t* rctx = (skv_local_kv_rocksdb_reqctx_t*)(aReq->mReqCtx);
-  skv_rdma_string *str = (skv_rdma_string*)rctx->mUserData;
+  skv_lmr_triplet_t *lmr = (skv_lmr_triplet_t*)rctx->mUserData;
+  mDataBuffer->ReleaseDataArea( lmr );
 
-  delete str;
+  delete lmr;
   delete rctx;
   return SKV_SUCCESS;
 }
