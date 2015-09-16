@@ -269,6 +269,18 @@ skv_local_kv_rocksdb::Init( int aRank,
 
   skv_local_kv_rocksdb_worker_settings_t worker_config;
   worker_config.mRDMABufferSize = config->GetRdmaMemoryLimit() / SKV_LOCAL_KV_WORKER_POOL_SIZE;
+  if( (config->GetRdmaMemoryLimit() / 1024 / 1024) % SKV_LOCAL_KV_WORKER_POOL_SIZE != 0 )
+  {
+    size_t newSizeMiB = (config->GetRdmaMemoryLimit() / 1024 / 1024) / SKV_LOCAL_KV_WORKER_POOL_SIZE;
+    size_t multipleOfEight = ( (size_t)( newSizeMiB / 8 ) + 1) * 8;
+    newSizeMiB = multipleOfEight * SKV_LOCAL_KV_WORKER_POOL_SIZE;
+    BegLogLine( 1 )
+      << "INFO: RDMA memory limit was no multiple of worker pool size (" << SKV_LOCAL_KV_WORKER_POOL_SIZE
+      << "). Adjusted from " << config->GetRdmaMemoryLimit()/1024/1024
+      << " to " << newSizeMiB
+      << EndLogLine;
+    worker_config.mRDMABufferSize = newSizeMiB * 1024 * 1024;
+  }
   worker_config.mMaxValueSize = SKV_LOCAL_KV_MAX_VALUE_SIZE;
   worker_config.mMaxRequests = worker_config.mRDMABufferSize / worker_config.mMaxValueSize;
 

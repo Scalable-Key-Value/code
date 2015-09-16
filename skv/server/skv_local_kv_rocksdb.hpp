@@ -28,7 +28,7 @@
 // will be divided by the worker pool size and the max value size
 #define SKV_LOCAL_KV_MIN_OUTSTANDING_REQUESTS ( 16 )
 #define SKV_LOCAL_KV_MAX_VALUE_SIZE ( 1 * 1048576ul )
-#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 32 )
+#define SKV_LOCAL_KV_WORKER_POOL_SIZE ( 24 )
 
 #include <thread>
 #include <rocksdb/db.h>
