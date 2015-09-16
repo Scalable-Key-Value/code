@@ -73,7 +73,7 @@ extern "C"
 #include <iwarpem_socket_access.hpp>
 #include <iwarpem_types.hpp>
 
-#define IT_API_MAX_ROUTER_SOCKETS ( 128 )
+#define IT_API_MAX_ROUTER_SOCKETS ( 256 )
 
 #if 1
 #include <rdma/rdma_cma.h>
