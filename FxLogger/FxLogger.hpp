@@ -93,7 +93,7 @@ enum
         fflush(stderr);            \
         assert(0);                 \
         _exit(__LINE__*-1);        \
-        const char *x=NULL; x = "doom";  \
+        ::abort();                 \
         for(;;);                   \
         }
 
