@@ -32,8 +32,8 @@
 #include <unistd.h>
 #include <pthread.h>
 
-
 #include <fstream>
+#include <stdexcept>
 #include <string>
 
 extern int  FxLoggerNodeId;
@@ -87,15 +87,13 @@ enum
     }
 #endif
 
-#define __PK_FXLOG_SERIOUS_ABORT \
-        {                          \
-        fflush(stdout);            \
-        fflush(stderr);            \
-        assert(0);                 \
-        _exit(__LINE__*-1);        \
-        ::abort();                 \
-        for(;;);                   \
-        }
+#define __PK_FXLOG_SERIOUS_ABORT                                    \
+    {                                                               \
+        fflush(stdout);                                             \
+        fflush(stderr);                                             \
+        throw std::runtime_error(                                   \
+            "FXLogger: Serious abort requested, check log file" );  \
+    }
 
 struct fxlogger_string_t
 {
@@ -579,39 +577,30 @@ enum {pkfxlog_debug = 1};
 
 #if defined(PK_STRONG_ASSERT_ONLY_TRAP)
 // gcc warns on a multiline comment, so macro it out instead
-#if 0
-    // Runtime check that is not turned off by NDEBUG flag, convert it to just cause a core dump
-    #define StrongAssertLogLine(MyAssertCond)                       \
-      if( ! ((MyAssertCond) || (((*(int *)0)=0),1) )) \
-         __PKFXLOG_BASIC_LOG_LINE(1)                                        \
-         << " FAILED ASSERT( " << #MyAssertCond << " ) >"
-#endif
-    // Runtime check that is turned off by NDEBUG flag
-    #define StrongAssertLogLine(MyAssertCond)                       \
-      if( ( pkfxlog_debug ) && ( ! (MyAssertCond) ) ) \
-         __PKFXLOG_BASIC_LOG_LINE(1)                                        \
-         << " FAILED ASSERT( " << #MyAssertCond << ") >"
-
+// Runtime check that is turned off by NDEBUG flag
+#  define StrongAssertLogLine(MyAssertCond)                             \
+    if( ( pkfxlog_debug ) && ( ! (MyAssertCond) ) )                     \
+        __PKFXLOG_BASIC_LOG_LINE(1)                                     \
+            << " FAILED ASSERT( " << #MyAssertCond << ") >"
 #else
-    // Runtime check that is not turned off by NDEBUG flag
-    #define StrongAssertLogLine(MyAssertCond)                       \
-      if( ! (MyAssertCond) ) \
-         __PKFXLOG_BASIC_LOG_LINE(1)                                        \
-         << " FAILED ASSERT( " << #MyAssertCond << " ) >"
-
+// Runtime check that is not turned off by NDEBUG flag
+#  define StrongAssertLogLine(MyAssertCond)                             \
+    if( ! (MyAssertCond) )                                              \
+        __PKFXLOG_BASIC_LOG_LINE(1)                                     \
+            << " FAILED ASSERT( " << #MyAssertCond << " ) >"
 #endif
 
-    #define EndLogLine0    "< "                                                       \
-             << __FUNCTION__  << "() "                                                   \
-             << FxLogger_GetStartPointInFilePathName( __FILE__ )  << " "               \
-             << __LINE__   << " "; }                                                   \
-             if(_pkFxLogAbortFlag) __PK_FXLOG_SERIOUS_ABORT }
+#define EndLogLine0    "< "                                             \
+    << __FUNCTION__  << "() "                                           \
+    << FxLogger_GetStartPointInFilePathName( __FILE__ )  << " "         \
+    << __LINE__   << " "; }                                             \
+    if(_pkFxLogAbortFlag) __PK_FXLOG_SERIOUS_ABORT }
 
-#define EndLogLine    "< "                                                       \
-         << __FUNCTION__  << "() "                                                   \
-         << FxLogger_GetStartPointInFilePathName( __FILE__ )  << " "               \
-         << __LINE__   << " "; }                                                   \
-         if(_pkFxLogAbortFlag) __PK_FXLOG_SERIOUS_ABORT }
+#define EndLogLine    "< "                                              \
+    << __FUNCTION__  << "() "                                           \
+    << FxLogger_GetStartPointInFilePathName( __FILE__ )  << " "         \
+    << __LINE__   << " "; }                                             \
+    if(_pkFxLogAbortFlag) __PK_FXLOG_SERIOUS_ABORT }
 
 
 class

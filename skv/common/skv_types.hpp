@@ -131,7 +131,7 @@ struct skv_server_addr_t
 struct skv_store_t
 {
   int   mSizeBE;
-  char* mData;  
+  char* mData;
 
   int mSize(void) const
   {
