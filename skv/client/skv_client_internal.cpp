@@ -474,10 +474,9 @@ iRetrieve( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t* Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - SKV_CHECKSUM_BYTES;  // -1 because of trailling msg-complete flag
-
-  int ValueFitsInBuff = (aValueBufferSize <= RoomForData);
-  int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
+  const int RoomForData = skv_cmd_RIU_req_t::GetMaxPayloadSize();
+  const bool ValueFitsInBuff = (aValueBufferSize <= RoomForData);
+  const bool KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
 
   if( ValueFitsInBuff )
     aFlags = (skv_cmd_RIU_flags_t) (SKV_COMMAND_RIU_RETRIEVE_VALUE_FIT_IN_CTL_MSG | aFlags);
@@ -616,10 +615,9 @@ iUpdate( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t * Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - SKV_CHECKSUM_BYTES;   // -1 because of trailling msg-complete flag
-
-  int KeyValueFitsInBuff = ((aKeyBufferSize + aValueUpdateSize) <= RoomForData);
-  int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
+  const int RoomForData = skv_cmd_RIU_req_t::GetMaxPayloadSize();
+  const bool KeyValueFitsInBuff = ((aKeyBufferSize + aValueUpdateSize) <= RoomForData);
+  const bool KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
 
   if( KeyValueFitsInBuff )
     aFlags = (skv_cmd_RIU_flags_t) (SKV_COMMAND_RIU_INSERT_KEY_VALUE_FIT_IN_CTL_MSG | aFlags);
@@ -746,10 +744,9 @@ iInsert( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_RIU_req_t* Req = (skv_cmd_RIU_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_RIU_req_t ) - SKV_CHECKSUM_BYTES; // -1 because of trailling msg-complete flag
-
-  int KeyValueFitsInBuff = (aKeyBufferSize+aValueBufferSize <= RoomForData);
-  int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
+  const int RoomForData = skv_cmd_RIU_req_t::GetMaxPayloadSize();
+  const bool KeyValueFitsInBuff = (aKeyBufferSize+aValueBufferSize <= RoomForData);
+  const bool KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
 
   if( KeyValueFitsInBuff )
     aFlags = (skv_cmd_RIU_flags_t) (SKV_COMMAND_RIU_INSERT_KEY_VALUE_FIT_IN_CTL_MSG | aFlags);
@@ -1563,9 +1560,8 @@ iRemove( skv_pds_id_t*          aPDSId,
   char* SendCtrlMsgBuff = CmdCtrlBlk->GetSendBuff();
   skv_cmd_remove_req_t* Req = (skv_cmd_remove_req_t *) SendCtrlMsgBuff;
 
-  int RoomForData = SKV_CONTROL_MESSAGE_SIZE - sizeof( skv_cmd_remove_req_t ) - SKV_CHECKSUM_BYTES;  // -1 because of trailling msg-complete flag
-
-  int KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
+  const int RoomForData = skv_cmd_RIU_req_t::GetMaxPayloadSize();
+  const bool KeyFitsInBuff = (aKeyBufferSize <= RoomForData);
 
   if( KeyFitsInBuff )
     aFlags = (skv_cmd_remove_flags_t) (SKV_COMMAND_REMOVE_KEY_FITS_IN_CTL_MSG | aFlags);

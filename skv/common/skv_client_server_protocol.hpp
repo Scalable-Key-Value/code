@@ -321,6 +321,14 @@ struct skv_cmd_RIU_req_t
     mOffset=htonl(mOffset) ;
     mFlags=(skv_cmd_RIU_flags_t)htonl(mFlags) ;
   }
+
+  static size_t GetMaxPayloadSize()
+  {
+    return SKV_CONTROL_MESSAGE_SIZE - SKV_CHECKSUM_BYTES -
+           sizeof( skv_cmd_RIU_req_t ) -
+           sizeof( skv_key_value_in_ctrl_msg_t::mKeySize ) -
+           sizeof( skv_key_value_in_ctrl_msg_t::mValueSize );
+  }
 };
 
 struct skv_cmd_remove_req_t
@@ -547,7 +555,7 @@ struct skv_cmd_retrieve_n_keys_req_t
 
     mHdr.SetCmdLength( sizeof(skv_cmd_retrieve_n_keys_req_t) + mStartingKeySize );
     return;
-  }  
+  }
   void EndianConvert(void)
   {
     BegLogLine(SKV_CLIENT_ENDIAN_LOG)
