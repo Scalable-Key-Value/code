@@ -23,7 +23,7 @@
 /* This is a dumb impl to encapsulate locking via pthread_mutex to work around old compilers not able to cope with C++11
  * This could be removed once we decide to require C++11 compiler support for whole SKV */
 class skv_mutex_t {
-  pthread_spinlock_t mMutex;
+  pthread_mutex_t mMutex;
 #if (SKV_MUTEX_LOG != 0)
   int mLogThisMutex;
 #else
@@ -40,27 +40,27 @@ public:
 #if (SKV_MUTEX_LOG != 0)
   mLogThisMutex = aLogThisMutex;
 #endif
-    pthread_spin_init( &mMutex, 0 );
+    pthread_mutex_init( &mMutex, 0 );
     BegLogLine( SKV_MUTEX_LOG ) << "Initialized lock: 0x" << (void*)&mMutex << EndLogLine;
   }
   ~skv_mutex_t()
   {
     BegLogLine( SKV_MUTEX_LOG && (mLogThisMutex) ) << "Destroying lock: 0x" << (void*)&mMutex << EndLogLine;
-    pthread_spin_destroy( &mMutex );
+    pthread_mutex_destroy( &mMutex );
   }
   inline int lock()
   {
     BegLogLine( SKV_MUTEX_LOG && (mLogThisMutex) ) << "About to lock: 0x" << (void*)&mMutex << EndLogLine;
-    return pthread_spin_lock( &mMutex );
+    return pthread_mutex_lock( &mMutex );
   }
   inline int unlock()
   {
     BegLogLine( SKV_MUTEX_LOG && (mLogThisMutex) ) << "Unlocking: 0x" << (void*)&mMutex << EndLogLine;
-    return pthread_spin_unlock( &mMutex );
+    return pthread_mutex_unlock( &mMutex );
   }
   inline int trylock()
   {
-    return pthread_spin_trylock( &mMutex );
+    return pthread_mutex_trylock( &mMutex );
   }
 
 #if (SKV_MUTEX_LOG != 0)
