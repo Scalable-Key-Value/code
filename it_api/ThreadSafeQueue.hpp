@@ -29,10 +29,6 @@
 #define THREAD_SAFE_QUEUE_INIT_FXLOG ( 0 )
 #endif
 
-#ifndef THREAD_SAFE_QUEUE_ENABLE_WITH_WAIT
-//#define THREAD_SAFE_QUEUE_ENABLE_WITH_WAIT
-#endif
-
 #if defined __ppc__ || defined __ppc64__ || defined __powerpc__ || defined __powerpc64__
 #  ifdef VRNIC_CNK // need a better name
 #    include "/bgsys/drivers/ppcfloor/arch/include/spi/kernel_interface.h"
@@ -67,8 +63,6 @@ template< class Item, int tLockless >
 struct ThreadSafeQueue_t
   {
     pthread_mutex_t   mutex;
-    pthread_cond_t    empty_cond;
-    pthread_cond_t    full_cond;
 
     typedef           uint64_t tsq_counter_t;
 
@@ -78,7 +72,6 @@ struct ThreadSafeQueue_t
     volatile tsq_counter_t     mGotCount;
     unsigned          mDepthMask;
     int               mMax;
-    struct timespec   mCondWaitTimeout;
 
     size_t
     GetCount()
@@ -126,8 +119,6 @@ struct ThreadSafeQueue_t
     Finalize()
     {
       pthread_mutex_destroy( & mutex );
-      pthread_cond_destroy( & empty_cond );
-      pthread_cond_destroy( & full_cond );
       free(mItemArray) ;
     }
 
@@ -135,11 +126,6 @@ struct ThreadSafeQueue_t
     Init(int aMax)
     {
       pthread_mutex_init( & mutex, 0 );
-      pthread_cond_init( & empty_cond, 0 );
-      pthread_cond_init( & full_cond, 0 );
-
-      mCondWaitTimeout.tv_sec  = 0;
-      mCondWaitTimeout.tv_nsec = 10000000; // 0.01 seconds
 
       mPutCount  = 0;
       mGotCount  = 0;
@@ -169,15 +155,6 @@ struct ThreadSafeQueue_t
 
     }
 
-
-
-    int
-    EnqueueWithWait( Item aNextIn )
-    {
-      //NEED: current Enqueue is actually with wait -- this prepares for a futre non-blocking Enqueue()
-      return( Enqueue( aNextIn ) );
-    }
-
     int
     Enqueue( Item aNextIn )
     {
@@ -196,31 +173,7 @@ struct ThreadSafeQueue_t
 
       // The queue is full
       while( GetCount() == mMax )
-        {
-          // See comment in DequeueAssumeLockedWithWait
-          // That explains the timed out wait
-
-          if( tLockless )
-            pthread_mutex_lock( &mutex );
-
-          struct timespec now ;
-          clock_gettime(CLOCK_REALTIME,&now) ;
-          struct timespec expiry ;
-          long nsec=now.tv_nsec + mCondWaitTimeout.tv_nsec ;
-          if (nsec >= 1000000000)
-            {
-              expiry.tv_nsec=nsec-1000000000 ;
-              expiry.tv_sec=now.tv_sec+mCondWaitTimeout.tv_sec+1 ;
-            }
-          else
-            {
-              expiry.tv_nsec=nsec ;
-              expiry.tv_sec=now.tv_sec+mCondWaitTimeout.tv_sec ;
-            }
-          pthread_cond_timedwait( & full_cond, & mutex, & expiry );
-          if( tLockless )
-            pthread_mutex_unlock( &mutex );
-        }
+          ::sched_yield();
 
       tsq_counter_t ItemsInQueue = GetCount();
 
@@ -250,11 +203,6 @@ struct ThreadSafeQueue_t
       if( ! tLockless )
         pthread_mutex_unlock( &mutex );
 
-
-#ifdef THREAD_SAFE_QUEUE_ENABLE_WITH_WAIT
-      if( ItemsInQueue == 0 )
-        pthread_cond_broadcast( & empty_cond );
-#endif
 
       return( 0 );
     }
@@ -303,58 +251,8 @@ struct ThreadSafeQueue_t
         << EndLogLine;
 #endif
 
-      if( (int) ItemsInQueue == mMax )
-        {
-          pthread_cond_broadcast( & full_cond );
-        }
       return 0;
     }
-
-#ifdef THREAD_SAFE_QUEUE_ENABLE_WITH_WAIT
-    int
-    DequeueAssumeLockedWithWait( Item *aNextOut )
-    {
-      while( GetCount() == 0 )
-        {
-          if( tLockless )
-            pthread_mutex_lock( &mutex );
-
-          /**
-           * There's a race condition if we use pthread_cond_wait(), need to use
-           * a timed out wait
-           *
-           * 1. DequeueAssumeLockedWithWait()  gets this far and gets descheduled
-           * 2. Enqueueing call increments mPutCount
-           * 3. Enqueueing call calls pthread_cond_broadcast
-           * 4. DequeueAssumeLockedWithWait() gets scheduled, misses the pthread_cond_broadcast
-           * and calls pthread_cond_wait(), blocking in definitely
-           *
-           **/
-
-          struct timespec now ;
-          clock_gettime(CLOCK_REALTIME,&now) ;
-          struct timespec expiry ;
-          long nsec=now.tv_nsec + mCondWaitTimeout.tv_nsec ;
-          if (nsec >= 1000000000)
-            {
-              expiry.tv_nsec=nsec-1000000000 ;
-              expiry.tv_sec=now.tv_sec+mCondWaitTimeout.tv_sec+1 ;
-            }
-          else
-            {
-              expiry.tv_nsec=nsec ;
-              expiry.tv_sec=now.tv_sec+mCondWaitTimeout.tv_sec ;
-            }
-
-          pthread_cond_timedwait( & empty_cond, & mutex, & expiry );
-
-          if( tLockless )
-            pthread_mutex_unlock( &mutex );
-        }
-
-      return DequeueAssumedLockedNonEmpty( aNextOut );
-    }
-#endif
 
     int
     DequeueAssumeLocked( Item *aNextOut )
@@ -364,26 +262,13 @@ struct ThreadSafeQueue_t
 
       return DequeueAssumedLockedNonEmpty( aNextOut );
     }
-#ifdef THREAD_SAFE_QUEUE_ENABLE_WITH_WAIT
-    int
-    DequeueWithWait( Item *aNextOut )
-    {
-      int rc;
 
-      if( ! tLockless )
-        pthread_mutex_lock( &mutex );
-
-      rc = DequeueAssumeLockedWithWait( aNextOut );
-
-      if( ! tLockless )
-        pthread_mutex_unlock( &mutex );
-
-      return(rc);
-    }
-#endif
     int
     Dequeue( Item *aNextOut )
     {
+      if( GetCount() == 0 )
+        return -1;
+
       int rc;
 
       BegLogLine(THREAD_SAFE_QUEUE_FXLOG)

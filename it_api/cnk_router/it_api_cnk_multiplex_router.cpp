@@ -508,7 +508,7 @@ static void AckConnection(struct connection *conn)
   else
     {
     BegLogLine( (FXLOG_ITAPI_ROUTER || ( FXLOG_ITAPI_ROUTER_CLEANUP && conn->mDisconnecting )) )
-      << "NOT FLUSHING because: " 
+      << "NOT FLUSHING because: "
       << " mSendAck=" << conn->mSendAck
       << " needtr=" << conn->mBuffer.NeedsAnyTransmit()
       << " disconnecting=" << conn->mDisconnecting
@@ -1619,6 +1619,8 @@ static pthread_t setup_polling_thread(void)
 
     int True = 1;
     setsockopt( drc_serv_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&True, sizeof( True ) );
+    True = 1;
+    setsockopt( drc_serv_socket, SOL_TCP, TCP_NODELAY, (char*)&True, sizeof(True));
 
     int brc= bind( drc_serv_socket, drc_serv_saddr, drc_serv_addr_len ) ;
     StrongAssertLogLine(brc == 0 )
@@ -1669,6 +1671,8 @@ static pthread_t setup_polling_thread(void)
 
     /*************************************************/
 
+    True = 1;
+    setsockopt( drc_cli_socket, SOL_TCP, TCP_NODELAY, (char*)&True, sizeof(True));
 
     if( listen( drc_serv_socket, 5 ) < 0 )
       {
@@ -2014,6 +2018,9 @@ int ConnectToServers( int aMyRank, const skv_configuration_t *config )
           << EndLogLine;
         rc = errno;
       }
+
+      int True = 1;
+      setsockopt( connections[conn_count].socket, SOL_TCP, TCP_NODELAY, (char*)&True, sizeof(True));
 
       connected = ( connect( connections[ conn_count ].socket, srv->ai_addr, srv->ai_addrlen ) == 0 );
       if ( connected )
@@ -2399,7 +2406,6 @@ static inline
 downlink_status_t downlink_sm( const downlink_status_t aState,
                                struct ibv_cq *aCQ )
 {
-  static int64_t idlecount = 0;
   static int RequestIndex = 0;
   static int RequestCount = 0;
   static downlink_status_t saved_status = DOWNLINK_STATUS_IDLE;
@@ -2426,7 +2432,6 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         << "IDLE STATE found new requests: " << rv
         << EndLogLine;
 
-        idlecount = 0;
         RequestCount = rv;
         RequestIndex = 0;
         return_status = DOWNLINK_STATUS_QUEUING;
@@ -2436,15 +2441,7 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         saved_status = aState;
         return_status = DOWNLINK_STATUS_FLUSH;
 
-        idlecount++;
-        if( idlecount > 200000 )
-        {
-          idlecount--;
-          BegLogLine( 0 )
-            << "usleep hit: idlecount=" << idlecount
-            << EndLogLine;
-          usleep( idlecount );
-        }
+        ::sched_yield();
       }
       else
       {
@@ -2480,7 +2477,6 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
       int rc = cqSlihQueue.Dequeue(&endiorec);
       if ( 0 == rc)
       {
-        idlecount = 0;
         do_cq_slih_processing(endiorec, &flushUplinks);
         requireFlushUplinks |= flushUplinks;
         RequestIndex++;
@@ -2517,7 +2513,6 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         int rv = gTerminationQueue.Dequeue( &ConnToTerm );
         if(( rv == 0 ) && ( ConnToTerm ))
         {
-          idlecount = 0;
           AckAllConnections();
 
           BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )

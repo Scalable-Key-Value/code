@@ -1069,7 +1069,7 @@ Dispatch( skv_client_server_conn_t*    aConn,
     << EndLogLine;
 
   // instead of posting send/recv we might have to defer the Dispatch() and push the request to an OverflowQueue
-  if(( aConn->mUnretiredRecvCount >= SKV_MAX_UNRETIRED_CMDS ) || 
+  if(( aConn->mUnretiredRecvCount >= SKV_MAX_UNRETIRED_CMDS ) ||
      ( aConn->mOutStandingRequests + aConn->mSendSegsCount >= SKV_MAX_COMMANDS_PER_EP ))
   {
     // Need to enqueue the request into the overflow queue
@@ -1576,12 +1576,11 @@ ProcessConnectionsRqSq()
 
     do
     {
-      skv_client_server_conn_t* Connection = & (mServerConns[ server ]);
-
+      skv_client_server_conn_t& Connection = mServerConns[ server ];
       skv_server_to_client_cmd_hdr_t *RdmaHdr;
 
       int commandsCount = 0;
-      while( ((RdmaHdr = Connection->CheckForNewResponse()) != NULL) &&
+      while( ((RdmaHdr = Connection.CheckForNewResponse()) != NULL) &&
              (commandsCount < SKV_CLIENT_RESPONSE_REAP_PER_EP) )   // run max one batch for one EP
       {
         skv_client_ccb_t *CCB = (skv_client_ccb_t *) RdmaHdr->mCmdCtrlBlk;
@@ -1594,14 +1593,14 @@ ProcessConnectionsRqSq()
 
         InitializeFromResponseData( CCB, RdmaHdr );
 
-        ProcessCCB( Connection, CCB );
+        ProcessCCB( &Connection, CCB );
 
         RdmaHdr->Reset();
-        Connection->ResponseSlotAdvance();
+        Connection.ResponseSlotAdvance();
 
-        ProcessOverflow( Connection );
+        ProcessOverflow( &Connection );
 
-        commandsCount++;
+        ++commandsCount;
         empty_poll = false;
       }
 

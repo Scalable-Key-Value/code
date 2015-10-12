@@ -263,13 +263,13 @@ InBoundsCheck( const char* aContext,
 
 #if defined(DEBUG_USE_GLIBC_MALLOC)
 #else
-  StrongAssertLogLine( aMem >= mStartOfDataField && 
+  StrongAssertLogLine( aMem >= mStartOfDataField &&
                        req_end < sto_end )
     << "ERROR: "
     << " aContext: " << aContext
     << " aMem: " << (void *) aMem
-    << " aSize: " << aSize
-    << " mDataFieldLen: " << mDataFieldLen
+    << " aSize: " << (void *) aSize
+    << " mDataFieldLen: " << (void *) mDataFieldLen
     << " mStartOfDataField: " << (void *) mStartOfDataField
     << EndLogLine;
 #endif
@@ -322,7 +322,7 @@ Deallocate( skv_lmr_triplet_t* aRemMemRep )
   return SKV_SUCCESS;
 }
 
-skv_status_t 
+skv_status_t
 skv_tree_based_container_t::
 Insert( skv_pds_id_t         aPDSId,
         char*                 aRowData,

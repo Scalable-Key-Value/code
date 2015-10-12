@@ -929,7 +929,7 @@ it_api_o_verbs_post_op( IN it_api_o_verbs_post_opcode_t post_op,
             << "it_api_o_verbs_post_op():: RETRYING post_send after usleep()"
             << EndLogLine;
 
-          usleep(100);
+          ::sched_yield();
           retry--;
         }
 #endif

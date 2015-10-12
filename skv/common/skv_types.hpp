@@ -48,7 +48,7 @@ extern "C"
 //#define SKV_RUNNING_LOCAL
 
 // Size of the control message buffers for send/recv
-#define SKV_CONTROL_MESSAGE_SIZE                    ( 256 )
+#define SKV_CONTROL_MESSAGE_SIZE                     ( 4096 )
 #define IT_TIMEOUT_SMALL                             ( 100 )
 
 /** \brief number of outstanding commands which are really posted to the it_api
@@ -93,7 +93,7 @@ extern "C"
 
 #include <skv/common/skv_types_ext.hpp>
 
-#define SKV_MAX_DATA_LOAD      ( 1024 )
+#define SKV_MAX_DATA_LOAD      ( 1024 ) // MB of heap
 #define SKV_KEY_LIMIT          ( 1024 )
 #define SKV_VALUE_LIMIT        ( 10 * 1024 * 1024 )
 #define SKV_BULK_INSERT_LIMIT  ( 100 * 1024 * 1024 )

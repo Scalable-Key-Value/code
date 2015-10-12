@@ -14,7 +14,7 @@
  * TODO:
  * 1. Handle data field on connect/accept
  * check . Freeing of LMRs
- * check . Completion for RDMA_Write 
+ * check . Completion for RDMA_Write
  * check . Completion for Send
  * check . Completion for Recv
  * check . Data receiver thread
@@ -154,35 +154,35 @@ struct iWARPEM_Bandwidth_Stats_t
   unsigned long long mFirstStartTime;
 
   unsigned long long mReportLimit;
-  
+
 #define BANDWIDTH_STATS_CONTEXT_MAX_SIZE 256
   char               mContext[ BANDWIDTH_STATS_CONTEXT_MAX_SIZE ];
-  
+
 public:
-  
+
   void
   Reset()
   {
     mBytesThisRound  = 0;
-    mStartTime       = PkTimeGetNanos();    
+    mStartTime       = PkTimeGetNanos();
   }
 
   void
   Init( const char* aContext, unsigned long long aReportLimit=IT_API_REPORT_BANDWIDTH_DEFAULT_MODULO_BYTES )
   {
     mReportLimit = aReportLimit;
-    
-    int ContextLen = strlen( aContext ) + 1; 
+
+    int ContextLen = strlen( aContext ) + 1;
     StrongAssertLogLine( ContextLen < BANDWIDTH_STATS_CONTEXT_MAX_SIZE )
-      << "ERROR: " 
+      << "ERROR: "
       << " ContextLen: " << ContextLen
       << " BANDWIDTH_STATS_CONTEXT_MAX_SIZE: " << BANDWIDTH_STATS_CONTEXT_MAX_SIZE
       << EndLogLine;
 
     strcpy( mContext, aContext );
-    
+
     mTotalBytes = 0;
-    mFirstStartTime       = PkTimeGetNanos();    
+    mFirstStartTime       = PkTimeGetNanos();
 
     BegLogLine( FXLOG_IT_API_O_SOCKETS )
       << "iWARPEM_Bandwidth_Stats_t::Init(): "
@@ -202,16 +202,16 @@ public:
     if( mBytesThisRound >= mReportLimit )
       ReportBandwidth();
   }
-    
+
   void
   ReportBandwidth()
   {
-    unsigned long long FinishTime = PkTimeGetNanos(); 
+    unsigned long long FinishTime = PkTimeGetNanos();
 
     double BandwidthThisRoundMB = ((mBytesThisRound * 1e9) / ( (FinishTime - mStartTime) )) / (1024.0 * 1024.0);
 
     double BandwidthAvgSinceStart = ((mTotalBytes * 1e9) / ( (FinishTime - mFirstStartTime) )) / (1024.0 * 1024.0);
-    
+
 
     BegLogLine( (IT_API_REPORT_BANDWIDTH_OUTGOING_TOTAL|IT_API_REPORT_BANDWIDTH_INCOMMING_TOTAL) )
       << "iWARPEM_Bandwidth_Stats::ReportBandwidth(): "
@@ -219,7 +219,7 @@ public:
       << " BandwidthThisRound (MB): " << BandwidthThisRoundMB
       << " BandwidthAvgSinceStart (MB): " << BandwidthAvgSinceStart
       << EndLogLine;
-    
+
     Reset();
   }
 };
@@ -312,20 +312,20 @@ struct iWARPEM_Object_EventQueue_t
   Dequeue( iWARPEM_Object_Event_t **aNextOut )
     {
       int rc = mQueue.Dequeue( aNextOut );
-      
+
 #ifndef NDEBUG
       if( rc != -1 )
         AssertLogLine( *aNextOut != NULL )
           << "iWARPEM_Object_EventQueue_t::Dequeue(): ERROR: "
           << " mQueue@: " << (void *) & mQueue
           << EndLogLine;
-#endif      
+#endif
       return rc;
     }
   };
 
 struct iWARPEM_Object_WorkRequest_t
-  {    
+  {
   iWARPEM_Message_Hdr_t  mMessageHdr;
 
   // Local from it_post_send
@@ -339,10 +339,10 @@ struct iWARPEM_Object_WorkRequest_t
 //   iWARPEM_Object_WorkRequest_t *mPrev;
   };
 
-it_status_t iwarpem_it_post_rdma_read_resp ( 
+it_status_t iwarpem_it_post_rdma_read_resp (
   IN int                                SocketFd,
   IN it_lmr_triplet_t*                  LocalSegment,
-  IN void*                              RdmaReadClientWorkRequestState 
+  IN void*                              RdmaReadClientWorkRequestState
   );
 
 it_status_t iwarpem_generate_rdma_read_cmpl_event( iWARPEM_Object_WorkRequest_t * aSendWR );
@@ -358,7 +358,7 @@ struct iWARPEM_Object_WR_Queue_t
   void
   Finalize()
   {
-    mQueue.Finalize();    
+    mQueue.Finalize();
   }
 
   void
@@ -366,7 +366,7 @@ struct iWARPEM_Object_WR_Queue_t
     {
       mQueue.Init( aSize );
     }
-  
+
   pthread_mutex_t*
   GetMutex()
   {
@@ -440,18 +440,18 @@ struct iWARPEM_Object_EndPoint_t
   iWARPEM_Connection_Flags_t  ConnectedFlag;
   int                         ConnFd;
   int                         OtherEPNodeId;
-    
+
   iWARPEM_Object_WR_Queue_t   RecvWrQueue;
 
-    // Send for sends and writes    
+    // Send for sends and writes
 //   iWARPEM_Object_EndPoint_t* mNext;
 //   iWARPEM_Object_EndPoint_t* mPrev;
   };
 
 template <class streamclass>
-static streamclass& operator<<( streamclass& os, iWARPEM_Object_EndPoint_t &aArg ) 
+static streamclass& operator<<( streamclass& os, iWARPEM_Object_EndPoint_t &aArg )
 {
-  os << "EP@ " << (void *) aArg.ep_handle; 
+  os << "EP@ " << (void *) aArg.ep_handle;
   os << " [ ";
   os << " OEPNodeId: " << aArg.OtherEPNodeId << " ";
   os << " sock: " << aArg.ConnFd << " ";
@@ -1962,7 +1962,7 @@ static void routed_close(unsigned int LocalEndpointIndex)
     pthread_mutex_unlock(&gSendUpstreamLock) ;
   }
 
-void 
+void
 iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
 		     iwarpem_flush_queue_flag_t aFlag )
 {
@@ -1982,21 +1982,21 @@ iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
   int Recv = ( aFlag == IWARPEM_FLUSH_RECV_QUEUE_FLAG );
 
   // Using lock free queue
-#if 0  
+#if 0
   if( Send )
     MutexPtr = gSendWrQueue->GetMutex();
   else
     MutexPtr = aEndPoint->RecvWrQueue.GetMutex();
-    
+
   pthread_mutex_lock( MutexPtr );
 #endif
-  
+
   iWARPEM_Object_WorkRequest_t* WR;
 
   if( Send )
-    {      
+    {
 #if 1
-      // Flush the gSendWrQueue queue      
+      // Flush the gSendWrQueue queue
       int Start = gSendWrQueue->mQueue.mGotCount;
       int End   = gSendWrQueue->mQueue.mPutCount;
 
@@ -2004,18 +2004,18 @@ iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
         {
           int ItemIndex = i & gSendWrQueue->mQueue.mDepthMask;
           WR = gSendWrQueue->mQueue.mItemArray[ ItemIndex ];
-          
+
           if( (iWARPEM_Object_EndPoint_t *) WR->ep_handle == aEndPoint )
             {
               gSendWrQueue->mQueue.mItemArray[ ItemIndex ] = NULL;
             }
-          else 
+          else
             continue;
-          
-	  iWARPEM_Object_Event_t* DTOCompletetionEvent = 
+
+	  iWARPEM_Object_Event_t* DTOCompletetionEvent =
 	    (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
-      
-	  it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;  
+
+	  it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;
 
 	  if( WR->mMessageHdr.mMsg_Type == iWARPEM_DTO_SEND_TYPE )
 	    dtoce->event_number = IT_DTO_SEND_CMPL_EVENT;
@@ -2023,34 +2023,34 @@ iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
 	    dtoce->event_number = IT_DTO_RDMA_WRITE_CMPL_EVENT;
 	  else if( WR->mMessageHdr.mMsg_Type == iWARPEM_DTO_RDMA_READ_REQ_TYPE )
 	    dtoce->event_number = IT_DTO_RDMA_READ_CMPL_EVENT;
-	  else 
-	    StrongAssertLogLine( 0 ) 
+	  else
+	    StrongAssertLogLine( 0 )
 	      << "iwarpem_flush_queue(): ERROR:: "
 	      << " WR->mMessageHdr.mMsg_Type: " << WR->mMessageHdr.mMsg_Type
 	      << EndLogLine;
-	  
+
 	  dtoce->evd          = aEndPoint->request_sevd_handle;
-	  
+
 	  dtoce->ep           = (it_ep_handle_t) aEndPoint;
 	  dtoce->cookie       = WR->cookie;
 	  dtoce->dto_status   = IT_DTO_ERR_FLUSHED;
 	  dtoce->transferred_length = 0;
-	  
-	  iWARPEM_Object_EventQueue_t* CmplEventQueue = 
+
+	  iWARPEM_Object_EventQueue_t* CmplEventQueue =
 	    (iWARPEM_Object_EventQueue_t*) dtoce->evd;
-	  
+
 	  int enqrc = CmplEventQueue->Enqueue( DTOCompletetionEvent );
 
           AssertLogLine( enqrc == 0 )
             << "iwarpem_flush_queue(): ERROR:: "
             << " enqrc: " << enqrc
             << EndLogLine;
-          
-          // Free WR resources          
+
+          // Free WR resources
           if( WR->segments_array )
             free( WR->segments_array );
-          
-          free( WR );          
+
+          free( WR );
 	}
 
       // Flush the RecvToSendQueue
@@ -2061,40 +2061,40 @@ iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
         {
           int ItemIndex = i & gRecvToSendWrQueue->mQueue.mDepthMask;
           WR = gRecvToSendWrQueue->mQueue.mItemArray[ ItemIndex ];
-          
+
           if( (iWARPEM_Object_EndPoint_t *) WR->ep_handle == aEndPoint )
             {
               gRecvToSendWrQueue->mQueue.mItemArray[ ItemIndex ] = NULL;
             }
-          else 
+          else
             continue;
-          
+
           if( WR->mMessageHdr.mMsg_Type == iWARPEM_DTO_RDMA_READ_CMPL_TYPE )
-            {                        
-              iWARPEM_Object_Event_t* DTOCompletetionEvent = 
+            {
+              iWARPEM_Object_Event_t* DTOCompletetionEvent =
                 (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
-              
-              it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;  
-              
+
+              it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;
+
               dtoce->event_number = IT_DTO_RDMA_READ_CMPL_EVENT;
               dtoce->evd          = aEndPoint->request_sevd_handle;
-              
+
               dtoce->ep           = (it_ep_handle_t) aEndPoint;
               dtoce->cookie       = WR->cookie;
               dtoce->dto_status   = IT_DTO_ERR_FLUSHED;
               dtoce->transferred_length = 0;
-              
-              iWARPEM_Object_EventQueue_t* CmplEventQueue = 
+
+              iWARPEM_Object_EventQueue_t* CmplEventQueue =
                 (iWARPEM_Object_EventQueue_t*) dtoce->evd;
-              
+
               int enqrc = CmplEventQueue->Enqueue( DTOCompletetionEvent );
 
               AssertLogLine( enqrc == 0 )
                 << "iwarpem_flush_queue(): ERROR:: "
                 << " enqrc: " << enqrc
-                << EndLogLine;              
+                << EndLogLine;
             }
-          
+
           if( WR->segments_array )
             free( WR->segments_array );
 
@@ -2102,30 +2102,30 @@ iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
         }
 #else
       WR = gSendWrQueue->mQueue.mHead;
-      
+
       while( WR != NULL )
 	{
 	  if( (iWARPEM_Object_EndPoint_t *) WR->ep_handle == aEndPoint )
 	    {
 	      gSendWrQueue->mQueue.RemoveAssumeLocked( WR );
 	    }
-	  else 
+	  else
 	    {
 	      WR = WR->mNext;
 	      continue;
 	    }
 
 	  // Don't generate completions for the internal RDMA_READ_RESP_TYPE
-	  if( WR->mMessageHdr.mMsg_Type == iWARPEM_DTO_RDMA_READ_RESP_TYPE ) 
+	  if( WR->mMessageHdr.mMsg_Type == iWARPEM_DTO_RDMA_READ_RESP_TYPE )
 	    {
 	      WR = WR->mNext;
-	      continue;	  
+	      continue;
 	    }
 
-	  iWARPEM_Object_Event_t* DTOCompletetionEvent = 
+	  iWARPEM_Object_Event_t* DTOCompletetionEvent =
 	    (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
-      
-	  it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;  
+
+	  it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;
 
 	  if( WR->mMessageHdr.mMsg_Type == iWARPEM_DTO_SEND_TYPE )
 	    dtoce->event_number = IT_DTO_SEND_CMPL_EVENT;
@@ -2133,65 +2133,65 @@ iwarpem_flush_queue( iWARPEM_Object_EndPoint_t* aEndPoint,
 	    dtoce->event_number = IT_DTO_RDMA_WRITE_CMPL_EVENT;
 	  else if( WR->mMessageHdr.mMsg_Type == iWARPEM_DTO_RDMA_READ_REQ_TYPE )
 	    dtoce->event_number = IT_DTO_RDMA_READ_CMPL_EVENT;
-	  else 
-	    StrongAssertLogLine( 0 ) 
+	  else
+	    StrongAssertLogLine( 0 )
 	      << "iwarpem_flush_queue(): ERROR:: "
 	      << " WR->mMessageHdr.mMsg_Type: " << WR->mMessageHdr.mMsg_Type
 	      << EndLogLine;
-	  
+
 	  dtoce->evd          = aEndPoint->request_sevd_handle;
-	  
+
 	  dtoce->ep           = (it_ep_handle_t) aEndPoint;
 	  dtoce->cookie       = WR->cookie;
 	  dtoce->dto_status   = IT_DTO_ERR_FLUSHED;
 	  dtoce->transferred_length = 0;
-	  
-	  iWARPEM_Object_EventQueue_t* CmplEventQueue = 
+
+	  iWARPEM_Object_EventQueue_t* CmplEventQueue =
 	    (iWARPEM_Object_EventQueue_t*) dtoce->evd;
-	  
+
 	  int enqrc = CmplEventQueue->Enqueue( DTOCompletetionEvent );
-	  	  
+
 	  WR = WR->mNext;
 	}
 #endif
     }
-  else 
+  else
     {
       while( 1 )
 	{
 	  int status = -1;
-	  
-	  status = aEndPoint->RecvWrQueue.DequeueAssumeLocked( &WR );
-	  
-	  if( status == -1 ) 
-	    break;	  
 
-	  iWARPEM_Object_Event_t* DTOCompletetionEvent = 
+	  status = aEndPoint->RecvWrQueue.DequeueAssumeLocked( &WR );
+
+	  if( status == -1 )
+	    break;
+
+	  iWARPEM_Object_Event_t* DTOCompletetionEvent =
 	    (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
-      
-	  it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;  
-	  
+
+	  it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent->mEvent;
+
 	  dtoce->event_number = IT_DTO_RC_RECV_CMPL_EVENT;
-	  dtoce->evd          = aEndPoint->recv_sevd_handle; 
-	
+	  dtoce->evd          = aEndPoint->recv_sevd_handle;
+
 	  dtoce->ep           = (it_ep_handle_t) aEndPoint;
 	  dtoce->cookie       = WR->cookie;
 	  dtoce->dto_status   = IT_DTO_ERR_FLUSHED;
 	  dtoce->transferred_length = 0;
-	  
-	  iWARPEM_Object_EventQueue_t* CmplEventQueue = 
+
+	  iWARPEM_Object_EventQueue_t* CmplEventQueue =
 	    (iWARPEM_Object_EventQueue_t*) dtoce->evd;
-	  
+
 	  int enqrc = CmplEventQueue->Enqueue( DTOCompletetionEvent );
-	  
-	  StrongAssertLogLine( enqrc == 0 ) 
-	    << "iwarpem_flush_queue(): ERROR:: failed to enqueue connection request event" 
+
+	  StrongAssertLogLine( enqrc == 0 )
+	    << "iwarpem_flush_queue(): ERROR:: failed to enqueue connection request event"
 	    << EndLogLine;
-          
-          // Free the WR resources          
+
+          // Free the WR resources
           if( WR->segments_array )
             free( WR->segments_array );
-          
+
           free( WR );
 	}
     }
@@ -2220,7 +2220,7 @@ iwarpem_generate_conn_termination_event( int aSocketId )
     << " aSocketId: " << aSocketId
     << EndLogLine;
 
-  pthread_mutex_lock( & gGenerateConnTerminationEventMutex ); 
+  pthread_mutex_lock( & gGenerateConnTerminationEventMutex );
 
   AssertLogLine( aSocketId >= 0 && aSocketId < SOCK_FD_TO_END_POINT_MAP_COUNT )
     << "iwarpem_generate_conn_termination_event(): "
@@ -2230,20 +2230,20 @@ iwarpem_generate_conn_termination_event( int aSocketId )
   iWARPEM_Object_EndPoint_t* LocalEndPoint = gSockFdToEndPointMap[ aSocketId ];
   if( LocalEndPoint == NULL )
     {
-    pthread_mutex_unlock( & gGenerateConnTerminationEventMutex );   
+    pthread_mutex_unlock( & gGenerateConnTerminationEventMutex );
     return;
     }
 
   if( LocalEndPoint->ConnectedFlag != IWARPEM_CONNECTION_FLAG_PASSIVE_SIDE_PENDING_DISCONNECT )
     {
       // If we have a broken connection
-#if 0      
+#if 0
       iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
       iwarpem_flush_queue( LocalEndPoint, IWARPEM_FLUSH_RECV_QUEUE_FLAG );
-#endif      
-      // gSendWRLocalEndPointList.Remove( LocalEndPoint );      
-    } 
-  
+#endif
+      // gSendWRLocalEndPointList.Remove( LocalEndPoint );
+    }
+
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
     << "iwarpem_generate_conn_termination_event(): Before routed_close() "
     << " aSocketId: " << aSocketId
@@ -2257,31 +2257,31 @@ iwarpem_generate_conn_termination_event( int aSocketId )
     << EndLogLine;
 
   gSockFdToEndPointMap[ aSocketId ] = NULL;
-  
+
   /**********************************************
    * Generate send completion event
    *********************************************/
-  iWARPEM_Object_Event_t* CompletetionEvent = 
+  iWARPEM_Object_Event_t* CompletetionEvent =
     (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
     << "CompletetionEvent malloc -> " << (void *) CompletetionEvent
     << EndLogLine ;
-  
-  it_connection_event_t* conne = (it_connection_event_t *) & CompletetionEvent->mEvent;  
-  
+
+  it_connection_event_t* conne = (it_connection_event_t *) & CompletetionEvent->mEvent;
+
   if( LocalEndPoint->ConnectedFlag == IWARPEM_CONNECTION_FLAG_PASSIVE_SIDE_PENDING_DISCONNECT )
     conne->event_number = IT_CM_MSG_CONN_DISCONNECT_EVENT;
-  else 
+  else
     conne->event_number = IT_CM_MSG_CONN_BROKEN_EVENT;
-  
+
   conne->evd          = LocalEndPoint->connect_sevd_handle;
-  conne->ep           = (it_ep_handle_t) LocalEndPoint;		    
-  
-  iWARPEM_Object_EventQueue_t* ConnCmplEventQueue = 
+  conne->ep           = (it_ep_handle_t) LocalEndPoint;
+
+  iWARPEM_Object_EventQueue_t* ConnCmplEventQueue =
     (iWARPEM_Object_EventQueue_t*) conne->evd;
-  
+
   int enqrc = ConnCmplEventQueue->Enqueue( CompletetionEvent );
-  
+
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
     << "ConnCmplEventQueue=" << ConnCmplEventQueue
     << " conne->event_number=" << conne->event_number
@@ -2289,14 +2289,14 @@ iwarpem_generate_conn_termination_event( int aSocketId )
     << " conne->ep=" << conne->ep
     << EndLogLine ;
 
-  StrongAssertLogLine( enqrc == 0 ) 
-    << "iWARPEM_DataReceiverThread()::Failed to enqueue connection request event" 
-    << EndLogLine;	  
+  StrongAssertLogLine( enqrc == 0 )
+    << "iWARPEM_DataReceiverThread()::Failed to enqueue connection request event"
+    << EndLogLine;
   /*********************************************/
-  
+
   LocalEndPoint->ConnectedFlag = IWARPEM_CONNECTION_FLAG_DISCONNECTED;
 
-  pthread_mutex_unlock( & gGenerateConnTerminationEventMutex ); 
+  pthread_mutex_unlock( & gGenerateConnTerminationEventMutex );
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
     << "iwarpem_generate_conn_termination_event(): Leaving "
@@ -2384,7 +2384,7 @@ case iWARPEM_DISCONNECT_RESP_TYPE:
 
     iWARPEM_Object_EventQueue_t* RecvCmplEventQueue =
       (iWARPEM_Object_EventQueue_t*) conne->evd;
-  
+
     int enqrc = RecvCmplEventQueue->Enqueue( CompletetionEvent );
 
     StrongAssertLogLine( enqrc == 0 )
@@ -3174,7 +3174,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
    * Send Header to destination
    *********************************************/
   int SocketFD = ((iWARPEM_Object_EndPoint_t *) SendWR->ep_handle)->ConnFd;
-	  
+
   int LenToSend = sizeof( iWARPEM_Message_Hdr_t );
 
   SendWR->mMessageHdr.EndianConvert() ;
@@ -3197,20 +3197,20 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
       /**********************************************
        * Generate rdma completion event
        *********************************************/
-      if( ( SendWR->dto_flags & IT_COMPLETION_FLAG ) && 
+      if( ( SendWR->dto_flags & IT_COMPLETION_FLAG ) &&
           ( SendWR->dto_flags & IT_NOTIFY_FLAG ) )
         {
           iWARPEM_Object_Event_t DTOCompletetionEvent ;
-		    
+
           it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent.mEvent;
-		    
+
           dtoce->event_number       = IT_DTO_RDMA_READ_CMPL_EVENT;
           dtoce->evd                = ((iWARPEM_Object_EndPoint_t *)SendWR->ep_handle)->request_sevd_handle;
           dtoce->ep                 = (it_ep_handle_t) SendWR->ep_handle;
           dtoce->cookie             = SendWR->cookie;
           dtoce->dto_status         = IT_DTO_SUCCESS;
           dtoce->transferred_length = ntohl(SendWR->mMessageHdr.mTotalDataLen);
-		    
+
           iWARPEM_Object_EventQueue_t* SendCmplEventQueue =
             (iWARPEM_Object_EventQueue_t*) dtoce->evd;
 
@@ -3227,27 +3227,27 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             << EndLogLine ;
           int enqrc=gSendCmplQueue->Enqueue(*(it_event_t *) dtoce) ;
           it_api_o_sockets_signal_aevd() ;
-		    
-          StrongAssertLogLine( enqrc == 0 ) 
+
+          StrongAssertLogLine( enqrc == 0 )
             << "failed to enqueue connection request event"
-            << EndLogLine;	  
+            << EndLogLine;
           /*********************************************/
         }
-		
+
       BegLogLine( FXLOG_IT_API_O_SOCKETS )
         << "About to call free( "
         << (void *) SendWR->segments_array << " )"
         << EndLogLine;
-		
+
       free( SendWR->segments_array );
-		
+
       BegLogLine( FXLOG_IT_API_O_SOCKETS )
         << "About to call free( " << (void *) SendWR << " )"
         << EndLogLine;
-		
+
       free( SendWR );
     }
-  else 
+  else
     {
 
       switch( MsgType )
@@ -3263,7 +3263,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             }
 
             BegLogLine( FXLOG_IT_API_O_SOCKETS )
-              << "iWARPEM_ProcessSendWR(): About to call free(): " 
+              << "iWARPEM_ProcessSendWR(): About to call free(): "
               << " MsgType: " << iWARPEM_Msg_Type_to_string( MsgType )
               << " SendWR->ep_handle: " << *((iWARPEM_Object_EndPoint_t *)SendWR->ep_handle)
               << " SendWR: " << (void *) SendWR
@@ -3274,7 +3274,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             break;
           }
         case iWARPEM_DISCONNECT_RESP_TYPE:
-          {		
+          {
             rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr) ;
 
             if( ! rc )
@@ -3293,7 +3293,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             iwarpem_flush_queue( (iWARPEM_Object_EndPoint_t *) SendWR->ep_handle, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
 
             free( SendWR );
-                
+
             break;
           }
         case iWARPEM_DTO_RDMA_READ_REQ_TYPE:
@@ -3307,16 +3307,16 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             }
 
             // Freeing of the SendWR happens in the ReceiverThread when the RDMA_READ_RESP is processed.
-            // WARNING: WARNING: WARNING: 
-            // WARNING: WARNING: WARNING: 
-            // WARNING: WARNING: WARNING: 
-            // WARNING: WARNING: WARNING: 
-            // WARNING: WARNING: WARNING: 
-                
-            // Due to thread scheduling it is possible for the RDMA_READ_RESP 
-            // to be processed on this node before the switch statement is entered                
-            // In which case SendWR has already been freed. It's not valid to use it here 
-            // without appropriate locking                
+            // WARNING: WARNING: WARNING:
+            // WARNING: WARNING: WARNING:
+            // WARNING: WARNING: WARNING:
+            // WARNING: WARNING: WARNING:
+            // WARNING: WARNING: WARNING:
+
+            // Due to thread scheduling it is possible for the RDMA_READ_RESP
+            // to be processed on this node before the switch statement is entered
+            // In which case SendWR has already been freed. It's not valid to use it here
+            // without appropriate locking
 
             break;
           }
@@ -3332,7 +3332,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 
             /**********************************************
              * Send data to destination
-             *********************************************/		
+             *********************************************/
 
 #if IT_API_CHECKSUM
             uint64_t Checksum = 0;
@@ -3342,7 +3342,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
             for( int i = 0; i < SendWR->num_segments; i++ )
               {
                 iWARPEM_Object_MemoryRegion_t* MemRegPtr = (iWARPEM_Object_MemoryRegion_t *)SendWR->segments_array[ i ].lmr;
-	      
+
                 BegLogLine(FXLOG_IT_API_O_SOCKETS)
                   << "SendWR->segments_array[" << i
                   << "]=" << HexDump(SendWR->segments_array+i,sizeof(SendWR->segments_array[ i ]))
@@ -3361,14 +3361,14 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                   << EndLogLine ;
 
                 it_addr_mode_t AddrMode = MemRegPtr->addr_mode;
-	      
+
                 char * DestAddr = NULL;
 
-                if( AddrMode == IT_ADDR_MODE_RELATIVE )		
+                if( AddrMode == IT_ADDR_MODE_RELATIVE )
                   DestAddr = SendWR->segments_array[ i ].addr.rel + (char *)MemRegPtr->addr;
                 else
                   DestAddr = (char *) SendWR->segments_array[ i ].addr.abs;
-	      
+
                 BegLogLine( FXLOG_IT_API_O_SOCKETS )
                   << "SocketFD: " << SocketFD
                   << " SendWR->ep_handle: " << *((iWARPEM_Object_EndPoint_t *)SendWR->ep_handle)
@@ -3376,7 +3376,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                   << " SendWR->segments_array[ " << i << " ].length: " << SendWR->segments_array[ i ].length
                   << " AddrMode: " << AddrMode
                   << EndLogLine;
-		    
+
 #if IT_API_CHECKSUM
                 for( int j = 0; j < SendWR->segments_array[ i ].length; j++ )
                   Checksum += DestAddr[ j ];
@@ -3385,7 +3385,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                 iov[i].iov_base = ( void *) DestAddr ;
                 iov[i].iov_len = ntohl(SendWR->segments_array[ i ].length) ;
               }
-		
+
             rc = iWARPEM_SendUpstream(SocketFD,SendWR->mMessageHdr,iov,SendWR->num_segments) ;
 
             if( ! rc )
@@ -3407,37 +3407,37 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
 #endif
 
             /**********************************************/
-		
+
 
             /**********************************************
              * Generate send completion event
              *********************************************/
-            if( ( SendWR->dto_flags & IT_COMPLETION_FLAG ) && 
+            if( ( SendWR->dto_flags & IT_COMPLETION_FLAG ) &&
                 ( SendWR->dto_flags & IT_NOTIFY_FLAG ) )
               {
                 SendWR->mMessageHdr.EndianConvert() ;
                 iWARPEM_Object_Event_t DTOCompletetionEvent ;
-		    
+
                 it_dto_cmpl_event_t* dtoce = (it_dto_cmpl_event_t*) & DTOCompletetionEvent.mEvent;
-		    
+
                 iWARPEM_Object_EndPoint_t* LocalEndPoint = (iWARPEM_Object_EndPoint_t*) SendWR->ep_handle;
-		    
+
                 if( SendWR->mMessageHdr.mMsg_Type == iWARPEM_DTO_SEND_TYPE )
                   dtoce->event_number = IT_DTO_SEND_CMPL_EVENT;
                 else if( SendWR->mMessageHdr.mMsg_Type == iWARPEM_DTO_RDMA_WRITE_TYPE )
                   dtoce->event_number = IT_DTO_RDMA_WRITE_CMPL_EVENT;
-                else 
-                  StrongAssertLogLine( 0 ) 
+                else
+                  StrongAssertLogLine( 0 )
                     << "ERROR:: "
                     << " SendWR->mMessageHdr.mMsg_Type: " << SendWR->mMessageHdr.mMsg_Type
                     << EndLogLine;
-		    
+
                 dtoce->evd          = LocalEndPoint->request_sevd_handle; // i guess?
                 dtoce->ep           = (it_ep_handle_t) SendWR->ep_handle;
                 dtoce->cookie       = SendWR->cookie;
                 dtoce->dto_status   = IT_DTO_SUCCESS;
                 dtoce->transferred_length = ntohl(SendWR->mMessageHdr.mTotalDataLen);
-		    		    
+
                 int* CookieAsIntPtr = (int *) & dtoce->cookie;
 
                 BegLogLine( 0 )
@@ -3446,10 +3446,10 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                   << " DTO_Type: " << SendWR->mMessageHdr.mMsg_Type
                   << " dtoce->evd: " << (void *) dtoce->evd
                   << " dtoce->ep: " << (void *) dtoce->ep
-                  << " dtoce->cookie: " 
-                  << FormatString( "%08X" ) << CookieAsIntPtr[ 0 ] 
+                  << " dtoce->cookie: "
+                  << FormatString( "%08X" ) << CookieAsIntPtr[ 0 ]
                   << " "
-                  << FormatString( "%08X" ) << CookieAsIntPtr[ 1 ] 
+                  << FormatString( "%08X" ) << CookieAsIntPtr[ 1 ]
                   << " dtoce->transferred_length: " << dtoce->transferred_length
                   << EndLogLine;
 
@@ -3479,7 +3479,7 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                   }
                 /*********************************************/
               }
-		
+
           free_WR_and_break:
             if( SendWR->segments_array != NULL )
               {
@@ -3487,18 +3487,18 @@ iWARPEM_ProcessSendWR( iWARPEM_Object_WorkRequest_t* SendWR )
                   << "iWARPEM_ProcessSendWR(): "
                   << " About to call free( " << (void *) SendWR->segments_array << " )"
                   << EndLogLine;
-                    
+
                 free( SendWR->segments_array );
                 SendWR->segments_array = NULL;
               }
-		
+
             BegLogLine( FXLOG_IT_API_O_SOCKETS )
-              << "iWARPEM_ProcessSendWR(): " 
+              << "iWARPEM_ProcessSendWR(): "
               << "About to call free( " << (void *) SendWR << " )"
               << EndLogLine;
-		
+
             free( SendWR );
-		
+
             break;
           }
         default:
@@ -3530,39 +3530,39 @@ iWARPEM_DataSenderThread( void* args )
     << " gSendWrQueue=" << gSendWrQueue
     << EndLogLine ;
   // Process the sender WR queue
-  while( 1 ) 
+  while( 1 )
     {
       iWARPEM_Object_WorkRequest_t* SendWR = NULL;
       int dstat_0 = -1;
       int dstat_1 = -1;
-      
+
       if( Even )
         {
           dstat_0 = gRecvToSendWrQueue->mQueue.Dequeue( &SendWR );
-          
+
           if( ( dstat_0 != -1 ) && ( SendWR != NULL ) )
             iWARPEM_ProcessSendWR( SendWR );
-          
+
           dstat_1 = gSendWrQueue->mQueue.Dequeue( &SendWR );
-          
+
           if( ( dstat_1 != -1 ) && ( SendWR != NULL ) )
             iWARPEM_ProcessSendWR( SendWR );
-          
+
         }
-      else 
+      else
         {
           dstat_1 = gSendWrQueue->mQueue.Dequeue( &SendWR );
-          
+
           if( ( dstat_1 != -1 ) && ( SendWR != NULL ) )
             iWARPEM_ProcessSendWR( SendWR );
-          
+
           dstat_0 = gRecvToSendWrQueue->mQueue.Dequeue( &SendWR );
-          
+
           if( ( dstat_0 != -1 ) && ( SendWR != NULL ) )
             iWARPEM_ProcessSendWR( SendWR );
 
         }
-      
+
       if (dstat_0 == -1 && dstat_1 == -1 )
         {
           iWARPEM_FlushBuffer() ;
@@ -3588,7 +3588,7 @@ iwarpem_add_socket_to_list( int aSockFd,
         << EndLogLine ;
   pthread_mutex_lock( & gDataReceiverControlSockMutex );
 
-  StrongAssertLogLine( aSockFd >= 0 && 
+  StrongAssertLogLine( aSockFd >= 0 &&
 		       aSockFd < SOCK_FD_TO_END_POINT_MAP_COUNT )
 			 << "iwarpem_add_socket_to_list():: ERROR:: "
 			 << " aSockFd: "  << aSockFd
@@ -3623,7 +3623,7 @@ iwarpem_remove_socket_to_list( int aSockFd )
         << EndLogLine ;
   pthread_mutex_lock( & gDataReceiverControlSockMutex );
 
-  StrongAssertLogLine( aSockFd >= 0 && 
+  StrongAssertLogLine( aSockFd >= 0 &&
 		       aSockFd < SOCK_FD_TO_END_POINT_MAP_COUNT )
 			 << "iwarpem_add_socket_to_list():: ERROR:: "
 			 << " aSockFd: "  << aSockFd
@@ -3704,13 +3704,13 @@ it_status_t it_ia_create (
 
 #if IT_API_REPORT_BANDWIDTH_INCOMMING_TOTAL
   gBandInStat.Init( "Incomming" );
-#endif    
-  
-  pthread_mutex_init( & gGenerateConnTerminationEventMutex, NULL ); 
+#endif
+
+  pthread_mutex_init( & gGenerateConnTerminationEventMutex, NULL );
 
   gReadCountHistogram.Init( "ReadIterCount", 2,  10, 8 );
   gReadTimeHistogram.Init( "ReadTime", 0,  100000, 128 );
-  
+
 //  /*************************************************
 //   * Set up the Data Receiver Control Socket
 //   *************************************************/
@@ -3919,8 +3919,8 @@ it_status_t it_ia_create (
 //    << " Errno " << errno
 //    << EndLogLine;
   /***********************************************/
-  
-  
+
+
 
 
 //  /***********************************************
@@ -3958,7 +3958,7 @@ it_status_t it_ia_create (
 //    << EndLogLine;
 //
 //  gDataReceiverControlSockFd = new_drc_serv_sock;
-  pthread_mutex_init( & gDataReceiverControlSockMutex, NULL );  
+  pthread_mutex_init( & gDataReceiverControlSockMutex, NULL );
 //  close( drc_serv_socket );
 //  /***********************************************/
 //
@@ -4090,7 +4090,7 @@ it_status_t it_ep_rc_create (
   EPObj->ep_attr             = *ep_attr;
   EPObj->ep_handle           = (it_ep_handle_t) EPObj;
 
-  EPObj->RecvWrQueue.Init( IWARPEM_RECV_WR_QUEUE_MAX_SIZE );   
+  EPObj->RecvWrQueue.Init( IWARPEM_RECV_WR_QUEUE_MAX_SIZE );
 
   // EPObj->SendWrQueue.Init();
   // gSendWRLocalEndPointList.Insert( EPObj );
@@ -4410,7 +4410,7 @@ it_status_t it_evd_dequeue (
   OUT it_event_t     *event
   )
   {
-  
+
   static unsigned int Count = 0;
   if( Count == 10000 )
     {
@@ -4437,16 +4437,16 @@ it_status_t it_evd_dequeue (
         << " EVQObj: " << (void *) EVQObj
         << " EVQObj->Queue: " << (void *) &(EVQObj->mQueue)
         << EndLogLine;
-      
+
     *event = EventPtr->mEvent;
-    
+
     BegLogLine( FXLOG_IT_API_O_SOCKETS )
       << "About to call free( " << (void *) EventPtr << " )"
       << EndLogLine;
 
     free( EventPtr );
     BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_evd_dequeue(): evd_handle " << (void*) evd_handle << " SUCCESS " << EndLogLine;
-    
+
     pthread_mutex_unlock( & gITAPIFunctionMutex );
     return(IT_SUCCESS);
     }
@@ -4472,13 +4472,13 @@ it_status_t it_evd_dequeue_n(
     {
       int rc = it_evd_dequeue( evd_handle, & events[ i ] );
       if( rc !=  IT_ERR_QUEUE_EMPTY )
-        DequeuedCount++;      
+        DequeuedCount++;
       else
         break;
     }
-  
+
   *dequed_count = DequeuedCount;
- 
+
   return IT_SUCCESS;
 }
 
@@ -4511,7 +4511,7 @@ it_status_t it_evd_wait (
 
   while( (rc = it_evd_dequeue( evd_handle, event )) == IT_ERR_QUEUE_EMPTY )
     {
-      sleep(1);
+      ::sched_yield();
     }
 
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
@@ -4535,7 +4535,7 @@ it_status_t it_evd_wait (
 
 // NEEDED FOR ASYNCRONOUS CONNECTIONS
 struct iWARPEM_Object_ConReqInfo_t
-  {    
+  {
     int                         ConnFd;
   };
 
@@ -4942,14 +4942,14 @@ it_status_t it_ep_disconnect (
     << "it_ep_disconnect(): ERROR:: it_ep_disconnect() called on a non connected EP"
     << " ep_handle: " <<  *(iWARPEM_Object_EndPoint_t *)ep_handle
     << EndLogLine;
-    
+
   EPObj->ConnectedFlag = IWARPEM_CONNECTION_FLAG_ACTIVE_SIDE_PENDING_DISCONNECT;
-  
+
   iwarpem_flush_queue( EPObj, IWARPEM_FLUSH_SEND_QUEUE_FLAG );
 
   iWARPEM_Object_WorkRequest_t *SendWR =
     (iWARPEM_Object_WorkRequest_t*) malloc( sizeof(iWARPEM_Object_WorkRequest_t) );
-  
+
   StrongAssertLogLine( SendWR )
     << "it_ep_disconnect():"
     << " failed to allocate memory for Send work request object "
@@ -4964,13 +4964,13 @@ it_status_t it_ep_disconnect (
 
   // iWARPEM_Object_EndPoint_t* LocalEndPoint = (iWARPEM_Object_EndPoint_t * ) ep_handle;
   // LocalEndPoint->SendWrQueue.Enqueue( SendWR );
-  
+
   iwarpem_enqueue_send_wr( gSendWrQueue, SendWR );
 
   // gSendWrQueue->Enqueue( SendWR );
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
-    << "it_ep_disconnect(): Enqueued a SendWR  request on: "    
+    << "it_ep_disconnect(): Enqueued a SendWR  request on: "
     << " ep_handle: " << *(iWARPEM_Object_EndPoint_t *)ep_handle
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
@@ -5011,7 +5011,7 @@ it_status_t it_ep_connect (
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "IN        it_cn_est_flags_t     cn_est_flags,              " <<  (void*)  cn_est_flags        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "IN  const unsigned char         private_data@              " <<  (void*)private_data        << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "IN        size_t                private_data_length        " <<   private_data_length << EndLogLine;
-  
+
   if( private_data_length > IT_MAX_PRIV_DATA )
     {
       pthread_mutex_unlock( & gITAPIFunctionMutex );
@@ -5020,7 +5020,7 @@ it_status_t it_ep_connect (
     }
 
   iWARPEM_Object_EndPoint_t* LocalEndPoint = (iWARPEM_Object_EndPoint_t*) ep_handle;
-  
+
   StrongAssertLogLine( LocalEndPoint != 0 )
     << "it_ep_connect(): local endpoint handle null"
     << EndLogLine;
@@ -5033,12 +5033,12 @@ it_status_t it_ep_connect (
 
   s = LocalEndpointSequenceLimit ;
   LocalEndpointSequenceLimit += 1 ;
-  
-  
-  
+
+
+
   iWARPEM_Private_Data_t PrivateData;
   PrivateData.mLen = private_data_length;
-  memcpy( PrivateData.mData, 
+  memcpy( PrivateData.mData,
 	  private_data,
 	  private_data_length);
 
@@ -5065,30 +5065,30 @@ it_status_t it_ep_connect (
   StrongAssertLogLine( private_data_length > 0 )
     << "it_ep_connect(): ERROR: private_data must be set to the other EP Node Id (needed for debugging)"
     << EndLogLine;
-  
+
   int Dummy;
-  sscanf( (const char *) private_data, "%d %d", &Dummy, &(LocalEndPoint->OtherEPNodeId) );   
+  sscanf( (const char *) private_data, "%d %d", &Dummy, &(LocalEndPoint->OtherEPNodeId) );
 
   // Add the socket descriptor to the data receiver controller
   iwarpem_add_socket_to_list( s, LocalEndPoint );
 
   // Generate the connection established event
   iWARPEM_Object_Event_t* ConnEstablishedEvent = (iWARPEM_Object_Event_t*) malloc( sizeof( iWARPEM_Object_Event_t ) );
-  
-  it_connection_event_t* ice = (it_connection_event_t*) & ConnEstablishedEvent->mEvent;  
-  
+
+  it_connection_event_t* ice = (it_connection_event_t*) & ConnEstablishedEvent->mEvent;
+
   ice->event_number = IT_CM_MSG_CONN_ESTABLISHED_EVENT;
   ice->evd          = LocalEndPoint->connect_sevd_handle; // i guess?
   ice->ep           = (it_ep_handle_t) ep_handle;
-  
-  iWARPEM_Object_EventQueue_t* ConnectEventQueuePtr = 
+
+  iWARPEM_Object_EventQueue_t* ConnectEventQueuePtr =
     (iWARPEM_Object_EventQueue_t*) LocalEndPoint->connect_sevd_handle;
 
 // Queue doesn't seem initialised
 //  int enqrc = ConnectEventQueuePtr->Enqueue( ConnEstablishedEvent );
 //
 //  StrongAssertLogLine( enqrc == 0 ) << "failed to enqueue connection request event" << EndLogLine;
-  
+
   pthread_mutex_unlock( & gITAPIFunctionMutex );
 
   return(IT_SUCCESS);
@@ -5290,7 +5290,7 @@ it_status_t it_lmr_free (
     {
       iWARPEM_Object_MemoryRegion_t* MRObj =
 	(iWARPEM_Object_MemoryRegion_t*) lmr_handle;
-      
+
       bzero( MRObj, sizeof( iWARPEM_Object_MemoryRegion_t ) );
 
       BegLogLine( FXLOG_IT_API_O_SOCKETS )
@@ -5326,9 +5326,9 @@ it_status_t it_post_rdma_read (
 				     << "->length "     << local_segments->length
 				     << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "size_t           " << num_segments      << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_cookie_t  { " 
+  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_cookie_t  { "
 				     << cookie.mFirst << " , "
-				     << cookie.mSecond 
+				     << cookie.mSecond
 				     << " } "
 				     << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_flags_t   " << (void *) dto_flags << EndLogLine;
@@ -5338,7 +5338,7 @@ it_status_t it_post_rdma_read (
   StrongAssertLogLine( local_segments )
     << "it_post_rdma_read(): local_segments is NULL "
     << EndLogLine;
-  
+
   // This effectively makes a "handle" for the work request
   // too bad we don't just give it back to the user ... that would relieve order constraints
   iWARPEM_Object_WorkRequest_t *SendWR =
@@ -5356,9 +5356,9 @@ it_status_t it_post_rdma_read (
 
   int NumSegSize = sizeof( it_lmr_triplet_t ) * num_segments;
   SendWR->segments_array = (it_lmr_triplet_t *) malloc( NumSegSize );
-  
+
   AssertLogLine( SendWR->segments_array ) << EndLogLine;
-  
+
 
   memcpy( SendWR->segments_array, local_segments, NumSegSize );
 
@@ -5377,7 +5377,7 @@ it_status_t it_post_rdma_read (
 	<< " i: " << i
 	<< " num_segments: " << num_segments
 	<< EndLogLine;
-      
+
       DataToReadLen += local_segments[ i ].length;
     }
 
@@ -5385,10 +5385,10 @@ it_status_t it_post_rdma_read (
   SendWR->mMessageHdr.mOpType.mRdmaReadReq.mRMRContext    = rmr_context;
   SendWR->mMessageHdr.mOpType.mRdmaReadReq.mDataToReadLen = htonl(DataToReadLen);
   SendWR->mMessageHdr.mOpType.mRdmaReadReq.mPrivatePtr    = (void *) SendWR;
-  
+
   // Now need to enqueue work order to EndPoint and send if possible
   // gSendWrQueue->Enqueue( SendWR );
-  
+
   //iWARPEM_Object_EndPoint_t* LocalEndPoint = (iWARPEM_Object_EndPoint_t * ) ep_handle;
   //LocalEndPoint->SendWrQueue.Enqueue( SendWR );
 
@@ -5396,7 +5396,7 @@ it_status_t it_post_rdma_read (
   iwarpem_enqueue_send_wr( gSendWrQueue, SendWR );
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
-    << "it_post_rdma_read(): Enqueued a SendWR  request on: "    
+    << "it_post_rdma_read(): Enqueued a SendWR  request on: "
     << " ep_handle: " << *(iWARPEM_Object_EndPoint_t *)ep_handle
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
@@ -5410,36 +5410,36 @@ it_status_t iwarpem_it_ep_disconnect_resp ( iWARPEM_Object_EndPoint_t* aLocalEnd
 {
   iWARPEM_Object_WorkRequest_t *SendWR =
     (iWARPEM_Object_WorkRequest_t*) malloc( sizeof(iWARPEM_Object_WorkRequest_t) );
-  
+
   StrongAssertLogLine( SendWR )
     << "iwarpem_it_ep_disconnect_resp(): ERROR::"
     << " failed to allocate memory for Send work request object "
     << EndLogLine;
-  
+
   bzero( SendWR, sizeof( iWARPEM_Object_WorkRequest_t ) );
-  
+
   SendWR->ep_handle                  = (it_ep_handle_t) aLocalEndPoint;
   SendWR->mMessageHdr.mMsg_Type      = iWARPEM_DISCONNECT_RESP_TYPE;
   SendWR->mMessageHdr.EndianConvert() ;
   SendWR->segments_array             = NULL;
 
-  BegLogLine( FXLOG_IT_API_O_SOCKETS ) 
+  BegLogLine( FXLOG_IT_API_O_SOCKETS )
     << "iwarpem_it_ep_disconnect_resp(): About to enqueue"
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
 
-  // aLocalEndPoint->SendWrQueue.Enqueue( SendWR );    
+  // aLocalEndPoint->SendWrQueue.Enqueue( SendWR );
 
   iwarpem_enqueue_send_wr( gRecvToSendWrQueue, SendWR );
 
   // gRecvToSendWrQueue->Enqueue( SendWR );
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
-    << "iwarpem_it_ep_disconnect_resp(): Enqueued a SendWR  request on: "    
+    << "iwarpem_it_ep_disconnect_resp(): Enqueued a SendWR  request on: "
     << " ep_handle: " <<  *aLocalEndPoint
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
-  
+
   return IT_SUCCESS;
 }
 
@@ -5453,10 +5453,10 @@ it_status_t iwarpem_generate_rdma_read_cmpl_event( iWARPEM_Object_WorkRequest_t 
   return IT_SUCCESS;
 }
 
-it_status_t iwarpem_it_post_rdma_read_resp ( 
+it_status_t iwarpem_it_post_rdma_read_resp (
   IN int                                SocketFd,
   IN it_lmr_triplet_t*                  LocalSegment,
-  IN void*                              RdmaReadClientWorkRequestState 
+  IN void*                              RdmaReadClientWorkRequestState
   )
   {
     BegLogLine(FXLOG_IT_API_O_SOCKETS) << "iwarpem_it_post_rdma_read_resp(): " << EndLogLine;
@@ -5468,17 +5468,17 @@ it_status_t iwarpem_it_post_rdma_read_resp (
 				       << "->length "     << LocalSegment->length
 				       << EndLogLine;
     BegLogLine(FXLOG_IT_API_O_SOCKETS) << "RdmaReadClientWorkRequestState: " << RdmaReadClientWorkRequestState  << EndLogLine;
-    
+
     // This effectively makes a "handle" for the work request
     // too bad we don't just give it back to the user ... that would relieve order constraints
     iWARPEM_Object_WorkRequest_t *SendWR =
       (iWARPEM_Object_WorkRequest_t*) malloc( sizeof(iWARPEM_Object_WorkRequest_t) );
-    
+
     StrongAssertLogLine( SendWR )
       << "iwarpem_it_post_rdma_read_resp: "
       << " failed to allocate memory for Send work request object "
       << EndLogLine;
-    
+
     bzero( SendWR, sizeof( iWARPEM_Object_WorkRequest_t ) );
 
 
@@ -5525,7 +5525,7 @@ it_status_t iwarpem_it_post_rdma_read_resp (
           << " LocalSegment[ i ].length: " << LocalSegment[ i ].length
 	  << EndLogLine;
 #endif
-	
+
 	SendWR->mMessageHdr.mTotalDataLen += LocalSegment[ i ].length;
 
 #if IT_API_CHECKSUM
@@ -5536,7 +5536,7 @@ it_status_t iwarpem_it_post_rdma_read_resp (
 #endif
       }
 
-    SendWR->mMessageHdr.mOpType.mRdmaReadResp.mPrivatePtr 
+    SendWR->mMessageHdr.mOpType.mRdmaReadResp.mPrivatePtr
       = RdmaReadClientWorkRequestState;
 
     // Now need to enqueue work order to EndPoint and send if possible
@@ -5544,10 +5544,10 @@ it_status_t iwarpem_it_post_rdma_read_resp (
     // gRecvToSendWrQueue->Enqueue( SendWR );
     iwarpem_enqueue_send_wr( gRecvToSendWrQueue, SendWR );
 
-    // LocalEndPoint->SendWrQueue.Enqueue( SendWR );    
-  
+    // LocalEndPoint->SendWrQueue.Enqueue( SendWR );
+
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
-    << "iwarpem_it_post_rdma_read_resp(): Enqueued a SendWR request on: " 
+    << "iwarpem_it_post_rdma_read_resp(): Enqueued a SendWR request on: "
     << " ep_handle: " << *LocalEndPoint
     << " mTotalDataLen:" << SendWR->mMessageHdr.mTotalDataLen
     << " SendWR: " << (void *) SendWR
@@ -5656,10 +5656,10 @@ it_status_t it_post_rdma_write (
     << " SendWR: " << (void *) SendWR
     << " DTO_Type: " << SendWR->mMessageHdr.mMsg_Type
     << " EP: " << *((iWARPEM_Object_EndPoint_t *)SendWR->ep_handle)
-    << " cookie: " 
-    << FormatString( "%08X" ) << CookieAsIntPtr[ 0 ] 
+    << " cookie: "
+    << FormatString( "%08X" ) << CookieAsIntPtr[ 0 ]
     << " "
-    << FormatString( "%08X" ) << CookieAsIntPtr[ 1 ] 
+    << FormatString( "%08X" ) << CookieAsIntPtr[ 1 ]
     << " TotalLen: " << SendWR->mMessageHdr.mTotalDataLen
     << EndLogLine;
 
@@ -5669,9 +5669,9 @@ it_status_t it_post_rdma_write (
 
   //iWARPEM_Object_EndPoint_t* LocalEndPoint = (iWARPEM_Object_EndPoint_t * ) ep_handle;
   //LocalEndPoint->SendWrQueue.Enqueue( SendWR );
-    
+
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
-    << "it_post_rdma_write(): Enqueued a SendWR request on: " 
+    << "it_post_rdma_write(): Enqueued a SendWR request on: "
     << " ep_handle: " << *(iWARPEM_Object_EndPoint_t *)ep_handle
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
@@ -5701,9 +5701,9 @@ it_status_t it_post_recv (
     << "->length "     << local_segments->length
     << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "size_t           " << num_segments     << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_cookie_t  { " 
+  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_cookie_t  { "
 				     << cookie.mFirst << " , "
-				     << cookie.mSecond 
+				     << cookie.mSecond
 				     << " } "
 				     << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_flags_t   " << (void*)dto_flags << EndLogLine;
@@ -5734,25 +5734,25 @@ it_status_t it_post_recv (
 
   RecvWR->cookie         = cookie;
   RecvWR->dto_flags      = dto_flags;
-  
+
   RecvWR->mMessageHdr.mMsg_Type      = iWARPEM_DTO_RECV_TYPE;
   RecvWR->mMessageHdr.EndianConvert() ;
   RecvWR->mMessageHdr.mTotalDataLen  = 0;
-  
+
   for( int i = 0; i < num_segments; i++ )
     {
       RecvWR->mMessageHdr.mTotalDataLen += local_segments[ i ].length;
     }
-  
+
   int enqrc = ((iWARPEM_Object_EndPoint_t *) handle)->RecvWrQueue.Enqueue( RecvWR );
 
   AssertLogLine( enqrc == 0 )
     << "it_post_recv(): ERROR:: "
     << " enqrc: " << enqrc
-    << EndLogLine;  
+    << EndLogLine;
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
-    << "it_post_recv(): Enqueue a recv request on: "    
+    << "it_post_recv(): Enqueue a recv request on: "
     << " ep_handle: " << *(iWARPEM_Object_EndPoint_t *)handle
     << " RecvWR: " << (void *) RecvWR
     << EndLogLine;
@@ -5782,9 +5782,9 @@ it_status_t it_post_send (
     << "->length "     << local_segments->length
     << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "size_t           " << num_segments     << EndLogLine;
-  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_cookie_t  { " 
+  BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_cookie_t  { "
 				     << cookie.mFirst << " , "
-				     << cookie.mSecond 
+				     << cookie.mSecond
 				     << " } "
 				     << EndLogLine;
   BegLogLine(FXLOG_IT_API_O_SOCKETS) << "it_dto_flags_t   " << (void*)dto_flags << EndLogLine;
@@ -5814,7 +5814,7 @@ it_status_t it_post_send (
 
   SendWR->cookie         = cookie;
   SendWR->dto_flags      = dto_flags;
-  
+
   SendWR->mMessageHdr.mMsg_Type      = iWARPEM_DTO_SEND_TYPE;
   SendWR->mMessageHdr.EndianConvert() ;
   SendWR->mMessageHdr.mTotalDataLen  = 0;
@@ -5830,7 +5830,7 @@ it_status_t it_post_send (
 	<< " i: " << i
 	<< " num_segments: " << num_segments
 	<< EndLogLine;
-      
+
       SendWR->mMessageHdr.mTotalDataLen += local_segments[ i ].length;
 
 #if IT_API_CHECKSUM
@@ -5840,16 +5840,16 @@ it_status_t it_post_send (
         }
 #endif
     }
-  
+
   // Now need to enqueue work order to EndPoint and send if possible
   // gSendWrQueue->Enqueue( SendWR );
   iwarpem_enqueue_send_wr( gSendWrQueue, SendWR );
 
   // iWARPEM_Object_EndPoint_t* LocalEndPoint = (iWARPEM_Object_EndPoint_t * ) ep_handle;
-  // LocalEndPoint->SendWrQueue.Enqueue( SendWR );  
+  // LocalEndPoint->SendWrQueue.Enqueue( SendWR );
 
   BegLogLine( FXLOG_IT_API_O_SOCKETS )
-    << "it_post_send(): Enqueued a SendWR  request on: "    
+    << "it_post_send(): Enqueued a SendWR  request on: "
     << " ep_handle: " << *(iWARPEM_Object_EndPoint_t *)ep_handle
     << " SendWR: " << (void *) SendWR
     << EndLogLine;
@@ -5862,7 +5862,7 @@ it_status_t it_post_send (
 
 
 /********************************************************************
- * Extended IT_API 
+ * Extended IT_API
  ********************************************************************/
 it_status_t
 itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
@@ -5870,14 +5870,14 @@ itx_get_rmr_context_for_ep( IN  it_ep_handle_t    ep_handle,
 			   OUT it_rmr_context_t* rmr_context )
 {
   *rmr_context = (it_rmr_context_t) lmr;
-  
+
   return IT_SUCCESS;
 }
 
 it_status_t
 itx_bind_ep_to_device( IN  it_ep_handle_t          ep_handle,
 		       IN  it_cn_est_identifier_t  cn_id )
-{  
+{
   return IT_SUCCESS;
 }
 
@@ -5896,7 +5896,7 @@ static void it_api_o_sockets_signal_aevd(void)
 
   }
 it_status_t
-itx_aevd_wait( IN  it_evd_handle_t evd_handle,     
+itx_aevd_wait( IN  it_evd_handle_t evd_handle,
 	       IN  uint64_t        timeout,
 	       IN  size_t          max_event_count,
 	       OUT it_event_t     *events,

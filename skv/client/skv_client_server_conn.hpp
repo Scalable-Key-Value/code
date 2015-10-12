@@ -216,11 +216,11 @@ struct skv_client_queued_command_rep_t
     skv_server_to_client_cmd_hdr_t*
     CheckForNewResponse() const
       {
-        int Index = mCurrentResponseSlot * SKV_CONTROL_MESSAGE_SIZE;
+        const int Index = mCurrentResponseSlot * SKV_CONTROL_MESSAGE_SIZE;
 
         skv_header_as_cmd_buffer_t* NewResponse = (skv_header_as_cmd_buffer_t*) (&mResponseSlotBuffer[Index]);
 
-        bool found = ((NewResponse->mData.mRespHdr.mCmdType != SKV_COMMAND_NONE) &&
+        const bool found = ((NewResponse->mData.mRespHdr.mCmdType != SKV_COMMAND_NONE) &&
                        NewResponse->GetCheckSum() == NewResponse->mData.mRespHdr.CheckSum());
         if( found )
         {
