@@ -119,22 +119,19 @@ public:
   skv_server_ep_state_t *GetNextEPStateAndFreezeForProcessing()
   {
     mSequentializer.lock();
-    skv_server_ep_state_t volatile *retval = NULL;
-    do
+    while( true )
     {
-      retval = AdvanceCurrentEPState();
+        skv_server_ep_state_t volatile *retval = AdvanceCurrentEPState();
+        if( retval &&
+            retval->mEPState_status == SKV_SERVER_ENDPOINT_STATUS_ACTIVE )
+        {
+            return (skv_server_ep_state_t*)retval;
+        }
 
-      // map is empty...
-      if(( retval == NULL ) || ( retval->mEPState_status != SKV_SERVER_ENDPOINT_STATUS_ACTIVE ))
-      {
         mSequentializer.unlock();
         ::sched_yield();
-        retval = NULL;
         mSequentializer.lock();
-      }
-    } while( retval == NULL );
-
-    return (skv_server_ep_state_t*)retval;
+    }
   }
 
   inline void UnfreezeAfterProcessing()

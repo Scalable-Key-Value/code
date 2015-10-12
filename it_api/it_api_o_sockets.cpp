@@ -2692,7 +2692,6 @@ iWARPEM_DataSenderThread( void* args )
 
   pthread_mutex_unlock( & gSendThreadStartedMutex );
 
-  bool Even=false;
   BegLogLine(FXLOG_IT_API_O_SOCKETS)
     << "gRecvToSendWrQueue=" << gRecvToSendWrQueue
     << " gSendWrQueue=" << gSendWrQueue
@@ -2702,45 +2701,26 @@ iWARPEM_DataSenderThread( void* args )
 
   // Process the sender WR queue
   while( 1 )
-    {
+  {
       iWARPEM_Object_WorkRequest_t* SendWR = NULL;
-      int dstat_0 = -1;
-      int dstat_1 = -1;
-      loopcnt++;
 
-      if( Even )
-        {
-          dstat_0 = gRecvToSendWrQueue->mQueue.Dequeue( &SendWR );
-
-          if( ( dstat_0 != -1 ) && ( SendWR != NULL ) )
-            iWARPEM_ProcessSendWR( SendWR );
-
-          dstat_1 = gSendWrQueue->mQueue.Dequeue( &SendWR );
-
-          if( ( dstat_1 != -1 ) && ( SendWR != NULL ) )
-            iWARPEM_ProcessSendWR( SendWR );
-
-        }
+      int dstat = gSendWrQueue->mQueue.Dequeue( &SendWR );
+      if( dstat != -1 && SendWR )
+          iWARPEM_ProcessSendWR( SendWR );
       else
-        {
-          dstat_1 = gSendWrQueue->mQueue.Dequeue( &SendWR );
-
-          if( ( dstat_1 != -1 ) && ( SendWR != NULL ) )
-            iWARPEM_ProcessSendWR( SendWR );
-
-          dstat_0 = gRecvToSendWrQueue->mQueue.Dequeue( &SendWR );
-
-          if( ( dstat_0 != -1 ) && ( SendWR != NULL ) )
-            iWARPEM_ProcessSendWR( SendWR );
-
-        }
+      {
+          dstat = gRecvToSendWrQueue->mQueue.Dequeue( &SendWR );
+          if( dstat != -1 && SendWR )
+              iWARPEM_ProcessSendWR( SendWR );
+          else
+              ::sched_yield();
+      }
 
 #ifdef WITH_CNK_ROUTER
-      if( ( gSendWrQueue->GetSize() == 0 ) && !(loopcnt & 0xfff) )
-        iWARPEM_FlushActiveSockets( gActiveSocketsQueue );
+      if( !(++loopcnt & 0xfff) && ( gSendWrQueue->GetSize() == 0 ))
+          iWARPEM_FlushActiveSockets( gActiveSocketsQueue );
 #endif
-      Even = ! Even;
-    }
+  }
 
   return NULL;
 }

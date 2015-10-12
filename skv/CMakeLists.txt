@@ -72,6 +72,9 @@ set(SKVSERVER_SOURCES
 set(SKVSERVER_LINK_LIBRARIES pthread m dl ${OFED_LIBRARIES}
   ${MPI_CXX_LIBRARIES}  ${ZLIB_LIBRARIES} ${BZIP2_LIBRARIES}
   ${ROCKSDB_LIBRARIES} skv_common it_api fxlogger)
+if(NOT BLUEGENE)
+  list(APPEND SKVSERVER_LINK_LIBRARIES lz4)
+endif()
 
 #------------------------------------------------------------------------------
 # libraries
