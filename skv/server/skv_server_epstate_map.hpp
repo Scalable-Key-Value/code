@@ -128,7 +128,7 @@ public:
       if(( retval == NULL ) || ( retval->mEPState_status != SKV_SERVER_ENDPOINT_STATUS_ACTIVE ))
       {
         mSequentializer.unlock();
-        usleep( 100000 );
+        ::sched_yield();
         retval = NULL;
         mSequentializer.lock();
       }

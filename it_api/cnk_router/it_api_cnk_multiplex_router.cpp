@@ -2444,14 +2444,7 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         return_status = DOWNLINK_STATUS_FLUSH;
 
         idlecount++;
-        if( idlecount > 200000 )
-        {
-          idlecount--;
-          BegLogLine( 0 )
-            << "usleep hit: idlecount=" << idlecount
-            << EndLogLine;
-          usleep( idlecount );
-        }
+        ::sched_yield();
       }
       else
       {

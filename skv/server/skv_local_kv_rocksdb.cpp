@@ -77,8 +77,6 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
   skv_thread_id_map_t *tm = skv_thread_id_map_t::GetThreadIdMap();
   tm->InsertRDB( aWorker->GetDataBuffer() );
 
-  static uint64_t idle_loops = 0;
-
   while( Master->KeepProcessing() )
   {
     skv_status_t status;
@@ -118,8 +116,6 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
 
     if( nextRequest )
     {
-      idle_loops == 0;
-
       BegLogLine( SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG )
         << "Fetched LocalKV request: " << skv_local_kv_request_type_to_string( nextRequest->mType )
         << " rctx:" << nextRequest->mReqCtx
@@ -179,11 +175,7 @@ void Run( skv_local_kv_rocksdb_worker_t *aWorker )
         nextQueue->AckRequest( nextRequest );
     }
     else
-    {
-      ++idle_loops;
-      if( idle_loops > IdleThreshold )
-        usleep( 10000 );
-    }
+      ::sched_yield();
   }
 
   BegLogLine( SKV_LOCAL_KV_ROCKSDB_PROCESSING_LOG )

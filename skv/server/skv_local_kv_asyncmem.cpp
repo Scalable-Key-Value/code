@@ -101,14 +101,7 @@ void AsyncProcessing( skv_local_kv_asyncmem *aBackEnd )
       RequestQueue->AckRequest( nextRequest );
     }
     else
-    {
-      double current_ts = MPI_Wtime();
-      if( current_ts - last_ts > 0.2 )
-      {
-        usleep(10000);
-        last_ts = MPI_Wtime();
-      }
-    }
+      ::sched_yield();
   }
 
   BegLogLine( SKV_LOCAL_KV_ASYNCMEM_PROCESSING_LOG )
