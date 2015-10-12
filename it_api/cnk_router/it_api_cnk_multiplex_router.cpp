@@ -2406,7 +2406,6 @@ static inline
 downlink_status_t downlink_sm( const downlink_status_t aState,
                                struct ibv_cq *aCQ )
 {
-  static int64_t idlecount = 0;
   static int RequestIndex = 0;
   static int RequestCount = 0;
   static downlink_status_t saved_status = DOWNLINK_STATUS_IDLE;
@@ -2433,7 +2432,6 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         << "IDLE STATE found new requests: " << rv
         << EndLogLine;
 
-        idlecount = 0;
         RequestCount = rv;
         RequestIndex = 0;
         return_status = DOWNLINK_STATUS_QUEUING;
@@ -2443,7 +2441,6 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         saved_status = aState;
         return_status = DOWNLINK_STATUS_FLUSH;
 
-        idlecount++;
         ::sched_yield();
       }
       else
@@ -2480,7 +2477,6 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
       int rc = cqSlihQueue.Dequeue(&endiorec);
       if ( 0 == rc)
       {
-        idlecount = 0;
         do_cq_slih_processing(endiorec, &flushUplinks);
         requireFlushUplinks |= flushUplinks;
         RequestIndex++;
@@ -2517,7 +2513,6 @@ downlink_status_t downlink_sm( const downlink_status_t aState,
         int rv = gTerminationQueue.Dequeue( &ConnToTerm );
         if(( rv == 0 ) && ( ConnToTerm ))
         {
-          idlecount = 0;
           AckAllConnections();
 
           BegLogLine( FXLOG_ITAPI_ROUTER_CLEANUP )
