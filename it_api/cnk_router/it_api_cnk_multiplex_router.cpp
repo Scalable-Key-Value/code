@@ -508,7 +508,7 @@ static void AckConnection(struct connection *conn)
   else
     {
     BegLogLine( (FXLOG_ITAPI_ROUTER || ( FXLOG_ITAPI_ROUTER_CLEANUP && conn->mDisconnecting )) )
-      << "NOT FLUSHING because: " 
+      << "NOT FLUSHING because: "
       << " mSendAck=" << conn->mSendAck
       << " needtr=" << conn->mBuffer.NeedsAnyTransmit()
       << " disconnecting=" << conn->mDisconnecting
@@ -1619,6 +1619,8 @@ static pthread_t setup_polling_thread(void)
 
     int True = 1;
     setsockopt( drc_serv_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&True, sizeof( True ) );
+    True = 1;
+    setsockopt( drc_serv_socket, SOL_TCP, TCP_NODELAY, (char*)&True, sizeof(True));
 
     int brc= bind( drc_serv_socket, drc_serv_saddr, drc_serv_addr_len ) ;
     StrongAssertLogLine(brc == 0 )
@@ -1669,6 +1671,8 @@ static pthread_t setup_polling_thread(void)
 
     /*************************************************/
 
+    True = 1;
+    setsockopt( drc_cli_socket, SOL_TCP, TCP_NODELAY, (char*)&True, sizeof(True));
 
     if( listen( drc_serv_socket, 5 ) < 0 )
       {
@@ -2014,6 +2018,9 @@ int ConnectToServers( int aMyRank, const skv_configuration_t *config )
           << EndLogLine;
         rc = errno;
       }
+
+      int True = 1;
+      setsockopt( connections[conn_count].socket, SOL_TCP, TCP_NODELAY, (char*)&True, sizeof(True));
 
       connected = ( connect( connections[ conn_count ].socket, srv->ai_addr, srv->ai_addrlen ) == 0 );
       if ( connected )
